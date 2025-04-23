@@ -21,6 +21,7 @@ import type {
   SimulationCalldata,
   SimulationCheck,
   SimulationEvent,
+  SimulationResult,
   SimulationStateChange,
   StructuredSimulationReport,
 } from '../types';
@@ -292,6 +293,7 @@ function generateStructuredReport(
  * @param proposal The proposal details
  * @param checks The check results
  * @param markdownReport The full markdown report
+ * @param destinationSimulations Optional destination simulations
  */
 export function writeFrontendData(
   governorType: GovernorType,
@@ -299,6 +301,7 @@ export function writeFrontendData(
   proposal: ProposalEvent,
   checks: AllCheckResults,
   markdownReport: string,
+  destinationSimulations?: SimulationResult['destinationSimulations'],
 ) {
   // Only write frontend data if we're in proposal creation mode (SIM_NAME is set)
   if (!process.env.SIM_NAME) {
@@ -345,6 +348,9 @@ export function writeFrontendData(
       ),
     );
     console.log('Frontend data written for proposal creation');
+
+    // TODO: Potentially add destinationSimulations data to the frontend JSON if needed
+    console.log('[Frontend Data] Destination Sims: ', destinationSimulations); // Log for now
   } catch (error) {
     console.error('Error writing frontend data:', error);
   }
@@ -358,6 +364,7 @@ export function writeFrontendData(
  * @param checks The checks results.
  * @param dir The directory where the file should be saved. It will be created if it doesn't exist.
  * @param filename The name of the file. All report formats will have the same filename with different extensions.
+ * @param destinationSimulations Optional destination simulations
  */
 export async function generateAndSaveReports(
   governorType: GovernorType,
@@ -365,6 +372,7 @@ export async function generateAndSaveReports(
   proposal: ProposalEvent,
   checks: AllCheckResults,
   dir: string,
+  destinationSimulations?: SimulationResult['destinationSimulations'],
 ) {
   // Prepare the output folder and filename.
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -372,7 +380,13 @@ export async function generateAndSaveReports(
   const path = `${dir}/${id}`;
 
   // Generate the base markdown proposal report. This is the markdown report which is translated into other file types.
-  const baseReport = await toMarkdownProposalReport(governorType, blocks, proposal, checks);
+  const baseReport = await toMarkdownProposalReport(
+    governorType,
+    blocks,
+    proposal,
+    checks,
+    destinationSimulations,
+  );
 
   // The table of contents' links in the baseReport work when converted to HTML, but do not work as Markdown
   // or PDF links, since the emojis in the header titles cause issues. We apply the remarkFixEmojiLinks plugin
@@ -406,7 +420,7 @@ export async function generateAndSaveReports(
   ]);
 
   // Write frontend data if in proposal creation mode
-  writeFrontendData(governorType, blocks, proposal, checks, markdownReport);
+  writeFrontendData(governorType, blocks, proposal, checks, markdownReport, destinationSimulations);
 }
 
 /**
@@ -414,12 +428,14 @@ export async function generateAndSaveReports(
  * @param blocks the relevant blocks for the proposal.
  * @param proposal The proposal details.
  * @param checks The checks results.
+ * @param destinationSimulations Optional destination simulations
  */
 async function toMarkdownProposalReport(
   governorType: GovernorType,
   blocks: { current: SimulationBlock; start: SimulationBlock | null; end: SimulationBlock | null },
   proposal: ProposalEvent,
   checks: AllCheckResults,
+  destinationSimulations?: SimulationResult['destinationSimulations'],
 ): Promise<string> {
   const { id, proposer, targets, endBlock, startBlock, description } = proposal;
 
@@ -459,6 +475,24 @@ ${blockQuote(description.trim())}
 ${Object.keys(checks)
   .map((checkId) => toCheckSummary(checks[checkId]))
   .join('\n')}
+
+## Cross-Chain Simulation Results
+${
+  destinationSimulations && destinationSimulations.length > 0
+    ? `\n${destinationSimulations
+        .map((destSimInfo) => {
+          let details = '';
+          if (destSimInfo.status === 'success') {
+            // Basic success message - can be expanded later to show L2 events/state changes from destSimInfo.sim
+            details = '  - L2 Execution: ✅ Succeeded';
+          } else {
+            details = `  - L2 Execution: ❌ Failed\n    - Error: ${destSimInfo.error || 'Unknown error'}`;
+          }
+          return `### Destination Chain: ${destSimInfo.chainId} (${destSimInfo.bridgeType})\n\n${details}`;
+        })
+        .join('\n\n')}`
+    : '' // Render nothing if no destination sims
+}
 `;
 
   // Add table of contents and return report.

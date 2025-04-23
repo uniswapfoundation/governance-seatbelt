@@ -5,9 +5,9 @@
 import { getAddress } from 'viem';
 import ALL_CHECKS from './checks';
 import { generateAndSaveReports } from './presentation/report';
-import type { AllCheckResults, ProposalData, SimulationConfig } from './types';
+import type { AllCheckResults, ProposalData, SimulationConfig, SimulationResult } from './types.d';
 import { publicClient } from './utils/clients/client';
-import { simulate } from './utils/clients/tenderly';
+import { handleCrossChainSimulations, simulate } from './utils/clients/tenderly';
 import { DAO_NAME, GOVERNOR_ADDRESS } from './utils/constants';
 import {
   formatProposalId,
@@ -58,10 +58,48 @@ async function main() {
     publicClient,
   };
 
-  // Run simulation
-  console.log('Simulating proposal...');
-  const { sim, proposal, latestBlock } = await simulate(config);
-  console.log('Simulation complete.');
+  let sourceResult: SimulationResult | null = null;
+
+  if (config.type === 'new') {
+    console.log(`[Simulate] Running fresh source simulation (type: ${config.type})...`);
+    const freshResult = await simulate(config);
+    sourceResult = freshResult;
+  } else {
+    console.log('Simulating proposal (multi-chain aware)...');
+    const simResult = await simulate(config);
+    console.log('Simulation attempt complete.');
+    sourceResult = simResult;
+  }
+
+  if (!sourceResult) {
+    throw new Error('Failed to obtain source simulation result.');
+  }
+
+  // --- Cross-Chain Handling ---
+  console.log('[Main] Handling potential cross-chain messages...');
+  const finalResult = await handleCrossChainSimulations(sourceResult);
+  console.log('[Main] Cross-chain handling complete.');
+
+  // --- Checks and Reporting ---
+
+  // Check for simulation failures (based on finalResult)
+  let overallSimulationSuccess = true;
+  if (!finalResult.sim.transaction.status) {
+    const failureReason = 'Source chain simulation failed.';
+    console.error(`[FAILURE] ${failureReason}`);
+    overallSimulationSuccess = false;
+  }
+  if (finalResult.crossChainFailure) {
+    const failureReason = 'One or more destination chain simulations failed.';
+    console.error(`[FAILURE] ${failureReason}`);
+    overallSimulationSuccess = false;
+  }
+
+  if (overallSimulationSuccess) {
+    console.log('Simulation successful on all relevant chains.');
+  }
+
+  const { sim, proposal, latestBlock, deps: _deps, destinationSimulations } = finalResult;
 
   // Run checks
   console.log('Running checks...');
@@ -96,6 +134,7 @@ async function main() {
     proposal,
     checkResults,
     dir,
+    destinationSimulations,
   );
 
   console.log(`Done! Report saved to ${dir}/${formatProposalId(governorType, proposalId)}.md`);

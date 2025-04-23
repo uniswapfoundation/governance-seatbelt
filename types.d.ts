@@ -1,4 +1,4 @@
-import type { Address, Block } from 'viem';
+import type { Address, Block, Hex } from 'viem';
 import type { getGovernor, getTimelock } from './utils/contracts/governor';
 
 // --- Simulation configurations ---
@@ -43,6 +43,15 @@ export interface SimulationResult {
   proposal: ProposalEvent;
   deps: ProposalData;
   latestBlock: SimulationBlock;
+  destinationSimulations?: Array<{
+    chainId: number;
+    bridgeType: string; // e.g., 'ArbitrumL1L2'
+    status: 'success' | 'failure';
+    error?: string; // Optional error message on failure
+    sim?: TenderlySimulation; // Tenderly result for the destination sim
+    l2Params?: ExtractedCrossChainMessage;
+  }>;
+  crossChainFailure?: boolean;
 }
 
 export interface SimulationData extends SimulationResult {
@@ -116,6 +125,26 @@ export interface AllCheckResults {
   [checkId: string]: { name: string; result: CheckResult };
 }
 
+// --- Extracted Cross-Chain Message Type ---
+/**
+ * @notice Holds the parameters extracted from a source chain simulation
+ * that are necessary to initiate a simulation on a destination chain via a bridge.
+ */
+export interface ExtractedCrossChainMessage {
+  /** @notice Identifier for the type of bridge/messaging protocol used (e.g., 'ArbitrumL1L2'). */
+  bridgeType: string;
+  /** @notice The chain ID of the destination network. */
+  destinationChainId: '42161'; // Only Arbitrum is supported for now
+  /** @notice The target contract address to be called on the destination chain. */
+  l2TargetAddress: Address;
+  /** @notice The encoded calldata to be used in the transaction on the destination chain. */
+  l2InputData: Hex;
+  /** @notice The native token value (as a string) to be sent with the transaction on the destination chain. */
+  l2Value: string;
+  /** @notice The address initiating the transaction on the destination chain (often a bridge contract or alias). Optional. */
+  l2FromAddress?: Address;
+}
+
 // --- Tenderly types, Request ---
 // Response from tenderly endpoint that encodes state data
 export type StorageEncodingResponse = {
@@ -156,7 +185,7 @@ type ContractObject = {
 };
 
 export type TenderlyPayload = {
-  network_id: '1' | '3' | '4' | '5' | '42';
+  network_id: '1' | '3' | '4' | '5' | '42' | '42161';
   block_number?: number;
   transaction_index?: number;
   from: string;

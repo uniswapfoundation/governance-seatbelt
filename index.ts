@@ -16,10 +16,9 @@ import type {
 } from './types';
 import { cacheProposal, getCachedProposal, needsSimulation } from './utils/cache/proposalCache';
 import { publicClient } from './utils/clients/client';
-import { simulate } from './utils/clients/tenderly';
+import { handleCrossChainSimulations, simulate } from './utils/clients/tenderly';
 import { DAO_NAME, GOVERNOR_ADDRESS, SIM_NAME } from './utils/constants';
 import {
-  type GetGovernorReturnType,
   formatProposalId,
   getGovernor,
   getProposalIds,
@@ -36,7 +35,6 @@ async function main() {
   // Prepare array to store all simulation outputs
   const simOutputs: SimulationData[] = [];
 
-  let governor: GetGovernorReturnType | undefined;
   let governorType: GovernorType;
 
   // Determine if we are running a specific simulation or all on-chain proposals for a specified governor.
@@ -46,49 +44,66 @@ async function main() {
     const config: SimulationConfig = await import(configPath).then((d) => d.config); // dynamic path `import` statements not allowed
 
     governorType = await inferGovernorType(config.governorAddress);
-    governor = getGovernor(governorType, config.governorAddress);
 
-    const proposalData: ProposalData = {
-      governor,
-      timelock: await getTimelock(governorType, config.governorAddress),
-      publicClient,
-    };
+    // 1. Run source simulation
+    console.log(`[Index] Simulating source chain for ${SIM_NAME}...`);
+    // Assume simulate returns the full SimulationResult including deps
+    const sourceResult = await simulate(config);
 
-    const { sim, proposal, latestBlock } = await simulate(config);
-    simOutputs.push({ sim, proposal, latestBlock, config, deps: proposalData });
+    // 2. Handle potential cross-chain messages
+    console.log(`[Index] Handling cross-chain messages for ${SIM_NAME}...`);
+    const finalResult = await handleCrossChainSimulations(sourceResult);
+    console.log(`[Index] Cross-chain handling complete for ${SIM_NAME}.`);
 
-    // Run checks for the simulation
-    console.log(`Running checks for ${SIM_NAME} simulation...`);
+    const { sim, proposal, latestBlock, deps, destinationSimulations } = finalResult;
+
+    // Check if source simulation itself failed
+    if (!sim.transaction.status) {
+      console.error(
+        `[Index][FAILURE] Source simulation failed for ${SIM_NAME}. Proceeding to checks/reporting anyway.`,
+      );
+    }
+    // Log if destination simulation failed
+    if (finalResult.crossChainFailure) {
+      console.error(`[Index][FAILURE] One or more destination simulations failed for ${SIM_NAME}.`);
+    }
+
+    // 3. Run checks (using potentially failed sim data)
+    console.log(`[Index] Running checks for ${SIM_NAME} simulation...`);
     const checkResults: AllCheckResults = Object.fromEntries(
       await Promise.all(
         Object.keys(ALL_CHECKS).map(async (checkId) => [
           checkId,
           {
             name: ALL_CHECKS[checkId].name,
-            result: await ALL_CHECKS[checkId].checkProposal(proposal, sim, proposalData),
+            // Pass correct deps (which should be part of finalResult)
+            result: await ALL_CHECKS[checkId].checkProposal(proposal, sim, deps!),
           },
         ]),
       ),
     );
 
+    // 4. Generate reports (reflecting potential failures)
+    console.log(`[Index] Generating reports for ${SIM_NAME}...`);
     const [startBlock, endBlock] = await Promise.all([
-      proposal.startBlock <= (latestBlock.number ?? 0n)
+      proposal?.startBlock && latestBlock?.number && proposal.startBlock <= latestBlock.number
         ? publicClient.getBlock({ blockNumber: proposal.startBlock })
         : null,
-      proposal.endBlock <= (latestBlock.number ?? 0n)
+      proposal?.endBlock && latestBlock?.number && proposal.endBlock <= latestBlock.number
         ? publicClient.getBlock({ blockNumber: proposal.endBlock })
         : null,
     ]);
 
-    // Generate reports
     const dir = `./reports/${config.daoName}/${config.governorAddress}`;
     await generateAndSaveReports(
       governorType,
-      { start: startBlock, end: endBlock, current: latestBlock },
-      proposal,
+      { start: startBlock, end: endBlock, current: latestBlock! },
+      proposal!,
       checkResults,
       dir,
+      destinationSimulations, // Pass destination results to report
     );
+    console.log(`[Index] Reports saved for ${SIM_NAME}.`);
   } else {
     // If no SIM_NAME is provided, we get proposals to simulate from the chain
     if (!GOVERNOR_ADDRESS) throw new Error('Must provide a GOVERNOR_ADDRESS');
@@ -99,11 +114,10 @@ async function main() {
     // Fetch all proposal IDs
     governorType = await inferGovernorType(GOVERNOR_ADDRESS);
     const proposalIds = await getProposalIds(governorType, GOVERNOR_ADDRESS, latestBlock.number);
-    governor = getGovernor(governorType, GOVERNOR_ADDRESS);
 
-    if (!governor) throw new Error('Failed to get governor');
-
-    const states = await Promise.all(proposalIds.map((id) => governor?.read.state([id])));
+    const states = await Promise.all(
+      proposalIds.map((id) => getGovernor(governorType, GOVERNOR_ADDRESS!).read.state([id])),
+    );
     const simProposals: { id: bigint; simType: SimulationConfigBase['type']; state: string }[] =
       proposalIds.map((id, i) => {
         const stateNum = String(states[i]) as keyof typeof PROPOSAL_STATES;
@@ -149,11 +163,13 @@ async function main() {
       );
 
       if (cachedData) {
-        // If we have cached data and the reports already exist, skip this proposal
         const reportPath = `./reports/${DAO_NAME}/${GOVERNOR_ADDRESS}/${cachedProposal.id}.md`;
         if (existsSync(reportPath)) {
           console.log(`  Using cached report for proposal ${cachedProposal.id}`);
-          continue;
+        } else {
+          console.log(
+            `  Report missing for cached proposal ${cachedProposal.id}, skipping for now.`,
+          );
         }
         simOutputs.push(cachedData);
       }
@@ -170,8 +186,8 @@ async function main() {
 
       // Generate the proposal data and dependencies needed by checks
       const proposalData: ProposalData = {
-        governor,
-        timelock: await getTimelock(governorType, governor.address),
+        governor: getGovernor(governorType, GOVERNOR_ADDRESS),
+        timelock: await getTimelock(governorType, GOVERNOR_ADDRESS),
         publicClient,
       };
 
