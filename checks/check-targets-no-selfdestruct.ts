@@ -48,7 +48,7 @@ async function checkNoSelfdestructs(
   const error: string[] = [];
   for (const addr of addresses) {
     const status = await checkNoSelfdestruct(trustedAddrs, addr, publicClient);
-    const address = toAddressLink(addr, false);
+    const address = toAddressLink(addr, 'https://etherscan.io');
     if (status === 'eoa') info.push(bullet(`${address}: EOA`));
     else if (status === 'empty') warn.push(bullet(`${address}: EOA (may have code later)`));
     else if (status === 'safe') info.push(bullet(`${address}: Contract (looks safe)`));

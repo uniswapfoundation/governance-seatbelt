@@ -5,17 +5,99 @@
 import { getAddress } from 'viem';
 import ALL_CHECKS from './checks';
 import { generateAndSaveReports } from './presentation/report';
-import type { AllCheckResults, ProposalData, SimulationConfig, SimulationResult } from './types.d';
-import { publicClient } from './utils/clients/client';
+import type {
+  AllCheckResults,
+  ProposalData,
+  ProposalEvent,
+  SimulationConfig,
+  TenderlySimulation,
+} from './types.d';
+import { getChainConfig, getClientForChain, publicClient } from './utils/clients/client';
 import { handleCrossChainSimulations, simulate } from './utils/clients/tenderly';
 import { DAO_NAME, GOVERNOR_ADDRESS } from './utils/constants';
-import {
-  formatProposalId,
-  getGovernor,
-  getTimelock,
-  inferGovernorType,
-} from './utils/contracts/governor';
+import { getGovernor, getTimelock, inferGovernorType } from './utils/contracts/governor';
 import { PROPOSAL_STATES } from './utils/contracts/governor-bravo';
+
+/**
+ * Run checks for a specific chain simulation
+ */
+async function runChecksForChain(
+  proposal: ProposalEvent,
+  sim: TenderlySimulation,
+  deps: ProposalData,
+  chainId: number,
+): Promise<AllCheckResults> {
+  const results: AllCheckResults = {};
+  const chainConfig = getChainConfig(chainId);
+
+  // Run all checks with chain-specific configuration
+  const depsWithConfig = {
+    ...deps,
+    chainConfig,
+  };
+
+  // Chain-agnostic checks
+  results.checkStateChanges = {
+    name: ALL_CHECKS.checkStateChanges.name,
+    result: await ALL_CHECKS.checkStateChanges.checkProposal(proposal, sim, depsWithConfig),
+  };
+  results.checkLogs = {
+    name: ALL_CHECKS.checkLogs.name,
+    result: await ALL_CHECKS.checkLogs.checkProposal(proposal, sim, depsWithConfig),
+  };
+  results.checkEthBalanceChanges = {
+    name: ALL_CHECKS.checkEthBalanceChanges.name,
+    result: await ALL_CHECKS.checkEthBalanceChanges.checkProposal(proposal, sim, depsWithConfig),
+  };
+  results.checkDecodeCalldata = {
+    name: ALL_CHECKS.checkDecodeCalldata.name,
+    result: await ALL_CHECKS.checkDecodeCalldata.checkProposal(proposal, sim, depsWithConfig),
+  };
+
+  // Chain-specific checks
+  results.checkTargetsVerifiedEtherscan = {
+    name: ALL_CHECKS.checkTargetsVerifiedEtherscan.name,
+    result: await ALL_CHECKS.checkTargetsVerifiedEtherscan.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+    ),
+  };
+  results.checkTouchedContractsVerifiedEtherscan = {
+    name: ALL_CHECKS.checkTouchedContractsVerifiedEtherscan.name,
+    result: await ALL_CHECKS.checkTouchedContractsVerifiedEtherscan.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+    ),
+  };
+  results.checkTargetsNoSelfdestruct = {
+    name: ALL_CHECKS.checkTargetsNoSelfdestruct.name,
+    result: await ALL_CHECKS.checkTargetsNoSelfdestruct.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+    ),
+  };
+  results.checkTouchedContractsNoSelfdestruct = {
+    name: ALL_CHECKS.checkTouchedContractsNoSelfdestruct.name,
+    result: await ALL_CHECKS.checkTouchedContractsNoSelfdestruct.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+    ),
+  };
+  results.checkSolc = {
+    name: ALL_CHECKS.checkSolc.name,
+    result: await ALL_CHECKS.checkSolc.checkProposal(proposal, sim, depsWithConfig),
+  };
+  results.checkSlither = {
+    name: ALL_CHECKS.checkSlither.name,
+    result: await ALL_CHECKS.checkSlither.checkProposal(proposal, sim, depsWithConfig),
+  };
+
+  return results;
+}
 
 /**
  * @notice Run checks for a specific proposal ID
@@ -56,92 +138,77 @@ async function main() {
     governor,
     timelock: await getTimelock(governorType, governor.address),
     publicClient,
+    chainConfig: getChainConfig(1), // Mainnet chain config
+    targets: [], // Will be populated from simulation
+    touchedContracts: [], // Will be populated from simulation
   };
 
-  let sourceResult: SimulationResult | null = null;
+  // Run source simulation
+  const sourceResult = await simulate(config);
 
-  if (config.type === 'new') {
-    console.log(`[Simulate] Running fresh source simulation (type: ${config.type})...`);
-    const freshResult = await simulate(config);
-    sourceResult = freshResult;
-  } else {
-    console.log('Simulating proposal (multi-chain aware)...');
-    const simResult = await simulate(config);
-    console.log('Simulation attempt complete.');
-    sourceResult = simResult;
-  }
-
-  if (!sourceResult) {
-    throw new Error('Failed to obtain source simulation result.');
-  }
-
-  // --- Cross-Chain Handling ---
-  console.log('[Main] Handling potential cross-chain messages...');
+  // Handle cross-chain messages
   const finalResult = await handleCrossChainSimulations(sourceResult);
-  console.log('[Main] Cross-chain handling complete.');
 
-  // --- Checks and Reporting ---
-
-  // Check for simulation failures (based on finalResult)
-  let overallSimulationSuccess = true;
-  if (!finalResult.sim.transaction.status) {
-    const failureReason = 'Source chain simulation failed.';
-    console.error(`[FAILURE] ${failureReason}`);
-    overallSimulationSuccess = false;
-  }
-  if (finalResult.crossChainFailure) {
-    const failureReason = 'One or more destination chain simulations failed.';
-    console.error(`[FAILURE] ${failureReason}`);
-    overallSimulationSuccess = false;
-  }
-
-  if (overallSimulationSuccess) {
-    console.log('Simulation successful on all relevant chains.');
-  }
-
-  const { sim, proposal, latestBlock, deps: _deps, destinationSimulations } = finalResult;
-
-  // Run checks
-  console.log('Running checks...');
-  const checkResults: AllCheckResults = Object.fromEntries(
-    await Promise.all(
-      Object.keys(ALL_CHECKS).map(async (checkId) => [
-        checkId,
-        {
-          name: ALL_CHECKS[checkId].name,
-          result: await ALL_CHECKS[checkId].checkProposal(proposal, sim, proposalData),
-        },
-      ]),
-    ),
+  // Run checks for source chain
+  const sourceChecks = await runChecksForChain(
+    finalResult.proposal,
+    finalResult.sim,
+    proposalData,
+    1, // Mainnet chain ID
   );
 
-  // Generate markdown report
-  console.log('Generating report...');
+  // Run checks for destination chains if any
+  const destinationChecks: Record<number, AllCheckResults> = {};
+  if (finalResult.destinationSimulations) {
+    for (const destSim of finalResult.destinationSimulations) {
+      if (destSim.sim) {
+        const l2Deps: ProposalData = {
+          ...proposalData,
+          publicClient: getClientForChain(destSim.chainId),
+          chainConfig: getChainConfig(destSim.chainId),
+        };
+        destinationChecks[destSim.chainId] = await runChecksForChain(
+          finalResult.proposal,
+          destSim.sim,
+          l2Deps,
+          destSim.chainId,
+        );
+      }
+    }
+  }
+
+  // Fetch full block data for start and end blocks
   const [startBlock, endBlock] = await Promise.all([
-    proposal.startBlock <= (latestBlock.number ?? 0n)
-      ? publicClient.getBlock({ blockNumber: proposal.startBlock })
+    finalResult.proposal.startBlock <= (finalResult.latestBlock.number ?? 0n)
+      ? publicClient.getBlock({ blockNumber: finalResult.proposal.startBlock })
       : null,
-    proposal.endBlock <= (latestBlock.number ?? 0n)
-      ? publicClient.getBlock({ blockNumber: proposal.endBlock })
+    finalResult.proposal.endBlock <= (finalResult.latestBlock.number ?? 0n)
+      ? publicClient.getBlock({ blockNumber: finalResult.proposal.endBlock })
       : null,
   ]);
 
-  // Save markdown report to a file
+  // Construct the blocks object
+  const blocks = {
+    current: finalResult.latestBlock,
+    start: startBlock,
+    end: endBlock,
+  };
+
+  // Generate reports
   const dir = `./reports/${config.daoName}/${config.governorAddress}`;
   await generateAndSaveReports(
     governorType,
-    { start: startBlock, end: endBlock, current: latestBlock },
-    proposal,
-    checkResults,
+    blocks,
+    finalResult.proposal,
+    sourceChecks,
     dir,
-    destinationSimulations,
+    finalResult.destinationSimulations,
   );
-
-  console.log(`Done! Report saved to ${dir}/${formatProposalId(governorType, proposalId)}.md`);
 }
 
-// Run the script
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

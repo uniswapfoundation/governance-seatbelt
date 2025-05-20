@@ -56,10 +56,10 @@ export function blockQuote(str: string) {
 /**
  * Turns a plaintext address into a link to etherscan page of that address
  * @param address to be linked
- * @param code whether to link to the code tab
+ * @param baseUrl the base URL for the etherscan link
  */
-export function toAddressLink(address: string, code = false) {
-  return `[\`${address}\`](https://etherscan.io/address/${address}${code ? '#code' : ''})`;
+export function toAddressLink(address: string, baseUrl = 'https://etherscan.io'): string {
+  return `[${address}](${baseUrl}/address/${address})`;
 }
 
 // -- Report formatters ---
@@ -373,6 +373,7 @@ export async function generateAndSaveReports(
   checks: AllCheckResults,
   dir: string,
   destinationSimulations?: SimulationResult['destinationSimulations'],
+  destinationChecks?: Record<number, AllCheckResults>,
 ) {
   // Prepare the output folder and filename.
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -386,6 +387,7 @@ export async function generateAndSaveReports(
     proposal,
     checks,
     destinationSimulations,
+    destinationChecks,
   );
 
   // The table of contents' links in the baseReport work when converted to HTML, but do not work as Markdown
@@ -436,6 +438,7 @@ async function toMarkdownProposalReport(
   proposal: ProposalEvent,
   checks: AllCheckResults,
   destinationSimulations?: SimulationResult['destinationSimulations'],
+  destinationChecks?: Record<number, AllCheckResults>,
 ): Promise<string> {
   const { id, proposer, targets, endBlock, startBlock, description } = proposal;
 
@@ -461,7 +464,7 @@ _Updated as of block [${blocks.current.number}](https://etherscan.io/block/${blo
       ? formatTime(blocks.end.timestamp)
       : formatTime(estimateTime(blocks.current, endBlock))
   })
-- Targets: ${targets.map((target) => toAddressLink(target, true)).join('; ')}
+- Targets: ${targets.map((target) => toAddressLink(target, 'https://etherscan.io')).join('; ')}
 
 ## Table of contents
 
@@ -471,7 +474,7 @@ This is filled in by remark-toc and this sentence will be removed.
 
 ${blockQuote(description.trim())}
 
-## Checks\n
+## Main Chain Checks\n
 ${Object.keys(checks)
   .map((checkId) => toCheckSummary(checks[checkId]))
   .join('\n')}
@@ -483,8 +486,14 @@ ${
         .map((destSimInfo) => {
           let details = '';
           if (destSimInfo.status === 'success') {
-            // Basic success message - can be expanded later to show L2 events/state changes from destSimInfo.sim
-            details = '  - L2 Execution: ✅ Succeeded';
+            details = '  - L2 Execution: ✅ Succeeded\n';
+            // Add detailed check results if available
+            if (destinationChecks?.[destSimInfo.chainId]) {
+              details += '\n  ### L2 Checks\n';
+              details += Object.keys(destinationChecks[destSimInfo.chainId])
+                .map((checkId) => toCheckSummary(destinationChecks[destSimInfo.chainId][checkId]))
+                .join('\n');
+            }
           } else {
             details = `  - L2 Execution: ❌ Failed\n    - Error: ${destSimInfo.error || 'Unknown error'}`;
           }

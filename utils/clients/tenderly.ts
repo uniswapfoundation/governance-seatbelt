@@ -42,7 +42,7 @@ import {
   hashOperationBatchOz,
   hashOperationOz,
 } from '../contracts/governor';
-import { publicClient } from './client';
+import { getChainConfig, publicClient } from './client';
 
 const fetchUrl = mftch;
 
@@ -316,6 +316,9 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
     governor,
     timelock,
     publicClient,
+    chainConfig: getChainConfig(1), // Mainnet chain config
+    targets: targets.map((target: string) => target),
+    touchedContracts: sim.contracts.map((contract) => contract.address),
   };
 
   return { sim, proposal, latestBlock, deps };
@@ -559,6 +562,9 @@ async function simulateProposed(config: SimulationConfigProposed): Promise<Simul
     governor,
     timelock,
     publicClient,
+    chainConfig: getChainConfig(1), // Mainnet chain config
+    targets: proposalCreatedEvent.args.targets?.map((target: string) => target) ?? [],
+    touchedContracts: sim.contracts.map((contract) => contract.address),
   };
 
   return { sim, proposal: formattedProposal, latestBlock, deps };
@@ -652,6 +658,9 @@ async function simulateExecuted(config: SimulationConfigExecuted): Promise<Simul
     governor,
     timelock,
     publicClient,
+    chainConfig: getChainConfig(1), // Mainnet chain config
+    targets: proposalCreatedEvent.args.targets?.map((target: string) => target) ?? [],
+    touchedContracts: sim.contracts.map((contract) => contract.address),
   };
 
   return { sim, proposal: formattedProposal, latestBlock, deps };
@@ -731,10 +740,7 @@ export async function handleCrossChainSimulations(
         console.error(
           `[CrossChainHandler] Destination sim FAILED for L2 target: ${message.l2TargetAddress}`,
         );
-        const errorMsg =
-          destSim.transaction?.transaction_info?.call_trace?.error_reason ||
-          (destSim.transaction as any).error_message ||
-          'Destination simulation reverted.';
+        const errorMsg = destSim.transaction?.transaction_info?.call_trace?.error_reason;
         return {
           chainId: Number(message.destinationChainId),
           bridgeType: message.bridgeType,
@@ -743,7 +749,7 @@ export async function handleCrossChainSimulations(
           sim: destSim,
           l2Params: message,
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error(
           `[CrossChainHandler] Error during destination simulation API call for L2 target ${message.l2TargetAddress}:`,
           error,

@@ -1,5 +1,5 @@
 import type { Address, Block, Hex } from 'viem';
-import type { getGovernor, getTimelock } from './utils/contracts/governor';
+import type { ChainConfig } from './utils/clients/client';
 
 // --- Simulation configurations ---
 // TODO Consider refactoring to an enum instead of string.
@@ -106,11 +106,14 @@ export type CheckResult = {
   errors: Message[];
 };
 
-export type ProposalData = {
-  governor: ReturnType<typeof getGovernor>;
-  timelock: Awaited<ReturnType<typeof getTimelock>>;
-  publicClient: PublicClient;
-};
+export interface ProposalData {
+  governor: any; // TODO: Properly type governor
+  timelock: any; // TODO: Properly type timelock
+  publicClient: any; // TODO: Properly type publicClient
+  chainConfig: ChainConfig;
+  targets: string[];
+  touchedContracts: string[];
+}
 
 export interface ProposalCheck {
   name: string;

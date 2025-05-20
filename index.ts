@@ -15,7 +15,7 @@ import type {
   SimulationData,
 } from './types';
 import { cacheProposal, getCachedProposal, needsSimulation } from './utils/cache/proposalCache';
-import { publicClient } from './utils/clients/client';
+import { getChainConfig, getClientForChain, publicClient } from './utils/clients/client';
 import { handleCrossChainSimulations, simulate } from './utils/clients/tenderly';
 import { DAO_NAME, GOVERNOR_ADDRESS, SIM_NAME } from './utils/constants';
 import {
@@ -55,7 +55,7 @@ async function main() {
     const finalResult = await handleCrossChainSimulations(sourceResult);
     console.log(`[Index] Cross-chain handling complete for ${SIM_NAME}.`);
 
-    const { sim, proposal, latestBlock, deps, destinationSimulations } = finalResult;
+    const { sim, proposal, deps, destinationSimulations } = finalResult;
 
     // Check if source simulation itself failed
     if (!sim.transaction.status) {
@@ -83,25 +83,56 @@ async function main() {
       ),
     );
 
+    // Run checks for destination chains if any
+    const destinationChecks: Record<number, AllCheckResults> = {};
+    if (destinationSimulations) {
+      for (const destSim of destinationSimulations) {
+        if (!destSim.sim) continue;
+
+        // Use the correct L2 client for deps
+        const l2Deps = {
+          ...deps,
+          publicClient: getClientForChain(destSim.chainId),
+        };
+        destinationChecks[destSim.chainId] = Object.fromEntries(
+          await Promise.all(
+            Object.keys(ALL_CHECKS).map(async (checkId) => [
+              checkId,
+              {
+                name: ALL_CHECKS[checkId].name,
+                result: await ALL_CHECKS[checkId].checkProposal(proposal, destSim.sim!, l2Deps),
+              },
+            ]),
+          ),
+        );
+      }
+    }
+
     // 4. Generate reports (reflecting potential failures)
     console.log(`[Index] Generating reports for ${SIM_NAME}...`);
+    // Fetch full block data for start and end blocks
     const [startBlock, endBlock] = await Promise.all([
-      proposal?.startBlock && latestBlock?.number && proposal.startBlock <= latestBlock.number
+      proposal.startBlock <= (finalResult.latestBlock.number ?? 0n)
         ? publicClient.getBlock({ blockNumber: proposal.startBlock })
         : null,
-      proposal?.endBlock && latestBlock?.number && proposal.endBlock <= latestBlock.number
+      proposal.endBlock <= (finalResult.latestBlock.number ?? 0n)
         ? publicClient.getBlock({ blockNumber: proposal.endBlock })
         : null,
     ]);
-
+    const blocks = {
+      current: finalResult.latestBlock,
+      start: startBlock,
+      end: endBlock,
+    };
     const dir = `./reports/${config.daoName}/${config.governorAddress}`;
     await generateAndSaveReports(
       governorType,
-      { start: startBlock, end: endBlock, current: latestBlock! },
-      proposal!,
+      blocks,
+      proposal,
       checkResults,
       dir,
-      destinationSimulations, // Pass destination results to report
+      destinationSimulations,
+      destinationChecks,
     );
     console.log(`[Index] Reports saved for ${SIM_NAME}.`);
   } else {
@@ -189,6 +220,9 @@ async function main() {
         governor: getGovernor(governorType, GOVERNOR_ADDRESS),
         timelock: await getTimelock(governorType, GOVERNOR_ADDRESS),
         publicClient,
+        chainConfig: getChainConfig(1), // Mainnet chain config
+        targets: [], // Will be populated from simulation
+        touchedContracts: [], // Will be populated from simulation
       };
 
       for (const simProposal of proposalsToSimulate) {
@@ -227,7 +261,7 @@ async function main() {
           ),
         );
 
-        // Generate reports immediately
+        // Fetch full block data for start and end blocks
         const [startBlock, endBlock] = await Promise.all([
           proposal.startBlock <= (latestBlock.number ?? 0n)
             ? publicClient.getBlock({ blockNumber: proposal.startBlock })
@@ -237,15 +271,16 @@ async function main() {
             : null,
         ]);
 
-        // Save reports
+        // Construct the blocks object
+        const blocks = {
+          current: latestBlock,
+          start: startBlock,
+          end: endBlock,
+        };
+
+        // Generate reports immediately
         const dir = `./reports/${config.daoName}/${config.governorAddress}`;
-        await generateAndSaveReports(
-          governorType,
-          { start: startBlock, end: endBlock, current: latestBlock },
-          proposal,
-          checkResults,
-          dir,
-        );
+        await generateAndSaveReports(governorType, blocks, proposal, checkResults, dir);
 
         // Cache everything together
         simulationData.checkResults = checkResults;
