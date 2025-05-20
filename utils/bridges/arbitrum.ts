@@ -49,20 +49,22 @@ function findArbitrumInboxCalls(call: any): any[] {
 /**
  * Parses a source chain simulation trace to find Arbitrum L1 -> L2 messages
  * initiated via the ArbitrumDelayedInbox contract's createRetryableTicket function.
+ * Groups messages by their L2 target address to avoid duplicate simulations.
  *
  * @param sourceSim The Tenderly simulation result from the source chain.
- * @returns An array of ExtractedCrossChainMessage objects.
+ * @returns An array of ExtractedCrossChainMessage objects, grouped by L2 target.
  */
 export function parseArbitrumL1L2Messages(
   sourceSim: TenderlySimulation,
 ): ExtractedCrossChainMessage[] {
-  const extractedMessages: ExtractedCrossChainMessage[] = [];
+  // Map to store messages by L2 target address
+  const messagesByTarget = new Map<string, ExtractedCrossChainMessage>();
 
   // Use optional chaining extensively for safety when accessing nested properties
   const trace = sourceSim?.transaction?.transaction_info?.call_trace;
   if (!trace) {
     console.warn('[Arbitrum Parser] No call trace found in simulation.');
-    return extractedMessages;
+    return [];
   }
 
   // Find all relevant calls to the inbox
@@ -95,15 +97,19 @@ export function parseArbitrumL1L2Messages(
         // Calculate the L2 alias
         const l2Alias = calculateL2Alias(l1Sender);
 
-        extractedMessages.push({
+        // Create the message
+        const message: ExtractedCrossChainMessage = {
           bridgeType: 'ArbitrumL1L2',
           destinationChainId: ARBITRUM_CHAIN_ID,
           l2TargetAddress: l2TargetAddress,
           l2InputData: l2InputData,
           l2Value: l2Value.toString(),
-          // Use the calculated L2 Alias as the expected sender on L2
           l2FromAddress: l2Alias,
-        });
+        };
+
+        // Store in map, overwriting any previous message for this target
+        // This ensures we only simulate once per L2 target
+        messagesByTarget.set(l2TargetAddress, message);
       }
     } catch (error) {
       console.error(
@@ -115,8 +121,10 @@ export function parseArbitrumL1L2Messages(
     }
   }
 
+  const extractedMessages = Array.from(messagesByTarget.values());
+
   if (extractedMessages.length > 0) {
-    console.log(`[Arbitrum Parser] Extracted ${extractedMessages.length} L1->L2 messages.`);
+    console.log(`[Arbitrum Parser] Extracted ${extractedMessages.length} unique L1->L2 messages.`);
   }
 
   return extractedMessages;

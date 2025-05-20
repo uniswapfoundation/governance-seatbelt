@@ -497,7 +497,9 @@ ${
           } else {
             details = `  - L2 Execution: ❌ Failed\n    - Error: ${destSimInfo.error || 'Unknown error'}`;
           }
-          return `### Destination Chain: ${destSimInfo.chainId} (${destSimInfo.bridgeType})\n\n${details}`;
+          // Add L2 target address to the section header for clarity
+          const l2Target = destSimInfo.l2Params?.l2TargetAddress;
+          return `### Destination Chain: ${destSimInfo.chainId} (${destSimInfo.bridgeType})${l2Target ? ` - Target: ${toAddressLink(l2Target)}` : ''}\n\n${details}`;
         })
         .join('\n\n')}`
     : '' // Render nothing if no destination sims
