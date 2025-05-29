@@ -25,6 +25,7 @@ import type {
   SimulationStateChange,
   StructuredSimulationReport,
 } from '../types';
+import { getContractName } from '../utils/clients/tenderly';
 import { formatProposalId } from '../utils/contracts/governor';
 
 // --- Markdown helpers ---
@@ -362,7 +363,7 @@ export function writeFrontendData(
  * @param blocks the relevant blocks for the proposal.
  * @param proposal The proposal details.
  * @param checks The checks results.
- * @param dir The directory where the file should be saved. It will be created if it doesn't exist.
+ * @param outputDir The directory where the file should be saved. It will be created if it doesn't exist.
  * @param filename The name of the file. All report formats will have the same filename with different extensions.
  * @param destinationSimulations Optional destination simulations
  */
@@ -371,14 +372,17 @@ export async function generateAndSaveReports(
   blocks: { current: SimulationBlock; start: SimulationBlock | null; end: SimulationBlock | null },
   proposal: ProposalEvent,
   checks: AllCheckResults,
-  dir: string,
+  outputDir: string,
   destinationSimulations?: SimulationResult['destinationSimulations'],
   destinationChecks?: Record<number, AllCheckResults>,
 ) {
+  console.log(`[Report] Generating report for proposal ${proposal.id} (${proposal.proposalId})`);
+  console.log(`[Report] Output directory: ${outputDir}`);
+
   // Prepare the output folder and filename.
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
   const id = formatProposalId(governorType, proposal.id!);
-  const path = `${dir}/${id}`;
+  const path = `${outputDir}/${id}`;
 
   // Generate the base markdown proposal report. This is the markdown report which is translated into other file types.
   const baseReport = await toMarkdownProposalReport(
@@ -482,32 +486,122 @@ ${Object.keys(checks)
 ## Cross-Chain Simulation Results
 ${
   destinationSimulations && destinationSimulations.length > 0
-    ? `\n${destinationSimulations
-        .map((destSimInfo) => {
-          let details = '';
-          if (destSimInfo.status === 'success') {
-            details = '  - L2 Execution: ✅ Succeeded\n';
-            // Add detailed check results if available
-            if (destinationChecks?.[destSimInfo.chainId]) {
-              details += '\n  ### L2 Checks\n';
-              details += Object.keys(destinationChecks[destSimInfo.chainId])
-                .map((checkId) => toCheckSummary(destinationChecks[destSimInfo.chainId][checkId]))
-                .join('\n');
-            }
-          } else {
-            details = `  - L2 Execution: ❌ Failed\n    - Error: ${destSimInfo.error || 'Unknown error'}`;
-          }
-          // Add L2 target address to the section header for clarity
-          const l2Target = destSimInfo.l2Params?.l2TargetAddress;
-          return `### Destination Chain: ${destSimInfo.chainId} (${destSimInfo.bridgeType})${l2Target ? ` - Target: ${toAddressLink(l2Target)}` : ''}\n\n${details}`;
-        })
-        .join('\n\n')}`
+    ? `\n${formatCrossChainResults(destinationSimulations, destinationChecks)}`
     : '' // Render nothing if no destination sims
 }
 `;
 
   // Add table of contents and return report.
   return (await remark().use(remarkToc, { tight: true }).process(report)).toString();
+}
+
+/**
+ * Format cross-chain simulation results, grouping by chain ID
+ */
+function formatCrossChainResults(
+  destinationSimulations: SimulationResult['destinationSimulations'],
+  destinationChecks?: Record<number, AllCheckResults>,
+): string {
+  if (!destinationSimulations) return '';
+
+  // Group simulations by chain ID
+  const simulationsByChain = destinationSimulations.reduce(
+    (acc, sim) => {
+      const chainId = sim.chainId;
+      if (!acc[chainId]) {
+        acc[chainId] = [];
+      }
+      acc[chainId].push(sim);
+      return acc;
+    },
+    {} as Record<number, typeof destinationSimulations>,
+  );
+
+  // Format each chain's section
+  return Object.entries(simulationsByChain)
+    .map(([chainId, sims]) => {
+      if (!sims || sims.length === 0) return '';
+
+      const chainName = getChainName(Number(chainId));
+      const bridgeType = sims[0].bridgeType;
+
+      // Format L1 message details
+      const l1Messages = sims
+        .map((sim, index) => {
+          const l2Target = sim.l2Params?.l2TargetAddress;
+          return `  - Message ${index + 1}: ${l2Target ? `Target: ${toAddressLink(l2Target)}` : 'No target address'}`;
+        })
+        .join('\n');
+
+      // Get overall chain status
+      const allSuccessful = sims.every((sim) => sim.status === 'success');
+      const status = allSuccessful ? '✅ Succeeded' : '❌ Failed';
+
+      // Format check results for this chain
+      let checkResults = '';
+      if (destinationChecks?.[Number(chainId)]) {
+        checkResults = '\n  ### L2 Checks\n';
+        checkResults += Object.keys(destinationChecks[Number(chainId)])
+          .map((checkId) => toCheckSummary(destinationChecks[Number(chainId)][checkId]))
+          .join('\n');
+      }
+
+      // Format any errors
+      const errors = sims
+        .filter((sim) => sim.status === 'failure')
+        .map((sim) => `    - Error: ${sim.error || 'Unknown error'}`)
+        .join('\n');
+
+      // Format L2 events from all simulations
+      let l2Events = '';
+      if (allSuccessful) {
+        const allEvents = sims
+          .filter((sim) => sim.sim)
+          .flatMap((sim, simIndex) => {
+            const logs = sim.sim?.transaction.transaction_info.logs || [];
+            return logs
+              .map((log) => {
+                if (!log.name) return null;
+                const contract = sim.sim?.contracts.find((c) => c.address === log.raw.address);
+                const contractName = getContractName(contract);
+                const parsedInputs = log.inputs
+                  .map((i) => `${i.soltype!.name}: ${i.value}`)
+                  .join(', ');
+                // Include simulation index to show which message this event came from
+                const messageLabel = sims.length > 1 ? ` (Message ${simIndex + 1})` : '';
+                return `  - ${contractName}${messageLabel}\n    * \`${log.name}(${parsedInputs})\``;
+              })
+              .filter(Boolean);
+          });
+
+        if (allEvents.length > 0) {
+          l2Events = `\n  ### L2 Events\n${allEvents.join('\n')}`;
+        }
+      }
+
+      return `### Chain: ${chainName} (${chainId})
+- Bridge Type: ${bridgeType}
+- L1 Messages:
+${l1Messages}
+- L2 Execution Status: ${status}
+${errors ? `- Errors:\n${errors}` : ''}${l2Events}${checkResults}`;
+    })
+    .filter(Boolean) // Remove any empty strings from the map
+    .join('\n\n');
+}
+
+/**
+ * Get human-readable chain name from chain ID
+ */
+function getChainName(chainId: number): string {
+  const chainNames: Record<number, string> = {
+    42161: 'Arbitrum One',
+    10: 'Optimism',
+    137: 'Polygon',
+    100: 'Gnosis Chain',
+    1: 'Ethereum Mainnet',
+  };
+  return chainNames[chainId] || `Chain ${chainId}`;
 }
 
 /**

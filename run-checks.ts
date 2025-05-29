@@ -10,6 +10,7 @@ import type {
   ProposalData,
   ProposalEvent,
   SimulationConfig,
+  SimulationResult,
   TenderlySimulation,
 } from './types.d';
 import { getChainConfig, getClientForChain, publicClient } from './utils/clients/client';
@@ -21,11 +22,12 @@ import { PROPOSAL_STATES } from './utils/contracts/governor-bravo';
 /**
  * Run checks for a specific chain simulation
  */
-async function runChecksForChain(
+export async function runChecksForChain(
   proposal: ProposalEvent,
   sim: TenderlySimulation,
   deps: ProposalData,
   chainId: number,
+  allL2Simulations?: SimulationResult['destinationSimulations'],
 ): Promise<AllCheckResults> {
   const results: AllCheckResults = {};
   const chainConfig = getChainConfig(chainId);
@@ -36,22 +38,43 @@ async function runChecksForChain(
     chainConfig,
   };
 
+  // For L2 checks, pass all L2 simulations
+  const l2Simulations =
+    chainId !== 1 && allL2Simulations
+      ? allL2Simulations.filter((s) => s.sim).map((s) => ({ chainId: s.chainId, sim: s.sim! }))
+      : undefined;
+
   // Chain-agnostic checks
   results.checkStateChanges = {
     name: ALL_CHECKS.checkStateChanges.name,
-    result: await ALL_CHECKS.checkStateChanges.checkProposal(proposal, sim, depsWithConfig),
+    result: await ALL_CHECKS.checkStateChanges.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
   };
   results.checkLogs = {
     name: ALL_CHECKS.checkLogs.name,
-    result: await ALL_CHECKS.checkLogs.checkProposal(proposal, sim, depsWithConfig),
+    result: await ALL_CHECKS.checkLogs.checkProposal(proposal, sim, depsWithConfig, l2Simulations),
   };
   results.checkEthBalanceChanges = {
     name: ALL_CHECKS.checkEthBalanceChanges.name,
-    result: await ALL_CHECKS.checkEthBalanceChanges.checkProposal(proposal, sim, depsWithConfig),
+    result: await ALL_CHECKS.checkEthBalanceChanges.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
   };
   results.checkDecodeCalldata = {
     name: ALL_CHECKS.checkDecodeCalldata.name,
-    result: await ALL_CHECKS.checkDecodeCalldata.checkProposal(proposal, sim, depsWithConfig),
+    result: await ALL_CHECKS.checkDecodeCalldata.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
   };
 
   // Chain-specific checks
@@ -61,6 +84,7 @@ async function runChecksForChain(
       proposal,
       sim,
       depsWithConfig,
+      l2Simulations,
     ),
   };
   results.checkTouchedContractsVerifiedEtherscan = {
@@ -69,6 +93,7 @@ async function runChecksForChain(
       proposal,
       sim,
       depsWithConfig,
+      l2Simulations,
     ),
   };
   results.checkTargetsNoSelfdestruct = {
@@ -77,6 +102,7 @@ async function runChecksForChain(
       proposal,
       sim,
       depsWithConfig,
+      l2Simulations,
     ),
   };
   results.checkTouchedContractsNoSelfdestruct = {
@@ -85,15 +111,21 @@ async function runChecksForChain(
       proposal,
       sim,
       depsWithConfig,
+      l2Simulations,
     ),
   };
   results.checkSolc = {
     name: ALL_CHECKS.checkSolc.name,
-    result: await ALL_CHECKS.checkSolc.checkProposal(proposal, sim, depsWithConfig),
+    result: await ALL_CHECKS.checkSolc.checkProposal(proposal, sim, depsWithConfig, l2Simulations),
   };
   results.checkSlither = {
     name: ALL_CHECKS.checkSlither.name,
-    result: await ALL_CHECKS.checkSlither.checkProposal(proposal, sim, depsWithConfig),
+    result: await ALL_CHECKS.checkSlither.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
   };
 
   return results;
@@ -155,6 +187,7 @@ async function main() {
     finalResult.sim,
     proposalData,
     1, // Mainnet chain ID
+    finalResult.destinationSimulations,
   );
 
   // Run checks for destination chains if any
@@ -172,6 +205,7 @@ async function main() {
           destSim.sim,
           l2Deps,
           destSim.chainId,
+          finalResult.destinationSimulations,
         );
       }
     }
@@ -203,12 +237,16 @@ async function main() {
     sourceChecks,
     dir,
     finalResult.destinationSimulations,
+    destinationChecks,
   );
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
+// Only run main if this file is executed directly, not when imported
+if (import.meta.main) {
+  main()
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error(error);
+      process.exit(1);
+    });
+}

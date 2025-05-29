@@ -174,6 +174,10 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
     timelockStorageObj[`_timestamps[${toHex(id)}]`] = simTimestamp.toString();
   }
 
+  console.log(`[Tenderly] Setting up storage overrides for proposal ${proposalId}`);
+  console.log(`[Tenderly] Proposal targets: ${targets.length} targets`);
+  console.log(`[Tenderly] Storage key format: proposals[${proposalId}]`);
+
   // Use the Tenderly API to get the encoded state overrides for governor storage
   let governorStateOverrides: Record<string, string> = {};
   if (governorType === 'bravo') {
@@ -784,8 +788,8 @@ const randomInt = (min: number, max: number) => Math.floor(Math.random() * (max 
  * @param contract Tenderly contract object to generate name from
  */
 export function getContractName(contract: TenderlyContract | undefined) {
-  if (!contract) return 'unknown contract name';
-  let contractName = contract?.contract_name;
+  if (!contract) return 'Unknown Contract';
+  let contractName = contract?.contract_name || 'Unknown Contract';
 
   // If the contract is a token, include the full token name. This is useful in cases where the
   // token is a proxy, so the contract name doesn't give much useful information

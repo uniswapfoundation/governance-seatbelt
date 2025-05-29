@@ -121,6 +121,10 @@ export interface ProposalCheck {
     proposal: ProposalEvent,
     tx: TenderlySimulation,
     deps: ProposalData,
+    l2Simulations?: {
+      chainId: number;
+      sim: TenderlySimulation;
+    }[],
   ): Promise<CheckResult>;
 }
 

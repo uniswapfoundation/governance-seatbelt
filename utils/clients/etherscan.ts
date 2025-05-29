@@ -33,7 +33,7 @@ function getAbiCacheFilePath(address: string, chainId: number): string {
 }
 
 /**
- * Fetches the ABI for a contract from Etherscan
+ * Fetches the ABI for a contract from Etherscan V2 API
  * @param address The contract address
  * @param chainId The chain ID (defaults to 1 for Ethereum mainnet)
  * @returns The parsed ABI or null if not found
@@ -57,13 +57,6 @@ export async function fetchContractAbi(address: string, chainId = 1): Promise<Ab
       return cachedAbi;
     }
 
-    // Determine the API URL based on the chain ID
-    const apiUrl = getEtherscanApiUrl(chainId);
-    if (!apiUrl) {
-      console.warn(`[ABI] Unsupported chain ID: ${chainId}`);
-      return null;
-    }
-
     // Get the API key from environment variables
     const apiKey = process.env.ETHERSCAN_API_KEY;
     if (!apiKey) {
@@ -76,15 +69,17 @@ export async function fetchContractAbi(address: string, chainId = 1): Promise<Ab
     let retryCount = 0;
     let data: EtherscanApiResponse | undefined;
 
-    console.log(`[Cache] Fetching new ABI for ${normalizedAddress} from Etherscan`);
+    console.log(
+      `[Cache] Fetching new ABI for ${normalizedAddress} from Etherscan V2 API (Chain ${chainId})`,
+    );
 
     while (retryCount < maxRetries) {
       // Add a delay before making the API call to avoid rate limiting
       await delay(1000); // 1000ms delay to be more conservative with rate limiting
 
       try {
-        // Fetch the ABI from Etherscan
-        const url = `${apiUrl}/api?module=contract&action=getabi&address=${normalizedAddress}&apikey=${apiKey}`;
+        // Use Etherscan V2 API with chainid parameter
+        const url = `https://api.etherscan.io/v2/api?chainid=${chainId}&module=contract&action=getabi&address=${normalizedAddress}&apikey=${apiKey}`;
         const response = await fetch(url);
         data = (await response.json()) as EtherscanApiResponse;
 
@@ -93,7 +88,7 @@ export async function fetchContractAbi(address: string, chainId = 1): Promise<Ab
         }
 
         console.warn(
-          `[ABI] Failed to fetch ABI for ${normalizedAddress} (attempt ${retryCount + 1}/${maxRetries}): ${data.message || 'Unknown error'}`,
+          `[ABI] Failed to fetch ABI for ${normalizedAddress} on chain ${chainId} (attempt ${retryCount + 1}/${maxRetries}): ${data.message || 'Unknown error'}`,
         );
         retryCount++;
 
@@ -102,7 +97,7 @@ export async function fetchContractAbi(address: string, chainId = 1): Promise<Ab
         }
       } catch (error) {
         console.error(
-          `[ABI] Error fetching ABI for ${normalizedAddress} (attempt ${retryCount + 1}/${maxRetries}):`,
+          `[ABI] Error fetching ABI for ${normalizedAddress} on chain ${chainId} (attempt ${retryCount + 1}/${maxRetries}):`,
           error,
         );
         retryCount++;
@@ -115,7 +110,7 @@ export async function fetchContractAbi(address: string, chainId = 1): Promise<Ab
 
     if (!data || data.status !== '1' || !data.result) {
       console.warn(
-        `[ABI] Failed to fetch ABI for ${normalizedAddress} after ${maxRetries} attempts`,
+        `[ABI] Failed to fetch ABI for ${normalizedAddress} on chain ${chainId} after ${maxRetries} attempts`,
       );
       return null;
     }
@@ -146,7 +141,7 @@ export async function fetchContractAbi(address: string, chainId = 1): Promise<Ab
       // Cache the result both in memory and on disk
       abiCache[cacheKey] = abiJson as Abi;
       writeFileSync(cachePath, JSON.stringify(abiJson, null, 2));
-      console.log(`[Cache] Cached new ABI for ${normalizedAddress}`);
+      console.log(`[Cache] Cached new ABI for ${normalizedAddress} on chain ${chainId}`);
 
       return abiJson as Abi;
     } catch (error) {
@@ -154,22 +149,8 @@ export async function fetchContractAbi(address: string, chainId = 1): Promise<Ab
       return null;
     }
   } catch (error) {
-    console.error(`Error fetching ABI for ${address}:`, error);
+    console.error(`Error fetching ABI for ${address} on chain ${chainId}:`, error);
     return null;
-  }
-}
-
-/**
- * Gets the Etherscan API URL for a given chain ID
- * @param chainId The chain ID
- * @returns The Etherscan API URL or null if unsupported
- */
-function getEtherscanApiUrl(chainId: number): string | null {
-  switch (chainId) {
-    case 1: // Ethereum Mainnet
-      return 'https://api.etherscan.io';
-    default:
-      return 'https://api.etherscan.io';
   }
 }
 

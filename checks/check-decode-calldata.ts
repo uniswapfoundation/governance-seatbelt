@@ -60,7 +60,7 @@ export const checkDecodeCalldata: ProposalCheck = {
           (c) => getAddress(c.address) === getAddress(targetAddress),
         );
 
-        return prettifyCalldata(call, targetAddress, warnings, contract);
+        return prettifyCalldata(call, targetAddress, warnings, contract, deps.chainConfig.chainId);
       }),
     );
 
@@ -191,6 +191,7 @@ async function prettifyCalldata(
   target: string,
   warnings: string[],
   contract: TenderlyContract | undefined,
+  chainId: number,
 ) {
   // Handle ETH transfers (empty calldata with value)
   if (call.input === '0x' && call.value && BigInt(call.value) > 0n) {
@@ -219,7 +220,7 @@ async function prettifyCalldata(
 
   // Try to decode using Etherscan ABI first
   try {
-    const decoded = await decodeFunctionWithAbi(target, call.input as `0x${string}`);
+    const decoded = await decodeFunctionWithAbi(target, call.input as `0x${string}`, chainId);
     if (decoded) {
       // Cache the decoded function
       decodedFunctionCache[cacheKey] = decoded;

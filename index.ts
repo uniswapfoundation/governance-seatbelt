@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { getAddress } from 'viem';
 import ALL_CHECKS from './checks';
 import { generateAndSaveReports } from './presentation/report';
+import { runChecksForChain } from './run-checks';
 import type {
   AllCheckResults,
   GovernorType,
@@ -15,7 +16,7 @@ import type {
   SimulationData,
 } from './types';
 import { cacheProposal, getCachedProposal, needsSimulation } from './utils/cache/proposalCache';
-import { getChainConfig, getClientForChain, publicClient } from './utils/clients/client';
+import { getChainConfig, publicClient } from './utils/clients/client';
 import { handleCrossChainSimulations, simulate } from './utils/clients/tenderly';
 import { DAO_NAME, GOVERNOR_ADDRESS, SIM_NAME } from './utils/constants';
 import {
@@ -55,7 +56,7 @@ async function main() {
     const finalResult = await handleCrossChainSimulations(sourceResult);
     console.log(`[Index] Cross-chain handling complete for ${SIM_NAME}.`);
 
-    const { sim, proposal, deps, destinationSimulations } = finalResult;
+    const { sim, proposal, deps } = finalResult;
 
     // Check if source simulation itself failed
     if (!sim.transaction.status) {
@@ -70,43 +71,15 @@ async function main() {
 
     // 3. Run checks (using potentially failed sim data)
     console.log(`[Index] Running checks for ${SIM_NAME} simulation...`);
-    const checkResults: AllCheckResults = Object.fromEntries(
-      await Promise.all(
-        Object.keys(ALL_CHECKS).map(async (checkId) => [
-          checkId,
-          {
-            name: ALL_CHECKS[checkId].name,
-            // Pass correct deps (which should be part of finalResult)
-            result: await ALL_CHECKS[checkId].checkProposal(proposal, sim, deps!),
-          },
-        ]),
-      ),
+
+    // Run checks for mainnet
+    const mainnetResults = await runChecksForChain(
+      proposal,
+      finalResult.sim,
+      deps,
+      1, // Mainnet chain ID
+      finalResult.destinationSimulations,
     );
-
-    // Run checks for destination chains if any
-    const destinationChecks: Record<number, AllCheckResults> = {};
-    if (destinationSimulations) {
-      for (const destSim of destinationSimulations) {
-        if (!destSim.sim) continue;
-
-        // Use the correct L2 client for deps
-        const l2Deps = {
-          ...deps,
-          publicClient: getClientForChain(destSim.chainId),
-        };
-        destinationChecks[destSim.chainId] = Object.fromEntries(
-          await Promise.all(
-            Object.keys(ALL_CHECKS).map(async (checkId) => [
-              checkId,
-              {
-                name: ALL_CHECKS[checkId].name,
-                result: await ALL_CHECKS[checkId].checkProposal(proposal, destSim.sim!, l2Deps),
-              },
-            ]),
-          ),
-        );
-      }
-    }
 
     // 4. Generate reports (reflecting potential failures)
     console.log(`[Index] Generating reports for ${SIM_NAME}...`);
@@ -125,13 +98,34 @@ async function main() {
       end: endBlock,
     };
     const dir = `./reports/${config.daoName}/${config.governorAddress}`;
+
+    // Run checks for each L2 chain and collect destination checks
+    const destinationChecks: Record<number, AllCheckResults> = {};
+    if (finalResult.destinationSimulations) {
+      for (const destSim of finalResult.destinationSimulations) {
+        if (destSim.sim) {
+          const l2Deps = {
+            ...deps,
+            chainConfig: getChainConfig(destSim.chainId),
+          };
+          destinationChecks[destSim.chainId] = await runChecksForChain(
+            proposal,
+            destSim.sim,
+            l2Deps,
+            destSim.chainId,
+            finalResult.destinationSimulations,
+          );
+        }
+      }
+    }
+
     await generateAndSaveReports(
       governorType,
       blocks,
       proposal,
-      checkResults,
+      mainnetResults,
       dir,
-      destinationSimulations,
+      finalResult.destinationSimulations,
       destinationChecks,
     );
     console.log(`[Index] Reports saved for ${SIM_NAME}.`);
