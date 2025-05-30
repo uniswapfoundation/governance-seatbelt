@@ -28,6 +28,7 @@ import type {
 import { getContractName } from '../utils/clients/tenderly';
 import { formatProposalId } from '../utils/contracts/governor';
 import { getAddress } from 'viem';
+import { getChainConfig } from '../utils/clients/client';
 
 // --- Markdown helpers ---
 
@@ -526,11 +527,15 @@ async function formatCrossChainResults(
       const chainName = getChainName(Number(chainId));
       const bridgeType = sims[0].bridgeType;
 
-      // Format L1 message details
+      // Get the correct block explorer URL for this chain
+      const chainConfig = getChainConfig(Number(chainId));
+      const blockExplorerUrl = chainConfig.blockExplorer.baseUrl;
+
+      // Format L1 message details with correct block explorer links
       const l1Messages = sims
         .map((sim, index) => {
           const l2Target = sim.l2Params?.l2TargetAddress;
-          return `  - Message ${index + 1}: ${l2Target ? `Target: ${toAddressLink(l2Target)}` : 'No target address'}`;
+          return `  - Message ${index + 1}: ${l2Target ? `Target: ${toAddressLink(l2Target, blockExplorerUrl)}` : 'No target address'}`;
         })
         .join('\n');
 
