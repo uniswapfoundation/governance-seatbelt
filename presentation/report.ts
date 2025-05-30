@@ -27,6 +27,7 @@ import type {
 } from '../types';
 import { getContractName } from '../utils/clients/tenderly';
 import { formatProposalId } from '../utils/contracts/governor';
+import { getAddress } from 'viem';
 
 // --- Markdown helpers ---
 
@@ -562,7 +563,9 @@ function formatCrossChainResults(
             return logs
               .map((log) => {
                 if (!log.name) return null;
-                const contract = sim.sim?.contracts.find((c) => c.address === log.raw.address);
+                const contract = sim.sim?.contracts.find(
+                  (c) => getAddress(c.address) === getAddress(log.raw.address),
+                );
                 const contractName = getContractName(contract);
                 const parsedInputs = log.inputs
                   .map((i) => `${i.soltype!.name}: ${i.value}`)
