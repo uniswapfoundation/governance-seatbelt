@@ -6,7 +6,7 @@ import {
   toFunctionSelector,
 } from 'viem';
 import { bullet } from '../presentation/report';
-import type { FluffyCall, ProposalCheck, TenderlyContract } from '../types';
+import type { FluffyCall, ProposalCheck, TenderlyContract, TenderlySimulation } from '../types';
 import { decodeFunctionWithAbi } from '../utils/clients/etherscan';
 import { getContractNameFromTenderly } from '../utils/clients/tenderly';
 import { fetchTokenMetadata } from '../utils/contracts/erc20';
@@ -89,8 +89,8 @@ export const checkDecodeCalldata: ProposalCheck = {
  * Handle L2 cross-chain calldata decoding using the actual L2 execution data
  */
 async function handleL2CrossChainCalldata(
-  l2Simulations: Array<{ chainId: number; sim: any }>,
-  sim: any,
+  l2Simulations: Array<{ chainId: number; sim: TenderlySimulation }>,
+  sim: TenderlySimulation,
   warnings: string[],
   chainId: number,
 ) {
@@ -144,9 +144,12 @@ async function handleL2CrossChainCalldata(
 /**
  * Extract meaningful L2 calls from the call trace, filtering out system calls
  */
-function extractMeaningfulL2Calls(callTrace: any): FluffyCall[] {
+function extractMeaningfulL2Calls(
+  callTrace: TenderlySimulation['transaction']['transaction_info']['call_trace'],
+): FluffyCall[] {
   const meaningfulCalls: FluffyCall[] = [];
 
+  // biome-ignore lint/suspicious/noExplicitAny: Complex nested Tenderly types make this difficult to type precisely
   function traverseCalls(calls: any[]): void {
     for (const call of calls || []) {
       // Skip system addresses and empty calls
