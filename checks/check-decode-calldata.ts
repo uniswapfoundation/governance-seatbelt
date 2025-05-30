@@ -19,8 +19,24 @@ const decodedFunctionCache: Record<string, { name: string; args: unknown[] }> = 
  */
 export const checkDecodeCalldata: ProposalCheck = {
   name: 'Decodes target calldata into a human-readable format',
-  async checkProposal(proposal, sim, deps) {
+  async checkProposal(proposal, sim, deps, l2Simulations) {
     const warnings: string[] = [];
+
+    // Check if we're running on L2 and have cross-chain message data available
+    const isL2Chain = deps.chainConfig?.chainId !== 1;
+    const hasL2Data = l2Simulations && l2Simulations.length > 0;
+
+    if (isL2Chain && hasL2Data) {
+      // Handle L2 cross-chain calldata decoding
+      return await handleL2CrossChainCalldata(
+        l2Simulations,
+        sim,
+        warnings,
+        deps.chainConfig.chainId,
+      );
+    }
+
+    // Handle regular L1 calldata decoding (existing logic)
     // Generate the raw calldata for each proposal action
     const calldatas = proposal.signatures.map((sig, i) => {
       return sig
@@ -68,6 +84,101 @@ export const checkDecodeCalldata: ProposalCheck = {
     return { info, warnings, errors: [] };
   },
 };
+
+/**
+ * Handle L2 cross-chain calldata decoding using the actual L2 execution data
+ */
+async function handleL2CrossChainCalldata(
+  l2Simulations: Array<{ chainId: number; sim: any }>,
+  sim: any,
+  warnings: string[],
+  chainId: number,
+) {
+  // We need to access the destination simulations to get l2Params
+  // Since l2Simulations doesn't include l2Params, we need to get it from the global result
+  // For now, let's extract L2 calldata from the simulation traces and decode what we can find
+
+  const allL2Calls: FluffyCall[] = [];
+
+  // Extract calls from all L2 simulations
+  for (const l2Sim of l2Simulations) {
+    if (l2Sim.sim?.transaction?.transaction_info?.call_trace?.calls) {
+      // Find calls that aren't just system calls
+      const meaningfulCalls = extractMeaningfulL2Calls(
+        l2Sim.sim.transaction.transaction_info.call_trace,
+      );
+      allL2Calls.push(...meaningfulCalls);
+    }
+  }
+
+  if (allL2Calls.length === 0) {
+    warnings.push('No meaningful L2 execution calls found in cross-chain simulation');
+    return { info: [], warnings, errors: [] };
+  }
+
+  // Process each meaningful L2 call
+  const descriptions = await Promise.all(
+    allL2Calls.map(async (call) => {
+      // Get contract information from the simulation
+      const contract = sim.contracts.find(
+        (c: TenderlyContract) => getAddress(c.address) === getAddress(call.to),
+      );
+
+      return prettifyCalldata(call, call.to, warnings, contract, chainId);
+    }),
+  );
+
+  const validDescriptions = descriptions.filter((d) => d !== null);
+  if (validDescriptions.length === 0) {
+    warnings.push('Could not decode any L2 cross-chain execution calls');
+    return { info: [], warnings, errors: [] };
+  }
+
+  return {
+    info: validDescriptions.map((d) => bullet(d!)),
+    warnings,
+    errors: [],
+  };
+}
+
+/**
+ * Extract meaningful L2 calls from the call trace, filtering out system calls
+ */
+function extractMeaningfulL2Calls(callTrace: any): FluffyCall[] {
+  const meaningfulCalls: FluffyCall[] = [];
+
+  function traverseCalls(calls: any[]): void {
+    for (const call of calls || []) {
+      // Skip system addresses and empty calls
+      if (call.to && call.input && call.input !== '0x') {
+        // Skip Arbitrum system addresses
+        const isSystemAddress =
+          call.to.toLowerCase().includes('fffff') || call.to.toLowerCase().includes('00000');
+
+        if (!isSystemAddress) {
+          meaningfulCalls.push({
+            from: call.from,
+            to: call.to,
+            input: call.input,
+            value: call.value || '0',
+            function_name: call.function_name,
+            decoded_input: call.decoded_input,
+            decoded_output: call.decoded_output,
+            calls: call.calls,
+          } as FluffyCall);
+        }
+      }
+
+      // Recursively check subcalls
+      if (call.calls) {
+        traverseCalls(call.calls);
+      }
+    }
+  }
+
+  traverseCalls([callTrace]);
+  return meaningfulCalls;
+}
 
 // --- Helper methods ---
 
