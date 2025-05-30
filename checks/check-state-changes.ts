@@ -75,7 +75,7 @@ export const checkStateChanges: ProposalCheck = {
     // ETH balance changes are now handled by the checkEthBalanceChanges module
     for (const [address, diffs] of Object.entries(stateDiffs)) {
       // Use contracts array to get contract name of address
-      const contract = sim.contracts.find((c) => c.address === address);
+      const contract = sim.contracts.find((c) => getAddress(c.address) === getAddress(address));
       info.push(bullet(getContractNameFromTenderly(contract)));
 
       // Track processed state changes to deduplicate
