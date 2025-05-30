@@ -1,7 +1,7 @@
 import { getAddress } from 'viem';
 import { bullet } from '../presentation/report';
 import type { Log, ProposalCheck } from '../types';
-import { getContractName } from '../utils/clients/tenderly';
+import { getContractNameFromTenderly } from '../utils/clients/tenderly';
 
 /**
  * Reports all emitted events from the proposal
@@ -56,7 +56,7 @@ export const checkLogs: ProposalCheck = {
     for (const [address, logs] of Object.entries(allEvents)) {
       // Use contracts array to get contract name of address
       const contract = sim.contracts.find((c) => c.address === address);
-      info.push(bullet(getContractName(contract)));
+      info.push(bullet(getContractNameFromTenderly(contract)));
 
       // Format log data for report
       for (const log of logs) {

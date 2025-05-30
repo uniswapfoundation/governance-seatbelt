@@ -42,6 +42,7 @@ import {
   hashOperationBatchOz,
   hashOperationOz,
 } from '../contracts/governor';
+import { fetchTokenMetadata } from '../contracts/erc20';
 import { getChainConfig, publicClient } from './client';
 
 const fetchUrl = mftch;
@@ -786,17 +787,62 @@ const randomInt = (min: number, max: number) => Math.floor(Math.random() * (max 
 /**
  * @notice Given a Tenderly contract object, generates a descriptive human-friendly name for that contract
  * @param contract Tenderly contract object to generate name from
+ * @param chainId Optional chain ID to fetch better contract names from block explorers
  */
-export function getContractName(contract: TenderlyContract | undefined) {
+export async function getContractName(
+  contract: TenderlyContract | undefined,
+  chainId?: number,
+): Promise<string> {
   if (!contract) return 'Unknown Contract';
-  let contractName = contract?.contract_name || 'Unknown Contract';
 
-  // If the contract is a token, include the full token name. This is useful in cases where the
-  // token is a proxy, so the contract name doesn't give much useful information
-  if (contract?.token_data?.name) contractName += ` (${contract?.token_data?.name})`;
+  const contractAddress = getAddress(contract.address);
 
-  // Lastly, append the contract address and save it off
-  return `${contractName} at \`${getAddress(contract.address)}\``;
+  // Priority 1: Use token metadata for semantic names (like "ARB Token") when available
+  if (contract?.token_data?.name) {
+    const tokenName = contract.token_data.name;
+    // Try to get token symbol to make it more descriptive
+    try {
+      if (chainId && (chainId === 42161 || chainId === 1)) {
+        const metadata = await fetchTokenMetadata(contractAddress);
+        const symbol = metadata.symbol || contract.token_data.symbol || tokenName;
+        return `${tokenName} (${symbol}) at \`${contractAddress}\``;
+      }
+    } catch (error) {
+      // Fallback to just token name if metadata fetch fails
+      console.debug(
+        `[Contract Name] Failed to fetch token metadata for ${contractAddress}:`,
+        error,
+      );
+    }
+    // Use token name with symbol from Tenderly if available
+    const symbol = contract.token_data.symbol || tokenName;
+    return `${tokenName} (${symbol}) at \`${contractAddress}\``;
+  }
+
+  // Priority 2: Use Tenderly's contract name (like "TransparentUpgradeableProxy")
+  const contractName = contract?.contract_name || 'Unknown Contract';
+  return `${contractName} at \`${contractAddress}\``;
+}
+
+/**
+ * @notice Uses only Tenderly's contract metadata for naming (no additional API calls)
+ * @param contract Tenderly contract object to generate name from
+ */
+export function getContractNameFromTenderly(contract: TenderlyContract | undefined): string {
+  if (!contract) return 'Unknown Contract';
+
+  const contractAddress = getAddress(contract.address);
+
+  // Priority 1: Use token name if available for better semantic naming
+  if (contract?.token_data?.name) {
+    const tokenName = contract.token_data.name;
+    const symbol = contract.token_data.symbol || tokenName;
+    return `${tokenName} (${symbol}) at \`${contractAddress}\``;
+  }
+
+  // Priority 2: Fall back to technical contract name
+  const contractName = contract?.contract_name || 'Unknown Contract';
+  return `${contractName} at \`${contractAddress}\``;
 }
 
 /**

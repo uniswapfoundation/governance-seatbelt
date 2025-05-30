@@ -1,7 +1,7 @@
 import { getAddress } from 'viem';
 import { bullet } from '../presentation/report';
 import type { ProposalCheck, StateDiff } from '../types';
-import { getContractName } from '../utils/clients/tenderly';
+import { getContractNameFromTenderly } from '../utils/clients/tenderly';
 
 /**
  * Reports all state changes from the proposal
@@ -76,7 +76,7 @@ export const checkStateChanges: ProposalCheck = {
     for (const [address, diffs] of Object.entries(stateDiffs)) {
       // Use contracts array to get contract name of address
       const contract = sim.contracts.find((c) => c.address === address);
-      info.push(bullet(getContractName(contract)));
+      info.push(bullet(getContractNameFromTenderly(contract)));
 
       // Track processed state changes to deduplicate
       const processedChanges = new Set<string>();

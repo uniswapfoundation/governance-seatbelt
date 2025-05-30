@@ -3,7 +3,7 @@ import util from 'node:util';
 import { getAddress } from 'viem';
 import { codeBlock } from '../presentation/report';
 import type { ProposalCheck } from '../types';
-import { getContractName } from '../utils/clients/tenderly';
+import { getContractNameFromTenderly } from '../utils/clients/tenderly';
 import { ETHERSCAN_API_KEY } from '../utils/constants';
 import { getImplementation } from '../utils/contracts/governor';
 
@@ -71,7 +71,7 @@ export const checkSolc: ProposalCheck = {
       }
 
       // Append results to report info.
-      const contractName = getContractName(contract);
+      const contractName = getContractNameFromTenderly(contract);
       if (output.stderr === '') {
         info.push(`No compiler warnings for ${contractName}`);
       } else {

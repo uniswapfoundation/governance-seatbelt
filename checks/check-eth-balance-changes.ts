@@ -1,6 +1,6 @@
 import { getAddress } from 'viem';
 import type { AssetChange, BalanceChange, ProposalCheck, TenderlyContract } from '../types';
-import { getContractName } from '../utils/clients/tenderly';
+import { getContractNameFromTenderly } from '../utils/clients/tenderly';
 
 /**
  * Reports all ETH balance changes from the proposal
@@ -109,11 +109,11 @@ function generateTransferMessages(
 
     // Format the from/to descriptions more clearly with Etherscan links
     const fromName = fromContract
-      ? `[${getContractName(fromContract).split(' at ')[0]}](https://etherscan.io/address/${from})`
+      ? `[${getContractNameFromTenderly(fromContract).split(' at ')[0]}](https://etherscan.io/address/${from})`
       : `[EOA (${from})](https://etherscan.io/address/${from})`;
 
     const toName = toContract
-      ? `[${getContractName(toContract).split(' at ')[0]}](https://etherscan.io/address/${to})`
+      ? `[${getContractNameFromTenderly(toContract).split(' at ')[0]}](https://etherscan.io/address/${to})`
       : `[EOA (${to})](https://etherscan.io/address/${to})`;
 
     // Create appropriate message based on the transfer context
@@ -185,7 +185,7 @@ function addBalanceChangesTable(
       const contract = findContractByAddress(address);
 
       // Format description based on whether it's a contract or EOA
-      const description = contract ? getContractName(contract).split(' at ')[0] : 'EOA';
+      const description = contract ? getContractNameFromTenderly(contract).split(' at ')[0] : 'EOA';
 
       // Get the net ETH change for this address
       const netChange = netEthChanges.get(addressLower) || 0;

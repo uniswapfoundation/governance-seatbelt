@@ -8,7 +8,7 @@ import {
 import { bullet } from '../presentation/report';
 import type { FluffyCall, ProposalCheck, TenderlyContract } from '../types';
 import { decodeFunctionWithAbi } from '../utils/clients/etherscan';
-import { getContractName } from '../utils/clients/tenderly';
+import { getContractNameFromTenderly } from '../utils/clients/tenderly';
 import { fetchTokenMetadata } from '../utils/contracts/erc20';
 
 // Cache for decoded function data to avoid redundant decoding
@@ -203,7 +203,7 @@ async function prettifyCalldata(
   const selector = call.input.slice(0, 10);
 
   // Format the contract identifier using the contract information from the simulation
-  const contractIdentifier = contract ? getContractName(contract) : `\`${target}\``;
+  const contractIdentifier = contract ? getContractNameFromTenderly(contract) : `\`${target}\``;
 
   // Check if we have a cached decoded function
   const cacheKey = `${target}-${call.input}`;

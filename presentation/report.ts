@@ -487,7 +487,7 @@ ${Object.keys(checks)
 ## Cross-Chain Simulation Results
 ${
   destinationSimulations && destinationSimulations.length > 0
-    ? `\n${formatCrossChainResults(destinationSimulations, destinationChecks)}`
+    ? `\n${await formatCrossChainResults(destinationSimulations, destinationChecks)}`
     : '' // Render nothing if no destination sims
 }
 `;
@@ -499,10 +499,10 @@ ${
 /**
  * Format cross-chain simulation results, grouping by chain ID
  */
-function formatCrossChainResults(
+async function formatCrossChainResults(
   destinationSimulations: SimulationResult['destinationSimulations'],
   destinationChecks?: Record<number, AllCheckResults>,
-): string {
+): Promise<string> {
   if (!destinationSimulations) return '';
 
   // Group simulations by chain ID
@@ -519,8 +519,8 @@ function formatCrossChainResults(
   );
 
   // Format each chain's section
-  return Object.entries(simulationsByChain)
-    .map(([chainId, sims]) => {
+  const chainSections = await Promise.all(
+    Object.entries(simulationsByChain).map(async ([chainId, sims]) => {
       if (!sims || sims.length === 0) return '';
 
       const chainName = getChainName(Number(chainId));
@@ -556,27 +556,37 @@ function formatCrossChainResults(
       // Format L2 events from all simulations
       let l2Events = '';
       if (allSuccessful) {
-        const allEvents = sims
-          .filter((sim) => sim.sim)
-          .flatMap((sim, simIndex) => {
-            const logs = sim.sim?.transaction.transaction_info.logs || [];
-            return logs
-              .map((log) => {
+        const allEventsArrays = await Promise.all(
+          sims
+            .filter((sim) => sim.sim)
+            .map(async (sim, simIndex) => {
+              const logs = sim.sim?.transaction.transaction_info.logs || [];
+
+              const logPromises = logs.map(async (log) => {
                 if (!log.name) return null;
+
+                // Fix case-sensitivity bug: normalize addresses before comparison
                 const contract = sim.sim?.contracts.find(
                   (c) => getAddress(c.address) === getAddress(log.raw.address),
                 );
-                const contractName = getContractName(contract);
+
+                // Use async getContractName with chain ID for better semantic names (e.g., "ARB Token")
+                const contractName = await getContractName(contract, Number(chainId));
+
                 const parsedInputs = log.inputs
                   .map((i) => `${i.soltype!.name}: ${i.value}`)
                   .join(', ');
                 // Include simulation index to show which message this event came from
                 const messageLabel = sims.length > 1 ? ` (Message ${simIndex + 1})` : '';
                 return `  - ${contractName}${messageLabel}\n    * \`${log.name}(${parsedInputs})\``;
-              })
-              .filter(Boolean);
-          });
+              });
 
+              const results = await Promise.all(logPromises);
+              return results.filter(Boolean);
+            }),
+        );
+
+        const allEvents = allEventsArrays.flat();
         if (allEvents.length > 0) {
           l2Events = `\n  ### L2 Events\n${allEvents.join('\n')}`;
         }
@@ -588,9 +598,10 @@ function formatCrossChainResults(
 ${l1Messages}
 - L2 Execution Status: ${status}
 ${errors ? `- Errors:\n${errors}` : ''}${l2Events}${checkResults}`;
-    })
-    .filter(Boolean) // Remove any empty strings from the map
-    .join('\n\n');
+    }),
+  );
+
+  return chainSections.filter(Boolean).join('\n\n');
 }
 
 /**
