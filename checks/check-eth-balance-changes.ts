@@ -18,7 +18,7 @@ export const checkEthBalanceChanges: ProposalCheck = {
 
     // Filter for ETH transfers
     const ethTransfers = sim.transaction.transaction_info.asset_changes.filter(
-      (change) => change.token_info.type === 'Native',
+      (change) => change.token_info.standard === 'NativeCurrency',
     );
 
     if (ethTransfers.length === 0) {
@@ -160,7 +160,7 @@ function addBalanceChangesTable(
   significantChanges: string[],
 ) {
   // Create table header
-  significantChanges.push('\n**ETH Balance Changes**');
+  significantChanges.push('ETH Balance Changes');
   significantChanges.push('| Address | Description | Net ETH Change |');
   significantChanges.push('| ------- | ----------- | ------------- |');
 
