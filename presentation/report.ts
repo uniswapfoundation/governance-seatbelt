@@ -64,7 +64,23 @@ export function toAddressLink(address: string, code = false) {
 // -- Report formatters ---
 
 function toMessageList(header: string, text: string[]): string {
-  return text.length > 0 ? `${bold(header)}:\n\n${text.map((msg) => `${msg}`).join('\n')}` : '';
+  return text.length > 0
+    ? `${bold(header)}:\n\n${text
+        .filter((msg) => msg.trim())
+        .map((msg) => {
+          // If the message starts with spaces, it's already indented (sub-item), preserve the indentation
+          if (msg.match(/^\s{4,}/)) {
+            // For indented messages, add bullet but preserve the indentation level
+            const trimmedMsg = msg.trim();
+            const indentMatch = msg.match(/^(\s*)/);
+            const indent = indentMatch ? indentMatch[1] : '';
+            return `${indent.slice(0, -4)}    - ${trimmedMsg}`;
+          }
+          // For non-indented messages, add main bullet
+          return bullet(msg.trim());
+        })
+        .join('\n')}`
+    : '';
 }
 
 /**
@@ -173,7 +189,8 @@ function generateStructuredReport(
     return {
       title: name,
       status: checkStatus,
-      details: details.length > 0 ? details : undefined,
+      details,
+      info,
     };
   });
 
@@ -188,23 +205,37 @@ function generateStructuredReport(
     let currentContractAddress = '';
 
     for (const infoMsg of result.info) {
-      // Check if this is a contract name line
-      const contractNameMatch = infoMsg.match(/- (.+?) at `(0x[a-fA-F0-9]{40})`/);
+      // Check if this is a contract name line: "ContractName at `0xAddress`"
+      const contractNameMatch = infoMsg.match(/^(.+) at `(0x[a-fA-F0-9]{40})`$/);
       if (contractNameMatch) {
         currentContract = contractNameMatch[1].trim();
         currentContractAddress = contractNameMatch[2];
         continue;
       }
 
-      // Try to extract mapping state changes from info messages
+      // Try to extract slot changes: "    Slot `0xhash` changed from `"value"` to `"newvalue"`"
+      const slotChangeMatch = infoMsg.match(
+        /^\s+Slot `(0x[a-fA-F0-9]+)` changed from `"(.*?)"` to `"(.*?)"`$/,
+      );
+      if (slotChangeMatch) {
+        stateChanges.push({
+          contract: currentContract,
+          contractAddress: currentContractAddress,
+          key: slotChangeMatch[1],
+          oldValue: slotChangeMatch[2], // Already clean, no quotes
+          newValue: slotChangeMatch[3], // Already clean, no quotes
+        });
+        continue;
+      }
+
+      // Try to extract mapping state changes (if any): "`variable` key `key` changed from `value` to `newvalue`"
       const mappingStateChangeMatch = infoMsg.match(
         /`(.+?)`\s+key\s+`(.+?)`\s+changed\s+from\s+`(.+?)`\s+to\s+`(.+?)`/,
       );
       if (mappingStateChangeMatch) {
-        // Use the current contract name and address if available
         stateChanges.push({
           contract: currentContract || mappingStateChangeMatch[1],
-          contractAddress: currentContractAddress || undefined,
+          contractAddress: currentContractAddress,
           key: mappingStateChangeMatch[2],
           oldValue: mappingStateChangeMatch[3],
           newValue: mappingStateChangeMatch[4],
@@ -212,12 +243,11 @@ function generateStructuredReport(
         continue;
       }
 
-      // Try to extract simple type state changes from info messages
+      // Try to extract simple type state changes (if any): "`variable` changed from `value` to `newvalue`"
       const simpleStateChangeMatch = infoMsg.match(
         /`(.+?)`\s+changed\s+from\s+`(.+?)`\s+to\s+`(.+?)`/,
       );
       if (simpleStateChangeMatch) {
-        // Use the current contract name and address if available
         stateChanges.push({
           contract: currentContract,
           contractAddress: currentContractAddress,
@@ -390,10 +420,14 @@ export async function generateAndSaveReports(
       .process(baseReport),
   );
 
+  // Generate the structured report for JSON output
+  const structuredReport = generateStructuredReport(governorType, blocks, proposal, checks);
+
   // Save off all reports. The Markdown and PDF reports use the `markdownReport`.
   await Promise.all([
     fsp.writeFile(`${path}.html`, htmlReport),
     fsp.writeFile(`${path}.md`, markdownReport),
+    fsp.writeFile(`${path}.json`, JSON.stringify(structuredReport, null, 2)),
     mdToPdf(
       { content: markdownReport },
       {

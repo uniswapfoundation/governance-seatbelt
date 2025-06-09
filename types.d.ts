@@ -714,6 +714,7 @@ export interface SimulationCheck {
   title: string;
   status: 'passed' | 'warning' | 'failed';
   details?: string;
+  info?: string[];
   infoItems?: Array<{
     label: string;
     value: string;

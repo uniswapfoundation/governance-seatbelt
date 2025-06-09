@@ -1,5 +1,5 @@
 import { type PublicClient, getAddress } from 'viem';
-import { bullet, toAddressLink } from '../presentation/report';
+import { toAddressLink } from '../presentation/report';
 import type { ProposalCheck } from '../types';
 
 /**
@@ -49,13 +49,12 @@ async function checkNoSelfdestructs(
   for (const addr of addresses) {
     const status = await checkNoSelfdestruct(trustedAddrs, addr, publicClient);
     const address = toAddressLink(addr, false);
-    if (status === 'eoa') info.push(bullet(`${address}: EOA`));
-    else if (status === 'empty') warn.push(bullet(`${address}: EOA (may have code later)`));
-    else if (status === 'safe') info.push(bullet(`${address}: Contract (looks safe)`));
-    else if (status === 'delegatecall')
-      warn.push(bullet(`${address}: Contract (with DELEGATECALL)`));
-    else if (status === 'trusted') info.push(bullet(`${address}: Trusted contract (not checked)`));
-    else error.push(bullet(`${address}: Contract (with SELFDESTRUCT)`));
+    if (status === 'eoa') info.push(`${address}: EOA`);
+    else if (status === 'empty') warn.push(`${address}: EOA (may have code later)`);
+    else if (status === 'safe') info.push(`${address}: Contract (looks safe)`);
+    else if (status === 'delegatecall') warn.push(`${address}: Contract (with DELEGATECALL)`);
+    else if (status === 'trusted') info.push(`${address}: Trusted contract (not checked)`);
+    else error.push(`${address}: Contract (with SELFDESTRUCT)`);
   }
   return { info, warn, error };
 }

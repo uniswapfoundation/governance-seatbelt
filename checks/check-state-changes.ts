@@ -1,5 +1,4 @@
 import { getAddress } from 'viem';
-import { bullet } from '../presentation/report';
 import type { ProposalCheck, StateDiff } from '../types';
 import { getContractName } from '../utils/clients/tenderly';
 
@@ -76,7 +75,7 @@ export const checkStateChanges: ProposalCheck = {
     for (const [address, diffs] of Object.entries(stateDiffs)) {
       // Use contracts array to get contract name of address
       const contract = sim.contracts.find((c) => c.address === address);
-      info.push(bullet(getContractName(contract)));
+      info.push(getContractName(contract));
 
       // Track processed state changes to deduplicate
       const processedChanges = new Set<string>();
@@ -94,7 +93,7 @@ export const checkStateChanges: ProposalCheck = {
             const newVal = JSON.stringify(w.dirty);
             const changeKey = `${w.key}:${oldVal}:${newVal}`;
             if (!processedChanges.has(changeKey)) {
-              info.push(bullet(`Slot \`${w.key}\` changed from \`${oldVal}\` to \`${newVal}\``, 1));
+              info.push(`    Slot \`${w.key}\` changed from \`${oldVal}\` to \`${newVal}\``);
               processedChanges.add(changeKey);
             }
           }
@@ -104,12 +103,13 @@ export const checkStateChanges: ProposalCheck = {
           const newVal = JSON.parse(JSON.stringify(diff.dirty));
           const changeKey = `${diff.soltype.name}:${oldVal}:${newVal}`;
           if (!processedChanges.has(changeKey)) {
-            info.push(
-              bullet(`\`${diff.soltype.name}\` changed from \`${oldVal}\` to \`${newVal}\``, 1),
-            );
+            info.push(`    \`${diff.soltype.name}\` changed from \`${oldVal}\` to \`${newVal}\``);
             processedChanges.add(changeKey);
           }
-        } else if (diff.soltype.type.startsWith('mapping')) {
+        } else if (
+          diff.soltype.type === 'mapping (address => uint256)' ||
+          diff.soltype.type === 'mapping (uint256 => uint256)'
+        ) {
           // This is a complex type like a mapping, which may have multiple changes. The diff.original
           // and diff.dirty fields can be strings or objects, and for complex types they are objects,
           // so we cast them as such
@@ -126,10 +126,7 @@ export const checkStateChanges: ProposalCheck = {
             const changeKey = `${diff.soltype?.name}:${k}:${oldVal}:${newVal}`;
             if (!processedChanges.has(changeKey)) {
               info.push(
-                bullet(
-                  `\`${diff.soltype?.name}\` key \`${k}\` changed from \`${oldVal}\` to \`${newVal}\``,
-                  1,
-                ),
+                `    \`${diff.soltype?.name}\` key \`${k}\` changed from \`${oldVal}\` to \`${newVal}\``,
               );
               processedChanges.add(changeKey);
             }
@@ -144,7 +141,7 @@ export const checkStateChanges: ProposalCheck = {
             const newVal = JSON.stringify(w.dirty);
             const changeKey = `${w.key}:${oldVal}:${newVal}`;
             if (!processedChanges.has(changeKey)) {
-              info.push(bullet(`Slot \`${w.key}\` changed from \`${oldVal}\` to \`${newVal}\``, 1));
+              info.push(`    Slot \`${w.key}\` changed from \`${oldVal}\` to \`${newVal}\``);
               warnings.push(
                 `Could not parse state: add support for formatting type ${diff.soltype?.type} (slot ${w.key})`,
               );

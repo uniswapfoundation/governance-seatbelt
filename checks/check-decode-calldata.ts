@@ -5,7 +5,6 @@ import {
   parseAbiItem,
   toFunctionSelector,
 } from 'viem';
-import { bullet } from '../presentation/report';
 import type { FluffyCall, ProposalCheck, TenderlyContract } from '../types';
 import { decodeFunctionWithAbi } from '../utils/clients/etherscan';
 import { getContractName } from '../utils/clients/tenderly';
@@ -64,7 +63,7 @@ export const checkDecodeCalldata: ProposalCheck = {
       }),
     );
 
-    const info = descriptions.filter((d) => d !== null).map((d) => bullet(d));
+    const info = descriptions.filter((d) => d !== null).map((d) => d);
     return { info, warnings, errors: [] };
   },
 };

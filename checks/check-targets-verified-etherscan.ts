@@ -1,5 +1,5 @@
 import { type PublicClient, getAddress } from 'viem';
-import { bullet, toAddressLink } from '../presentation/report';
+import { toAddressLink } from '../presentation/report';
 import type { ProposalCheck, TenderlySimulation } from '../types';
 
 /**
@@ -47,9 +47,9 @@ async function checkVerificationStatuses(
   for (const addr of addresses) {
     const status = await checkVerificationStatus(sim, addr, publicClient);
     const address = toAddressLink(addr);
-    if (status === 'eoa') info.push(bullet(`${address}: EOA (verification not applicable)`));
-    else if (status === 'verified') info.push(bullet(`${address}: Contract (verified)`));
-    else info.push(bullet(`${address}: Contract (not verified)`));
+    if (status === 'eoa') info.push(`${address}: EOA (verification not applicable)`);
+    else if (status === 'verified') info.push(`${address}: Contract (verified)`);
+    else info.push(`${address}: Contract (not verified)`);
   }
   return info;
 }
