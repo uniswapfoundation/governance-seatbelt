@@ -1,6 +1,6 @@
 import { type PublicClient, getAddress } from 'viem';
 import { toAddressLink } from '../presentation/report';
-import type { ProposalCheck, TenderlySimulation } from '../types';
+import type { CallTrace, ProposalCheck, TenderlySimulation } from '../types';
 
 /**
  * Check all targets with code if they contain selfdestruct.
@@ -172,7 +172,7 @@ function extractL2Targets(
 /**
  * Recursively extract target addresses from call traces
  */
-function extractTargetsFromCalls(calls: any[], targets: Set<string>): void {
+function extractTargetsFromCalls(calls: CallTrace[], targets: Set<string>): void {
   for (const call of calls || []) {
     if (call.to && call.input && call.input !== '0x') {
       targets.add(call.to.toLowerCase());

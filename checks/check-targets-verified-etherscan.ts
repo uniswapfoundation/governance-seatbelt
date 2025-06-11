@@ -1,6 +1,6 @@
 import { type PublicClient, getAddress } from 'viem';
 import { toAddressLink } from '../presentation/report';
-import type { ProposalCheck, TenderlySimulation } from '../types';
+import type { CallTrace, ProposalCheck, TenderlySimulation } from '../types';
 import type { ChainConfig } from '../utils/clients/client';
 import { isContractVerified } from '../utils/clients/etherscan';
 
@@ -9,7 +9,7 @@ import { isContractVerified } from '../utils/clients/etherscan';
  */
 export const checkTargetsVerifiedEtherscan: ProposalCheck = {
   name: 'Check all targets are verified on Etherscan',
-  async checkProposal(proposal, sim, deps, l2Simulations) {
+  async checkProposal(proposal, _sim, deps, l2Simulations) {
     const isL2Chain = deps.chainConfig?.chainId !== 1;
     const hasL2Data = l2Simulations && l2Simulations.length > 0;
 
@@ -122,7 +122,7 @@ function extractL2Targets(
 /**
  * Recursively extract target addresses from call traces
  */
-function extractTargetsFromCalls(calls: any[], targets: Set<string>): void {
+function extractTargetsFromCalls(calls: CallTrace[], targets: Set<string>): void {
   for (const call of calls || []) {
     if (call.to && call.input && call.input !== '0x') {
       targets.add(call.to.toLowerCase());

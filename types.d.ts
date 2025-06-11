@@ -1,6 +1,37 @@
 import type { Address, Block, Hex } from 'viem';
 import type { ChainConfig } from './utils/clients/client';
 
+// --- Call Trace Types ---
+export interface CallTrace {
+  from: string;
+  to?: string;
+  input: string;
+  calls?: CallTrace[];
+  type?: string;
+  value?: string;
+  error_reason?: string;
+}
+
+// Specific call type for calldata decoding with additional properties
+export interface DecodedCall {
+  from: string;
+  to: string;
+  input: string;
+  value: string;
+  calls?: DecodedCall[];
+  function_name?: string;
+  decoded_input?: Array<{
+    soltype: { name: string; type: string };
+    // biome-ignore lint/suspicious/noExplicitAny: Dynamic decoded values can be any type
+    value: any;
+  }>;
+  decoded_output?: Array<{
+    soltype: { name: string; type: string };
+    // biome-ignore lint/suspicious/noExplicitAny: Dynamic decoded values can be any type
+    value: any;
+  }>;
+}
+
 // --- Simulation configurations ---
 // TODO Consider refactoring to an enum instead of string.
 export type GovernorType = 'oz' | 'bravo';
@@ -107,9 +138,12 @@ export type CheckResult = {
 };
 
 export interface ProposalData {
-  governor: any; // TODO: Properly type governor
-  timelock: any; // TODO: Properly type timelock
-  publicClient: any; // TODO: Properly type publicClient
+  // biome-ignore lint/suspicious/noExplicitAny: TODO: Properly type governor
+  governor: any;
+  // biome-ignore lint/suspicious/noExplicitAny: TODO: Properly type timelock
+  timelock: any;
+  // biome-ignore lint/suspicious/noExplicitAny: TODO: Properly type publicClient
+  publicClient: any;
   chainConfig: ChainConfig;
   targets: string[];
   touchedContracts: string[];
@@ -467,253 +501,9 @@ interface StackTrace {
   length: number;
 }
 
-interface CallTrace {
-  hash: From;
-  contract_name: string;
-  function_name: string;
-  function_pc: number;
-  function_op: string;
-  function_file_index: number;
-  function_code_start: number;
-  function_line_number: number;
-  function_code_length: number;
-  function_states: CallTraceFunctionState[];
-  caller_pc: number;
-  caller_op: string;
-  call_type: string;
-  error_reason: string;
-  from: From;
-  from_balance: string;
-  to: From;
-  to_balance: string;
-  value: string;
-  caller: Caller;
-  block_timestamp: Date;
-  gas: number;
-  gas_used: number;
-  intrinsic_gas: number;
-  input: string;
-  decoded_input: Input[];
-  state_diff: StateDiff[];
-  logs: Log[];
-  output: string;
-  decoded_output: FunctionVariableElement[];
-  network_id: string;
-  calls: CallTraceCall[];
-}
-
-interface Caller {
-  address: From;
-  balance: string;
-}
-
-interface CallTraceCall {
-  hash: string;
-  contract_name: string;
-  function_name: string;
-  function_pc: number;
-  function_op: string;
-  function_file_index: number;
-  function_code_start: number;
-  function_line_number: number;
-  function_code_length: number;
-  function_states: CallTraceFunctionState[];
-  function_variables: FunctionVariableElement[];
-  caller_pc: number;
-  caller_op: string;
-  caller_file_index: number;
-  caller_line_number: number;
-  caller_code_start: number;
-  caller_code_length: number;
-  call_type: string;
-  from: From;
-  from_balance: null;
-  to: From;
-  to_balance: null;
-  value: null;
-  caller: Caller;
-  block_timestamp: Date;
-  gas: number;
-  gas_used: number;
-  input: string;
-  decoded_input: Input[];
-  output: string;
-  decoded_output: FunctionVariableElement[];
-  network_id: string;
-  calls: PurpleCall[];
-}
-
-interface PurpleCall {
-  hash: string;
-  contract_name: string;
-  function_name: string;
-  function_pc: number;
-  function_op: string;
-  function_file_index: number;
-  function_code_start: number;
-  function_line_number: number;
-  function_code_length: number;
-  function_states?: FluffyFunctionState[];
-  function_variables?: FunctionVariable[];
-  caller_pc: number;
-  caller_op: string;
-  caller_file_index: number;
-  caller_line_number: number;
-  caller_code_start: number;
-  caller_code_length: number;
-  call_type: string;
-  from: From;
-  from_balance: null | string;
-  to: string;
-  to_balance: null | string;
-  value: null | string;
-  caller: Caller;
-  block_timestamp: Date;
-  gas: number;
-  gas_used: number;
-  refund_gas?: number;
-  input: string;
-  decoded_input: Input[];
-  output: string;
-  decoded_output: FunctionVariable[] | null;
-  network_id: string;
-  calls: FluffyCall[] | null;
-}
-
-interface FluffyCall {
-  hash: string;
-  contract_name: string;
-  function_name?: string;
-  function_pc: number;
-  function_op: string;
-  function_file_index?: number;
-  function_code_start?: number;
-  function_line_number?: number;
-  function_code_length?: number;
-  function_states?: FluffyFunctionState[];
-  function_variables?: FunctionVariable[];
-  caller_pc: number;
-  caller_op: string;
-  caller_file_index: number;
-  caller_line_number: number;
-  caller_code_start: number;
-  caller_code_length: number;
-  call_type: string;
-  from: string;
-  from_balance: null | string;
-  to: string;
-  to_balance: null | string;
-  value: null | string;
-  caller?: Caller;
-  block_timestamp: Date;
-  gas: number;
-  gas_used: number;
-  input: string;
-  decoded_input?: FunctionVariable[];
-  output: string;
-  decoded_output: PurpleDecodedOutput[] | null;
-  network_id: string;
-  calls: TentacledCall[] | null;
-  refund_gas?: number;
-}
-
-interface TentacledCall {
-  hash: string;
-  contract_name: string;
-  function_name: string;
-  function_pc: number;
-  function_op: string;
-  function_file_index: number;
-  function_code_start: number;
-  function_line_number: number;
-  function_code_length: number;
-  function_states: PurpleFunctionState[];
-  caller_pc: number;
-  caller_op: string;
-  caller_file_index: number;
-  caller_line_number: number;
-  caller_code_start: number;
-  caller_code_length: number;
-  call_type: string;
-  from: string;
-  from_balance: null;
-  to: string;
-  to_balance: null;
-  value: null;
-  caller: Caller;
-  block_timestamp: Date;
-  gas: number;
-  gas_used: number;
-  input: string;
-  decoded_input: FunctionVariableElement[];
-  output: string;
-  decoded_output: FunctionVariable[];
-  network_id: string;
-  calls: null;
-}
-
-interface FunctionVariableElement {
-  soltype: SoltypeElement;
-  value: string;
-}
-
-interface FunctionVariable {
-  soltype: SoltypeElement;
-  value: PurpleValue | string;
-}
-
-interface PurpleValue {
-  ballot: string;
-  basedOn: string;
-  configured: string;
-  currency: string;
-  cycleLimit: string;
-  discountRate: string;
-  duration: string;
-  fee: string;
-  id: string;
-  metadata: string;
-  number: string;
-  projectId: string;
-  start: string;
-  tapped: string;
-  target: string;
-  weight: string;
-}
-
-interface PurpleFunctionState {
-  soltype: SoltypeElement;
-  value: Record<string, string>;
-}
-
-interface PurpleDecodedOutput {
-  soltype: SoltypeElement;
-  value: boolean | PurpleValue | string;
-}
-
-interface FluffyFunctionState {
-  soltype: PurpleSoltype;
-  value: Record<string, string>;
-}
-
-interface PurpleSoltype {
-  name: string;
-  type: SoltypeType;
-  storage_location: StorageLocation;
-  components: null;
-  offset: number;
-  index: string;
-  indexed: boolean;
-}
-
 interface Input {
   soltype: SoltypeElement | null;
   value: boolean | string;
-}
-
-interface CallTraceFunctionState {
-  soltype: PurpleSoltype;
-  value: Record<string, string>;
 }
 
 interface Log {

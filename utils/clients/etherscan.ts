@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type Abi, getAddress } from 'viem';
-import { getChainConfig } from './client';
+import { type ChainConfig, getChainConfig } from './client';
 
 // Cache directory path - use a non-gitignored location
 const CACHE_DIR = join(process.cwd(), 'cache');
@@ -46,28 +46,6 @@ function getAbiCacheFilePath(address: string, chainId: number): string {
 function getVerificationCacheFilePath(address: string, chainId: number): string {
   const normalizedAddress = getAddress(address);
   return join(VERIFICATION_CACHE_DIR, `${chainId}-${normalizedAddress}.json`);
-}
-
-/**
- * Gets the Etherscan API URL for a given chain ID
- */
-function getEtherscanApiUrl(chainId: number): string | null {
-  switch (chainId) {
-    case 1:
-      return 'https://api.etherscan.io';
-    case 11155111: // Sepolia
-      return 'https://api-sepolia.etherscan.io';
-    case 137: // Polygon
-      return 'https://api.polygonscan.com';
-    case 42161: // Arbitrum One
-      return 'https://api.arbiscan.io';
-    case 10: // Optimism
-      return 'https://api-optimistic.etherscan.io';
-    case 8453: // Base
-      return 'https://api.basescan.org';
-    default:
-      return null;
-  }
 }
 
 /**
@@ -275,10 +253,10 @@ export async function isContractVerified(address: string, chainId = 1): Promise<
     }
 
     // Get chain-specific configuration
-    let chainConfig;
+    let chainConfig: ChainConfig;
     try {
       chainConfig = getChainConfig(chainId);
-    } catch (error) {
+    } catch (_error) {
       console.warn(`[Verification] Unsupported chain ID: ${chainId}`);
       const result = false;
       verificationCache[cacheKey] = result;

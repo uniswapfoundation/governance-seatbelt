@@ -1,6 +1,6 @@
 import type { Address, Hex } from 'viem';
 import { decodeFunctionData, getAddress, hexToBigInt, toHex } from 'viem';
-import type { TenderlySimulation } from '../../types.d';
+import type { CallTrace, TenderlySimulation } from '../../types.d';
 import type { ExtractedCrossChainMessage } from '../../types.d';
 // Assuming ABI is available, similar to sims/arb-grant.sim.ts
 import ArbitrumDelayedInboxAbi from '../abis/ArbitrumDelayedInboxAbi.json' assert { type: 'json' };
@@ -22,10 +22,9 @@ function calculateL2Alias(l1Address: Address): Address {
 
 /**
  * Recursively searches the call trace for calls to the Arbitrum Delayed Inbox.
- * Uses 'any' for parameter type due to complex nested trace types.
  */
-function findArbitrumInboxCalls(call: any): any[] {
-  let inboxCalls: any[] = [];
+function findArbitrumInboxCalls(call: CallTrace): CallTrace[] {
+  let inboxCalls: CallTrace[] = [];
 
   // Check if the current call is to the inbox
   // Use optional chaining for safety
