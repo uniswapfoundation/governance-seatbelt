@@ -510,7 +510,7 @@ _Updated as of block [${blocks.current.number}](https://etherscan.io/block/${blo
       ? formatTime(blocks.end.timestamp)
       : formatTime(estimateTime(blocks.current, endBlock))
   })
-- Targets: ${targets.map((target) => toAddressLink(target, 'https://etherscan.io')).join('; ')}
+- Targets: ${targets.map((target) => toAddressLink(target)).join('; ')}
 
 ## Table of contents
 

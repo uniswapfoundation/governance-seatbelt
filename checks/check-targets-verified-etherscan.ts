@@ -44,7 +44,7 @@ async function checkVerificationStatuses(
   const info: string[] = [];
   for (const addr of addresses) {
     const status = await checkVerificationStatus(addr, publicClient, chainConfig.chainId);
-    const address = toAddressLink(addr, chainConfig?.blockExplorer?.baseUrl);
+    const address = toAddressLink(addr, chainConfig.blockExplorer.baseUrl);
     if (status === 'eoa') info.push(`${address}: EOA (verification not applicable)`);
     else if (status === 'verified') info.push(`${address}: Contract (verified)`);
     else info.push(`${address}: Contract (not verified)`);

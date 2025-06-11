@@ -11,10 +11,12 @@ export const checkTargetsNoSelfdestruct: ProposalCheck = {
     const uniqueTargets = proposal.targets.filter(
       (addr, i, targets) => targets.indexOf(addr) === i,
     );
+    const blockExplorerUrl = deps.chainConfig.blockExplorer.baseUrl;
     const { info, warn, error } = await checkNoSelfdestructs(
       [deps.governor.address, deps.timelock.address],
       uniqueTargets.map(getAddress),
       deps.publicClient,
+      blockExplorerUrl,
     );
     return { info, warnings: warn, errors: error };
   },
@@ -26,10 +28,12 @@ export const checkTargetsNoSelfdestruct: ProposalCheck = {
 export const checkTouchedContractsNoSelfdestruct: ProposalCheck = {
   name: 'Check all touched contracts do not contain selfdestruct',
   async checkProposal(_, sim, deps) {
+    const blockExplorerUrl = deps.chainConfig.blockExplorer.baseUrl;
     const { info, warn, error } = await checkNoSelfdestructs(
       [deps.governor.address, deps.timelock.address],
       sim.transaction.addresses.map(getAddress),
       deps.publicClient,
+      blockExplorerUrl,
     );
     return { info, warnings: warn, errors: error };
   },
@@ -42,13 +46,14 @@ async function checkNoSelfdestructs(
   trustedAddrs: `0x${string}`[],
   addresses: `0x${string}`[],
   publicClient: PublicClient,
+  blockExplorerUrl: string,
 ): Promise<{ info: string[]; warn: string[]; error: string[] }> {
   const info: string[] = [];
   const warn: string[] = [];
   const error: string[] = [];
   for (const addr of addresses) {
     const status = await checkNoSelfdestruct(trustedAddrs, addr, publicClient);
-    const address = toAddressLink(addr, false);
+    const address = toAddressLink(addr, blockExplorerUrl);
     if (status === 'eoa') info.push(`${address}: EOA`);
     else if (status === 'empty') warn.push(`${address}: EOA (may have code later)`);
     else if (status === 'safe') info.push(`${address}: Contract (looks safe)`);
