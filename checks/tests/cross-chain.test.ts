@@ -1,0 +1,150 @@
+import { describe, test, expect } from 'bun:test';
+import type { TenderlySimulation, ExtractedCrossChainMessage } from '../../types';
+import { parseArbitrumL1L2Messages } from '../../utils/bridges/arbitrum';
+
+describe('Cross-Chain Implementation', () => {
+  describe('Arbitrum L1→L2 Message Parsing', () => {
+    test('should extract messages from createRetryableTicket calls', () => {
+      // Mock simulation with Arbitrum DelayedInbox calls
+      const mockSim: TenderlySimulation = {
+        transaction: {
+          transaction_info: {
+            call_trace: {
+              calls: [
+                {
+                  to: '0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f', // Arbitrum DelayedInbox
+                  from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC', // Timelock
+                  input: '0x679b6ded000000000000000000000000912ce59144191c1204e64559fe8253a0e49e654800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a46fc7c680000000000000000000000000002bad8182c09f50c8318d769245bea52c32be46cd0000000000000000000000002bad8182c09f50c8318d769245bea52c32be46cd0000000000000000000000000000000000000000000000000000000000030d40000000000000000000000000000000000000000000000000000000003b9aca0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000044a9059cbb00000000000000000000000066ccbf509cd28c2fc0f40b4469d6b6aa1fc0fed300000000000000000000000000000000000000000000152d02c7e14af680000000000000000000000000000000000000000000000000000000000000',
+                  calls: [],
+                },
+              ],
+            },
+          },
+        },
+      } as TenderlySimulation;
+
+      const messages = parseArbitrumL1L2Messages(mockSim);
+
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({
+        bridgeType: 'ArbitrumL1L2',
+        destinationChainId: '42161',
+        l2TargetAddress: '0x912CE59144191C1204E64559FE8253a0e49E6548',
+        l2FromAddress: '0x2BAD8182C09F50c8318d769245beA52C32Be46CD', // L2 alias of timelock
+      });
+    });
+
+    test('should handle empty or invalid input data', () => {
+      const mockSim: TenderlySimulation = {
+        transaction: {
+          transaction_info: {
+            call_trace: {
+              calls: [
+                {
+                  to: '0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f',
+                  from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+                  input: '0x', // Empty input
+                  calls: [],
+                },
+                {
+                  to: '0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f',
+                  from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+                  input: '0x123', // Too short
+                  calls: [],
+                },
+              ],
+            },
+          },
+        },
+      } as TenderlySimulation;
+
+      const messages = parseArbitrumL1L2Messages(mockSim);
+      expect(messages).toHaveLength(0);
+    });
+
+    test('should deduplicate messages with same target and calldata', () => {
+      const mockSim: TenderlySimulation = {
+        transaction: {
+          transaction_info: {
+            call_trace: {
+              calls: [
+                {
+                  to: '0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f',
+                  from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+                  input: '0x679b6ded000000000000000000000000912ce59144191c1204e64559fe8253a0e49e654800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a46fc7c680000000000000000000000000002bad8182c09f50c8318d769245bea52c32be46cd0000000000000000000000002bad8182c09f50c8318d769245bea52c32be46cd0000000000000000000000000000000000000000000000000000000000030d40000000000000000000000000000000000000000000000000000000003b9aca0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000044a9059cbb00000000000000000000000066ccbf509cd28c2fc0f40b4469d6b6aa1fc0fed300000000000000000000000000000000000000000000152d02c7e14af680000000000000000000000000000000000000000000000000000000000000',
+                  calls: [],
+                },
+                {
+                  to: '0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f',
+                  from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+                  input: '0x679b6ded000000000000000000000000912ce59144191c1204e64559fe8253a0e49e654800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a46fc7c680000000000000000000000000002bad8182c09f50c8318d769245bea52c32be46cd0000000000000000000000002bad8182c09f50c8318d769245bea52c32be46cd0000000000000000000000000000000000000000000000000000000000030d40000000000000000000000000000000000000000000000000000000003b9aca0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000044a9059cbb00000000000000000000000066ccbf509cd28c2fc0f40b4469d6b6aa1fc0fed300000000000000000000000000000000000000000000152d02c7e14af680000000000000000000000000000000000000000000000000000000000000',
+                  calls: [],
+                },
+              ],
+            },
+          },
+        },
+      } as TenderlySimulation;
+
+      const messages = parseArbitrumL1L2Messages(mockSim);
+      expect(messages).toHaveLength(1); // Should deduplicate to 1 message
+    });
+
+    test('should handle nested calls', () => {
+      const mockSim: TenderlySimulation = {
+        transaction: {
+          transaction_info: {
+            call_trace: {
+              calls: [
+                {
+                  to: '0xSomeOtherContract',
+                  from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+                  input: '0x123',
+                  calls: [
+                    {
+                      to: '0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f', // Nested DelayedInbox call
+                      from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+                      input: '0x679b6ded000000000000000000000000912ce59144191c1204e64559fe8253a0e49e654800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a46fc7c680000000000000000000000000002bad8182c09f50c8318d769245bea52c32be46cd0000000000000000000000002bad8182c09f50c8318d769245bea52c32be46cd0000000000000000000000000000000000000000000000000000000000030d40000000000000000000000000000000000000000000000000000000003b9aca0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000044a9059cbb00000000000000000000000066ccbf509cd28c2fc0f40b4469d6b6aa1fc0fed300000000000000000000000000000000000000000000152d02c7e14af680000000000000000000000000000000000000000000000000000000000000',
+                      calls: [],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      } as TenderlySimulation;
+
+      const messages = parseArbitrumL1L2Messages(mockSim);
+      expect(messages).toHaveLength(1);
+    });
+  });
+
+  describe('L2 Alias Calculation', () => {
+    test('should calculate correct L2 alias for timelock', () => {
+      // The timelock address should get aliased correctly
+      const timelock = '0x1a9C8182C09F50C8318d769245beA52c32BE35BC';
+      const expectedAlias = '0x2BAD8182C09F50c8318d769245beA52C32Be46CD';
+
+      const mockSim: TenderlySimulation = {
+        transaction: {
+          transaction_info: {
+            call_trace: {
+              calls: [
+                {
+                  to: '0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f',
+                  from: timelock,
+                  input: '0x679b6ded000000000000000000000000912ce59144191c1204e64559fe8253a0e49e654800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a46fc7c680000000000000000000000000002bad8182c09f50c8318d769245bea52c32be46cd0000000000000000000000002bad8182c09f50c8318d769245bea52c32be46cd0000000000000000000000000000000000000000000000000000000000030d40000000000000000000000000000000000000000000000000000000003b9aca0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000044a9059cbb00000000000000000000000066ccbf509cd28c2fc0f40b4469d6b6aa1fc0fed300000000000000000000000000000000000000000000152d02c7e14af680000000000000000000000000000000000000000000000000000000000000',
+                  calls: [],
+                },
+              ],
+            },
+          },
+        },
+      } as TenderlySimulation;
+
+      const messages = parseArbitrumL1L2Messages(mockSim);
+      expect(messages[0].l2FromAddress.toLowerCase()).toBe(expectedAlias.toLowerCase());
+    });
+  });
+});

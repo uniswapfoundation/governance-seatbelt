@@ -70,7 +70,7 @@ export function toAddressLink(address: string, baseUrl = 'https://etherscan.io')
 function toMessageList(header: string, text: string[]): string {
   return text.length > 0
     ? `${bold(header)}:\n\n${text
-        .filter((msg) => msg.trim())
+        .filter((msg) => msg && typeof msg === 'string' && msg.trim())
         .map((msg) => {
           // If the message starts with spaces, it's already indented (sub-item), preserve the indentation
           if (msg.match(/^\s{4,}/)) {
@@ -209,6 +209,9 @@ function generateStructuredReport(
     let currentContractAddress = '';
 
     for (const infoMsg of result.info) {
+      // Skip non-string entries
+      if (typeof infoMsg !== 'string') continue;
+      
       // Check if this is a contract name line: "ContractName at `0xAddress`"
       const contractNameMatch = infoMsg.match(/^(.+) at `(0x[a-fA-F0-9]{40})`$/);
       if (contractNameMatch) {
@@ -269,6 +272,9 @@ function generateStructuredReport(
   for (const checkId in checks) {
     const { result } = checks[checkId];
     for (const infoMsg of result.info) {
+      // Skip non-string entries
+      if (typeof infoMsg !== 'string') continue;
+      
       // Try to extract events from info messages
       const eventMatch = infoMsg.match(/`(.+?)`\s+at\s+`(.+?)`\s*\n\s+\*\s+`(.+?)`/);
       if (eventMatch) {

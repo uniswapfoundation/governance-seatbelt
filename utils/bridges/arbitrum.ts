@@ -63,6 +63,13 @@ export function parseArbitrumL1L2Messages(
 
   for (const call of inboxCalls) {
     if (!call || !call.input || !call.from) continue; // Ensure from exists
+    
+    // Skip empty or invalid calldata
+    if (call.input === '0x' || call.input.length < 10) {
+      console.log(`[Arbitrum Parser] Skipping call with invalid input: ${call.input}`);
+      continue;
+    }
+    
     try {
       const decodedInput = decodeFunctionData({
         abi: ArbitrumDelayedInboxAbi,

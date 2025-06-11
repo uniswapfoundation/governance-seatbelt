@@ -1,0 +1,64 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Development Commands
+
+**Main Application:**
+- `bun start` - Run governance simulation and checks on all proposals
+- `SIM_NAME=<simulation> bun start` - Run specific simulation (see `sims/` folder)
+- `bun run check-proposal` - Run checks on proposals using run-checks.ts
+- `bun run typecheck` - Type check TypeScript files
+- `bun run lint` - Run type check and biome linting
+- `bun run lint:fix` - Fix linting issues automatically
+
+**Frontend:**
+- `bun run propose` - Run simulation and start frontend dev server
+- `SIM_NAME=<simulation> bun run propose` - Run specific simulation and start frontend
+- `cd frontend && bun dev` - Start frontend development server only
+- `cd frontend && bun run typecheck` - Type check frontend code
+
+**Testing:**
+- `cd checks && bun test` - Run all tests in checks directory
+- `cd checks && bun test <test-file>` - Run specific test file
+
+## Architecture Overview
+
+This is a governance safety tool that simulates on-chain proposals and runs safety checks against them.
+
+**Core Flow:**
+1. **Simulation**: Uses Tenderly API to simulate proposal execution
+2. **Cross-chain**: Handles L1→L2 bridge messages (currently Arbitrum)
+3. **Checks**: Runs safety checks on simulation results
+4. **Reports**: Generates markdown reports and structured data
+
+**Key Components:**
+- `index.ts` - Main entry point, orchestrates simulation and checking
+- `checks/` - Individual safety checks (state changes, logs, balance changes, etc.)
+- `utils/clients/` - External service clients (Tenderly, Etherscan, GitHub)
+- `utils/contracts/` - Governor and timelock contract interactions
+- `sims/` - Custom simulation configurations
+- `frontend/` - Next.js app for proposal visualization and creation
+
+**Governor Support:**
+- Compound GovernorBravo (`bravo` type)
+- OpenZeppelin Governor (`oz` type)
+
+**Environment Setup:**
+Requires `.env` file with:
+- `ETHERSCAN_API_KEY` - For contract verification
+- `RPC_URL` - Ethereum node endpoint
+- `TENDERLY_ACCESS_TOKEN`, `TENDERLY_USER`, `TENDERLY_PROJECT_SLUG` - For simulations
+- `DAO_NAME`, `GOVERNOR_ADDRESS` - Target governance configuration
+
+**Report Generation:**
+- Reports saved to `reports/` directory (gitignored)
+- Path: `./reports/${daoName}/${governorAddress}/${proposalId}.md`
+- Structured data available via frontend API at `/api/simulation-results`
+
+**Cross-chain Flow:**
+1. Simulates mainnet proposal execution
+2. Extracts cross-chain messages from logs
+3. Simulates destination chain execution
+4. Runs checks on both chains
+5. Generates combined reports

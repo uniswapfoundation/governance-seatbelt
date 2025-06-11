@@ -21,7 +21,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
     chainId: mainnet.id,
     blockExplorer: {
       baseUrl: mainnet.blockExplorers?.default.url,
-      apiUrl: 'https://api.etherscan.io/api',
+      apiUrl: 'https://api.etherscan.io/v2/api', // Using v2 unified API
       apiKey: process.env.ETHERSCAN_API_KEY,
     },
     rpcUrl: process.env.MAINNET_RPC_URL,
@@ -30,8 +30,8 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
     chainId: arbitrum.id,
     blockExplorer: {
       baseUrl: arbitrum.blockExplorers?.default.url,
-      apiUrl: 'https://api.arbiscan.io/api',
-      apiKey: process.env.ARBISCAN_API_KEY,
+      apiUrl: 'https://api.etherscan.io/v2/api', // Using v2 unified API
+      apiKey: process.env.ETHERSCAN_API_KEY, // Single API key for all chains
     },
     rpcUrl: process.env.ARBITRUM_RPC_URL,
   },

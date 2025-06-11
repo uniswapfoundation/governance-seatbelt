@@ -1,6 +1,7 @@
 import { type PublicClient, getAddress } from 'viem';
 import { toAddressLink } from '../presentation/report';
 import type { ProposalCheck } from '../types';
+import type { ChainConfig } from '../utils/clients/client';
 import { isContractVerified } from '../utils/clients/etherscan';
 
 /**
@@ -12,7 +13,7 @@ export const checkTargetsVerifiedEtherscan: ProposalCheck = {
     const uniqueTargets = proposal.targets.filter(
       (addr, i, targets) => targets.indexOf(addr) === i,
     );
-    const info = await checkVerificationStatuses(uniqueTargets.map(getAddress), deps.publicClient);
+    const info = await checkVerificationStatuses(uniqueTargets.map(getAddress), deps.publicClient, deps.chainConfig);
     return { info, warnings: [], errors: [] };
   },
 };
@@ -26,6 +27,7 @@ export const checkTouchedContractsVerifiedEtherscan: ProposalCheck = {
     const info = await checkVerificationStatuses(
       sim.transaction.addresses.map(getAddress),
       deps.publicClient,
+      deps.chainConfig,
     );
     return { info, warnings: [], errors: [] };
   },
@@ -37,11 +39,12 @@ export const checkTouchedContractsVerifiedEtherscan: ProposalCheck = {
 async function checkVerificationStatuses(
   addresses: `0x${string}`[],
   publicClient: PublicClient,
+  chainConfig: ChainConfig,
 ): Promise<string[]> {
   const info: string[] = [];
   for (const addr of addresses) {
-    const status = await checkVerificationStatus(addr, publicClient);
-    const address = toAddressLink(addr);
+    const status = await checkVerificationStatus(addr, publicClient, chainConfig.chainId);
+    const address = toAddressLink(addr, chainConfig?.blockExplorer?.baseUrl);
     if (status === 'eoa') info.push(`${address}: EOA (verification not applicable)`);
     else if (status === 'verified') info.push(`${address}: Contract (verified)`);
     else info.push(`${address}: Contract (not verified)`);
@@ -55,12 +58,13 @@ async function checkVerificationStatuses(
 async function checkVerificationStatus(
   addr: `0x${string}`,
   publicClient: PublicClient,
+  chainId: number,
 ): Promise<'verified' | 'eoa' | 'unverified'> {
   // First check if there's code at the address
   const code = await publicClient.getCode({ address: addr });
   if (code === '0x') return 'eoa';
 
-  // For contracts, check verification status via Etherscan API
-  const isVerified = await isContractVerified(addr);
+  // For contracts, check verification status via appropriate block explorer API
+  const isVerified = await isContractVerified(addr, chainId);
   return isVerified ? 'verified' : 'unverified';
 }

@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type Abi, getAddress } from 'viem';
+import { getChainConfig } from './client';
 
 // Cache directory path - use a non-gitignored location
 const CACHE_DIR = join(process.cwd(), 'cache');
@@ -273,9 +274,11 @@ export async function isContractVerified(address: string, chainId = 1): Promise<
       return cachedVerification.verified;
     }
 
-    // Determine the API URL based on the chain ID
-    const apiUrl = getEtherscanApiUrl(chainId);
-    if (!apiUrl) {
+    // Get chain-specific configuration
+    let chainConfig;
+    try {
+      chainConfig = getChainConfig(chainId);
+    } catch (error) {
       console.warn(`[Verification] Unsupported chain ID: ${chainId}`);
       const result = false;
       verificationCache[cacheKey] = result;
@@ -283,10 +286,10 @@ export async function isContractVerified(address: string, chainId = 1): Promise<
       return result;
     }
 
-    // Get the API key from environment variables
-    const apiKey = process.env.ETHERSCAN_API_KEY;
+    // Get the API key from chain configuration
+    const apiKey = chainConfig.blockExplorer.apiKey;
     if (!apiKey) {
-      console.warn('[Verification] ETHERSCAN_API_KEY not found in environment variables');
+      console.warn(`[Verification] API key not found for chain ${chainId}`);
       const result = false;
       verificationCache[cacheKey] = result;
       writeFileSync(cachePath, JSON.stringify({ verified: result, timestamp: Date.now() }));
@@ -296,10 +299,10 @@ export async function isContractVerified(address: string, chainId = 1): Promise<
     // Add a delay to avoid rate limiting
     await delay(200);
 
-    console.log(`[Cache] Fetching verification status for ${normalizedAddress} from Etherscan`);
+    console.log(`[Cache] Fetching verification status for ${normalizedAddress} from chain ${chainId}`);
 
-    // Check verification status using getsourcecode endpoint
-    const url = `${apiUrl}/api?module=contract&action=getsourcecode&address=${normalizedAddress}&apikey=${apiKey}`;
+    // Use Etherscan v2 API with chainid parameter for unified multichain support
+    const url = `https://api.etherscan.io/v2/api?chainid=${chainId}&module=contract&action=getsourcecode&address=${normalizedAddress}&apikey=${apiKey}`;
     const response = await fetch(url);
     const data = (await response.json()) as EtherscanApiResponse;
 
