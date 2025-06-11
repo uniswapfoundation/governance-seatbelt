@@ -17,13 +17,17 @@ export const checkTargetsNoSelfdestruct: ProposalCheck = {
       // For L2 chains, extract targets from cross-chain simulation data
       targets = extractL2Targets(l2Simulations);
       if (targets.length === 0) {
-        return { info: ['No L2 targets found in cross-chain simulation'], warnings: [], errors: [] };
+        return {
+          info: ['No L2 targets found in cross-chain simulation'],
+          warnings: [],
+          errors: [],
+        };
       }
     } else {
       // For mainnet, use proposal targets
-      targets = proposal.targets.filter(
-        (addr, i, targets) => targets.indexOf(addr) === i,
-      ).map(getAddress);
+      targets = proposal.targets
+        .filter((addr, i, targets) => targets.indexOf(addr) === i)
+        .map(getAddress);
     }
 
     const blockExplorerUrl = deps.chainConfig.blockExplorer.baseUrl;
@@ -145,7 +149,9 @@ async function checkNoSelfdestruct(
 /**
  * Extract unique target addresses from L2 simulations
  */
-function extractL2Targets(l2Simulations: Array<{ chainId: number; sim: TenderlySimulation }>): `0x${string}`[] {
+function extractL2Targets(
+  l2Simulations: Array<{ chainId: number; sim: TenderlySimulation }>,
+): `0x${string}`[] {
   const targets = new Set<string>();
 
   for (const l2Sim of l2Simulations) {
@@ -160,7 +166,7 @@ function extractL2Targets(l2Simulations: Array<{ chainId: number; sim: TenderlyS
     }
   }
 
-  return Array.from(targets).map(addr => getAddress(addr));
+  return Array.from(targets).map((addr) => getAddress(addr));
 }
 
 /**

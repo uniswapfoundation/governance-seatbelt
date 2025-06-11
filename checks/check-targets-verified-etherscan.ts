@@ -19,13 +19,17 @@ export const checkTargetsVerifiedEtherscan: ProposalCheck = {
       // For L2 chains, extract targets from cross-chain simulation data
       targets = extractL2Targets(l2Simulations);
       if (targets.length === 0) {
-        return { info: ['No L2 targets found in cross-chain simulation'], warnings: [], errors: [] };
+        return {
+          info: ['No L2 targets found in cross-chain simulation'],
+          warnings: [],
+          errors: [],
+        };
       }
     } else {
       // For mainnet, use proposal targets
-      targets = proposal.targets.filter(
-        (addr, i, targets) => targets.indexOf(addr) === i,
-      ).map(getAddress);
+      targets = proposal.targets
+        .filter((addr, i, targets) => targets.indexOf(addr) === i)
+        .map(getAddress);
     }
 
     const info = await checkVerificationStatuses(targets, deps.publicClient, deps.chainConfig);
@@ -61,7 +65,8 @@ async function checkVerificationStatuses(
     const status = await checkVerificationStatus(addr, publicClient, chainConfig.chainId);
     const address = toAddressLink(addr, chainConfig.blockExplorer.baseUrl);
     if (status === 'eoa') info.push(`${address}: EOA (verification not applicable)`);
-    else if (status === 'empty') info.push(`${address}: EOA (may have code later, verification not applicable)`);
+    else if (status === 'empty')
+      info.push(`${address}: EOA (may have code later, verification not applicable)`);
     else if (status === 'verified') info.push(`${address}: Contract (verified)`);
     else info.push(`${address}: Contract (not verified)`);
   }
@@ -81,7 +86,7 @@ async function checkVerificationStatus(
     publicClient.getCode({ address: addr }),
     publicClient.getTransactionCount({ address: addr }),
   ]);
-  
+
   // If there is no code and nonce is > 0 then it's an EOA.
   // If nonce is 0 it is an empty account that might have code later.
   if (!code || code === '0x') return nonce > 0 ? 'eoa' : 'empty';
@@ -94,7 +99,9 @@ async function checkVerificationStatus(
 /**
  * Extract unique target addresses from L2 simulations
  */
-function extractL2Targets(l2Simulations: Array<{ chainId: number; sim: TenderlySimulation }>): `0x${string}`[] {
+function extractL2Targets(
+  l2Simulations: Array<{ chainId: number; sim: TenderlySimulation }>,
+): `0x${string}`[] {
   const targets = new Set<string>();
 
   for (const l2Sim of l2Simulations) {
@@ -109,7 +116,7 @@ function extractL2Targets(l2Simulations: Array<{ chainId: number; sim: TenderlyS
     }
   }
 
-  return Array.from(targets).map(addr => getAddress(addr));
+  return Array.from(targets).map((addr) => getAddress(addr));
 }
 
 /**

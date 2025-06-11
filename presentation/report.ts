@@ -13,6 +13,7 @@ import remarkToc from 'remark-toc';
 import { unified } from 'unified';
 import { visit } from 'unist-util-visit';
 import type { Visitor } from 'unist-util-visit';
+import { getAddress } from 'viem';
 import type {
   AllCheckResults,
   GovernorType,
@@ -25,10 +26,9 @@ import type {
   SimulationStateChange,
   StructuredSimulationReport,
 } from '../types';
+import { getChainConfig } from '../utils/clients/client';
 import { getContractName } from '../utils/clients/tenderly';
 import { formatProposalId } from '../utils/contracts/governor';
-import { getAddress } from 'viem';
-import { getChainConfig } from '../utils/clients/client';
 
 // --- Markdown helpers ---
 
@@ -211,7 +211,7 @@ function generateStructuredReport(
     for (const infoMsg of result.info) {
       // Skip non-string entries
       if (typeof infoMsg !== 'string') continue;
-      
+
       // Check if this is a contract name line: "ContractName at `0xAddress`"
       const contractNameMatch = infoMsg.match(/^(.+) at `(0x[a-fA-F0-9]{40})`$/);
       if (contractNameMatch) {
@@ -274,7 +274,7 @@ function generateStructuredReport(
     for (const infoMsg of result.info) {
       // Skip non-string entries
       if (typeof infoMsg !== 'string') continue;
-      
+
       // Try to extract events from info messages
       const eventMatch = infoMsg.match(/`(.+?)`\s+at\s+`(.+?)`\s*\n\s+\*\s+`(.+?)`/);
       if (eventMatch) {

@@ -33,6 +33,7 @@ import {
   TENDERLY_SIM_URL,
 } from '../constants';
 import { GOVERNOR_OZ_ABI } from '../constants/abi';
+import { fetchTokenMetadata } from '../contracts/erc20';
 import {
   generateProposalId,
   getGovernor,
@@ -42,7 +43,6 @@ import {
   hashOperationBatchOz,
   hashOperationOz,
 } from '../contracts/governor';
-import { fetchTokenMetadata } from '../contracts/erc20';
 import { getChainConfig, publicClient } from './client';
 
 const fetchUrl = mftch;

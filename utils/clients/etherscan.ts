@@ -299,7 +299,9 @@ export async function isContractVerified(address: string, chainId = 1): Promise<
     // Add a delay to avoid rate limiting
     await delay(200);
 
-    console.log(`[Cache] Fetching verification status for ${normalizedAddress} from chain ${chainId}`);
+    console.log(
+      `[Cache] Fetching verification status for ${normalizedAddress} from chain ${chainId}`,
+    );
 
     // Use Etherscan v2 API with chainid parameter for unified multichain support
     const url = `https://api.etherscan.io/v2/api?chainid=${chainId}&module=contract&action=getsourcecode&address=${normalizedAddress}&apikey=${apiKey}`;

@@ -1,7 +1,6 @@
 import { getAddress } from 'viem';
 import type { AssetChange, BalanceChange, ProposalCheck, TenderlyContract } from '../types';
 import { getContractNameFromTenderly } from '../utils/clients/tenderly';
-import { toAddressLink } from '../presentation/report';
 
 /**
  * Reports all ETH balance changes from the proposal
