@@ -75,8 +75,7 @@ export const checkSolc: ProposalCheck = {
       if (output.stderr === '') {
         info.push(`No compiler warnings for ${contractName}`);
       } else {
-        info.push(`Compiler warnings for ${contractName}`);
-        info.push(codeBlock(output.stderr.trim()));
+        info.push(`Compiler warnings for ${contractName}${codeBlock(output.stderr.trim())}`);
       }
     }
 

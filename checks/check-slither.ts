@@ -3,7 +3,7 @@ import util from 'node:util';
 import { getAddress } from 'viem';
 import { codeBlock } from '../presentation/report';
 import type { ProposalCheck } from '../types';
-import { getContractNameFromTenderly } from '../utils/clients/tenderly';
+import { getContractName } from '../utils/clients/tenderly';
 import { ETHERSCAN_API_KEY } from '../utils/constants';
 import { getImplementation } from '../utils/contracts/governor';
 
@@ -72,9 +72,8 @@ export const checkSlither: ProposalCheck = {
       // Append results to report info.
       // Note that slither supports a `--json` flag  we could use, but directly printing the formatted
       // results in a code block is simpler and sufficient for now.
-      const contractName = getContractNameFromTenderly(contract);
-      info.push(`Slither report for ${contractName}`);
-      info.push(codeBlock(slitherOutput.stderr.trim()));
+      const contractName = await getContractName(contract);
+      info.push(`Slither report for ${contractName}${codeBlock(slitherOutput.stderr.trim())}`);
     }
 
     return { info, warnings, errors: [] };
