@@ -462,6 +462,10 @@ export async function generateAndSaveReports(
         dest: `${path}.pdf`,
         launch_options: {
           args: process.env.CI ? ['--no-sandbox', '--disable-setuid-sandbox'] : [],
+          timeout: 60000, // Increase timeout to 60 seconds
+        },
+        pdf_options: {
+          timeout: 60000, // Increase timeout to 60 seconds
         },
       },
     ),
