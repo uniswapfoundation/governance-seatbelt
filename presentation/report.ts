@@ -115,13 +115,26 @@ ${toMessageList('Info', info)}
 }
 
 /**
- * Pulls the title out of the markdown description, from the first markdown h1 line
+ * Extracts the title from the proposal description.
+ * Handles both markdown format (starting with # Title) and plain text descriptions.
  * @param description the proposal description
  */
 function getProposalTitle(description: string) {
-  const match = description.match(/^\s*#\s*(.*)\s*\n/);
-  if (!match || match.length < 2) return 'Title not found';
-  return match[1];
+  // First, try to extract a markdown H1 title (# Title)
+  const markdownMatch = description.match(/^\s*#\s*(.*?)(?:\s*\n|$)/);
+  if (markdownMatch?.[1]?.trim()) {
+    return markdownMatch[1].trim();
+  }
+
+  // If no markdown title found, try to extract the first line as title
+  const firstLine = description.split('\n')[0]?.trim();
+  if (firstLine && firstLine.length > 0) {
+    // Remove any leading # symbols if present but not properly formatted
+    const cleanTitle = firstLine.replace(/^#+\s*/, '').trim();
+    return cleanTitle || 'Title not found';
+  }
+
+  return 'Title not found';
 }
 
 /**
