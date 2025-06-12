@@ -62,3 +62,11 @@ Requires `.env` file with:
 3. Simulates destination chain execution
 4. Runs checks on both chains
 5. Generates combined reports
+
+## Pull Request Guidelines
+
+**Repository Setup:**
+- This is a fork of the main Uniswap governance-seatbelt repository
+- Always create PRs against this fork: https://github.com/uniswapfoundation/governance-seatbelt/pulls
+- Do NOT create PRs against the upstream Uniswap repository unless specifically requested
+- The fork serves as the primary development repository for this project
