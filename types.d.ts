@@ -69,6 +69,12 @@ export type SimulationConfig =
 
 export type SimulationBlock = Pick<Block, 'number' | 'timestamp'>;
 
+export interface SimulationBlocks {
+  current: SimulationBlock;
+  start: SimulationBlock | null;
+  end: SimulationBlock | null;
+}
+
 export interface SimulationResult {
   sim: TenderlySimulation;
   proposal: ProposalEvent;
@@ -603,6 +609,34 @@ export interface StructuredSimulationReport {
     proposalExecutedAtBlockNumber?: string;
     proposalExecutedAtTimestamp?: string;
   };
+}
+
+export interface GenerateReportsParams {
+  governorType: GovernorType;
+  blocks: SimulationBlocks;
+  proposal: ProposalEvent;
+  checks: AllCheckResults;
+  outputDir: string;
+  governorAddress: string;
+  destinationSimulations?: SimulationResult['destinationSimulations'];
+  destinationChecks?: Record<number, AllCheckResults>;
+  executor?: string;
+  proposalCreatedBlock?: SimulationBlock;
+  proposalExecutedBlock?: SimulationBlock;
+}
+
+export interface WriteSimulationResultsJsonParams {
+  governorType: GovernorType;
+  blocks: SimulationBlocks;
+  proposal: ProposalEvent;
+  checks: AllCheckResults;
+  markdownReport: string;
+  governorAddress: string;
+  outputPath: string;
+  destinationSimulations?: SimulationResult['destinationSimulations'];
+  executor?: string;
+  proposalCreatedBlock?: SimulationBlock;
+  proposalExecutedBlock?: SimulationBlock;
 }
 
 export interface FrontendData {

@@ -3,7 +3,6 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type {
   AllCheckResults,
-  GovernorType,
   ProposalEvent,
   SimulationBlock,
   StructuredSimulationReport,
@@ -65,14 +64,14 @@ describe('Simulation Results Metadata', () => {
 
   test('should generate structured report with governorAddress in metadata', async () => {
     // Generate reports in test directory
-    await generateAndSaveReports(
-      'bravo' as GovernorType,
-      mockBlocks,
-      mockProposal,
-      mockChecks,
-      testOutputDir,
-      mockGovernorAddress,
-    );
+    await generateAndSaveReports({
+      governorType: 'bravo',
+      blocks: mockBlocks,
+      proposal: mockProposal,
+      checks: mockChecks,
+      outputDir: testOutputDir,
+      governorAddress: mockGovernorAddress,
+    });
 
     // Read the generated JSON file
     const jsonPath = join(testOutputDir, '123.json');
@@ -97,17 +96,15 @@ describe('Simulation Results Metadata', () => {
       proposer: '0x1234567890abcdef1234567890abcdef12345678', // Original proposer
     };
 
-    await generateAndSaveReports(
-      'bravo' as GovernorType,
-      mockBlocks,
-      executedProposal,
-      mockChecks,
-      testOutputDir,
-      mockGovernorAddress,
-      undefined,
-      undefined,
-      executorAddress, // Pass the executor
-    );
+    await generateAndSaveReports({
+      governorType: 'bravo',
+      blocks: mockBlocks,
+      proposal: executedProposal,
+      checks: mockChecks,
+      outputDir: testOutputDir,
+      governorAddress: mockGovernorAddress,
+      executor: executorAddress, // Pass the executor
+    });
 
     const jsonPath = join(testOutputDir, '123.json');
     const content = readFileSync(jsonPath, 'utf8');
@@ -128,17 +125,15 @@ describe('Simulation Results Metadata', () => {
       proposer: proposerExecutorAddress,
     };
 
-    await generateAndSaveReports(
-      'bravo' as GovernorType,
-      mockBlocks,
-      executedProposal,
-      mockChecks,
-      testOutputDir,
-      mockGovernorAddress,
-      undefined,
-      undefined,
-      proposerExecutorAddress, // Pass the same address as executor
-    );
+    await generateAndSaveReports({
+      governorType: 'bravo',
+      blocks: mockBlocks,
+      proposal: executedProposal,
+      checks: mockChecks,
+      outputDir: testOutputDir,
+      governorAddress: mockGovernorAddress,
+      executor: proposerExecutorAddress, // Pass the same address as executor
+    });
 
     const jsonPath = join(testOutputDir, '123.json');
     const content = readFileSync(jsonPath, 'utf8');
@@ -156,14 +151,14 @@ describe('Simulation Results Metadata', () => {
       proposer: '0x1234567890abcdef1234567890abcdef12345678',
     };
 
-    await generateAndSaveReports(
-      'bravo' as GovernorType,
-      mockBlocks,
-      proposedOnlyProposal,
-      mockChecks,
-      testOutputDir,
-      mockGovernorAddress,
-    );
+    await generateAndSaveReports({
+      governorType: 'bravo',
+      blocks: mockBlocks,
+      proposal: proposedOnlyProposal,
+      checks: mockChecks,
+      outputDir: testOutputDir,
+      governorAddress: mockGovernorAddress,
+    });
 
     const jsonPath = join(testOutputDir, '123.json');
     const content = readFileSync(jsonPath, 'utf8');
@@ -176,14 +171,14 @@ describe('Simulation Results Metadata', () => {
 
   test('should generate simulation-results.json file in bulk mode', async () => {
     // Test that we generate the frontend JSON file alongside the regular reports
-    await generateAndSaveReports(
-      'bravo' as GovernorType,
-      mockBlocks,
-      mockProposal,
-      mockChecks,
-      testOutputDir,
-      mockGovernorAddress,
-    );
+    await generateAndSaveReports({
+      governorType: 'bravo',
+      blocks: mockBlocks,
+      proposal: mockProposal,
+      checks: mockChecks,
+      outputDir: testOutputDir,
+      governorAddress: mockGovernorAddress,
+    });
 
     // Check that the simulation-results.json file is created
     const simulationResultsPath = join(testOutputDir, '123-simulation-results.json');
@@ -234,14 +229,14 @@ describe('File Generation Tests', () => {
   });
 
   test('should generate all expected report files', async () => {
-    await generateAndSaveReports(
-      'bravo' as GovernorType,
-      mockBlocks,
-      mockProposal,
-      mockChecks,
-      testOutputDir,
-      mockGovernorAddress,
-    );
+    await generateAndSaveReports({
+      governorType: 'bravo',
+      blocks: mockBlocks,
+      proposal: mockProposal,
+      checks: mockChecks,
+      outputDir: testOutputDir,
+      governorAddress: mockGovernorAddress,
+    });
 
     // Check that all the standard files are generated
     expect(existsSync(join(testOutputDir, '123.md'))).toBe(true);

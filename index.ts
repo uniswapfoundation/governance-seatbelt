@@ -119,19 +119,19 @@ async function main() {
       }
     }
 
-    await generateAndSaveReports(
+    await generateAndSaveReports({
       governorType,
       blocks,
       proposal,
-      mainnetResults,
-      dir,
-      config.governorAddress,
-      finalResult.destinationSimulations,
+      checks: mainnetResults,
+      outputDir: dir,
+      governorAddress: config.governorAddress,
+      destinationSimulations: finalResult.destinationSimulations,
       destinationChecks,
-      finalResult.executor,
-      finalResult.proposalCreatedBlock,
-      finalResult.proposalExecutedBlock,
-    );
+      executor: finalResult.executor,
+      proposalCreatedBlock: finalResult.proposalCreatedBlock,
+      proposalExecutedBlock: finalResult.proposalExecutedBlock,
+    });
     console.log(`[Index] Reports saved for ${SIM_NAME}.`);
   } else {
     // If no SIM_NAME is provided, we get proposals to simulate from the chain
@@ -278,19 +278,17 @@ async function main() {
 
         // Generate reports immediately
         const dir = `./reports/${config.daoName}/${config.governorAddress}`;
-        await generateAndSaveReports(
+        await generateAndSaveReports({
           governorType,
           blocks,
           proposal,
-          checkResults,
-          dir,
-          config.governorAddress,
-          undefined,
-          undefined,
-          simulationData.executor,
-          simulationData.proposalCreatedBlock,
-          simulationData.proposalExecutedBlock,
-        );
+          checks: checkResults,
+          outputDir: dir,
+          governorAddress: config.governorAddress,
+          executor: simulationData.executor,
+          proposalCreatedBlock: simulationData.proposalCreatedBlock,
+          proposalExecutedBlock: simulationData.proposalExecutedBlock,
+        });
 
         // Cache everything together
         simulationData.checkResults = checkResults;

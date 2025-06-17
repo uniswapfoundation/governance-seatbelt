@@ -230,19 +230,19 @@ async function main() {
 
   // Generate reports
   const dir = `./reports/${config.daoName}/${config.governorAddress}`;
-  await generateAndSaveReports(
+  await generateAndSaveReports({
     governorType,
     blocks,
-    finalResult.proposal,
-    sourceChecks,
-    dir,
-    config.governorAddress,
-    finalResult.destinationSimulations,
+    proposal: finalResult.proposal,
+    checks: sourceChecks,
+    outputDir: dir,
+    governorAddress: config.governorAddress,
+    destinationSimulations: finalResult.destinationSimulations,
     destinationChecks,
-    finalResult.executor,
-    finalResult.proposalCreatedBlock,
-    finalResult.proposalExecutedBlock,
-  );
+    executor: finalResult.executor,
+    proposalCreatedBlock: finalResult.proposalCreatedBlock,
+    proposalExecutedBlock: finalResult.proposalExecutedBlock,
+  });
 }
 
 // Only run main if this file is executed directly, not when imported

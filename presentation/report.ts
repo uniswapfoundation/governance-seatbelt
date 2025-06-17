@@ -1,5 +1,4 @@
-import fs, { promises as fsp, writeFileSync } from 'node:fs';
-import { existsSync, mkdirSync } from 'node:fs';
+import { promises as fsp, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { mdToPdf } from 'md-to-pdf';
 import type { Link, Root } from 'mdast';
@@ -16,15 +15,18 @@ import type { Visitor } from 'unist-util-visit';
 import { getAddress } from 'viem';
 import type {
   AllCheckResults,
+  GenerateReportsParams,
   GovernorType,
   ProposalEvent,
   SimulationBlock,
+  SimulationBlocks,
   SimulationCalldata,
   SimulationCheck,
   SimulationEvent,
   SimulationResult,
   SimulationStateChange,
   StructuredSimulationReport,
+  WriteSimulationResultsJsonParams,
 } from '../types';
 import { getChainConfig } from '../utils/clients/client';
 import { getContractName } from '../utils/clients/tenderly';
@@ -159,11 +161,162 @@ function estimateTime(current: SimulationBlock, block: bigint): bigint {
 }
 
 /**
+ * Generate metadata for a structured report
+ */
+function generateReportMetadata(
+  governorType: GovernorType,
+  proposal: ProposalEvent,
+  governorAddress: string,
+  blocks: SimulationBlocks,
+  executor?: string,
+  proposalCreatedBlock?: SimulationBlock,
+  proposalExecutedBlock?: SimulationBlock,
+) {
+  return {
+    proposalId: formatProposalId(governorType, proposal.id!),
+    proposer: proposal.proposer,
+    governorAddress,
+    executor,
+    simulationBlockNumber: blocks.current.number?.toString() ?? 'unknown',
+    simulationTimestamp: blocks.current.timestamp.toString(),
+    proposalCreatedAtBlockNumber: proposalCreatedBlock?.number?.toString() ?? 'unknown',
+    proposalCreatedAtTimestamp: proposalCreatedBlock?.timestamp?.toString() ?? 'unknown',
+    proposalExecutedAtBlockNumber: proposalExecutedBlock?.number?.toString(),
+    proposalExecutedAtTimestamp: proposalExecutedBlock?.timestamp?.toString(),
+  };
+}
+
+/**
+ * Extract state changes from check results
+ */
+function extractStateChanges(checks: AllCheckResults): SimulationStateChange[] {
+  const stateChanges: SimulationStateChange[] = [];
+
+  for (const checkId in checks) {
+    const { result } = checks[checkId];
+
+    // Track the current contract name and address
+    let currentContract = '';
+    let currentContractAddress = '';
+
+    for (const infoMsg of result.info) {
+      // Skip non-string entries
+      if (typeof infoMsg !== 'string') continue;
+
+      // Check if this is a contract name line: "ContractName at `0xAddress`"
+      const contractNameMatch = infoMsg.match(/^(.+) at `(0x[a-fA-F0-9]{40})`$/);
+      if (contractNameMatch) {
+        currentContract = contractNameMatch[1].trim();
+        currentContractAddress = contractNameMatch[2];
+        continue;
+      }
+
+      // Try to extract slot changes: "    Slot `0xhash` changed from `"value"` to `"newvalue"`"
+      const slotChangeMatch = infoMsg.match(
+        /^\s+Slot `(0x[a-fA-F0-9]+)` changed from `"(.*?)"` to `"(.*?)"`$/,
+      );
+      if (slotChangeMatch) {
+        stateChanges.push({
+          contract: currentContract,
+          contractAddress: currentContractAddress,
+          key: slotChangeMatch[1],
+          oldValue: slotChangeMatch[2],
+          newValue: slotChangeMatch[3],
+        });
+        continue;
+      }
+
+      // Try to extract mapping state changes: "`variable` key `key` changed from `value` to `newvalue`"
+      const mappingStateChangeMatch = infoMsg.match(
+        /`(.+?)`\s+key\s+`(.+?)`\s+changed\s+from\s+`(.+?)`\s+to\s+`(.+?)`/,
+      );
+      if (mappingStateChangeMatch) {
+        stateChanges.push({
+          contract: currentContract || mappingStateChangeMatch[1],
+          contractAddress: currentContractAddress,
+          key: mappingStateChangeMatch[2],
+          oldValue: mappingStateChangeMatch[3],
+          newValue: mappingStateChangeMatch[4],
+        });
+        continue;
+      }
+
+      // Try to extract simple type state changes: "`variable` changed from `value` to `newvalue`"
+      const simpleStateChangeMatch = infoMsg.match(
+        /`(.+?)`\s+changed\s+from\s+`(.+?)`\s+to\s+`(.+?)`/,
+      );
+      if (simpleStateChangeMatch) {
+        stateChanges.push({
+          contract: currentContract,
+          contractAddress: currentContractAddress,
+          key: simpleStateChangeMatch[1],
+          oldValue: simpleStateChangeMatch[2],
+          newValue: simpleStateChangeMatch[3],
+        });
+      }
+    }
+  }
+
+  return stateChanges;
+}
+
+/**
+ * Extract events from check results
+ */
+function extractEvents(checks: AllCheckResults): SimulationEvent[] {
+  const events: SimulationEvent[] = [];
+
+  for (const checkId in checks) {
+    const { result } = checks[checkId];
+    for (const infoMsg of result.info) {
+      // Skip non-string entries
+      if (typeof infoMsg !== 'string') continue;
+
+      // Try to extract events from info messages
+      const eventMatch = infoMsg.match(/`(.+?)`\s+at\s+`(.+?)`\s*\n\s+\*\s+`(.+?)`/);
+      if (eventMatch) {
+        events.push({
+          name: eventMatch[1],
+          contract: eventMatch[2],
+          params: [{ name: 'params', value: eventMatch[3], type: 'unknown' }],
+        });
+      }
+    }
+  }
+
+  return events;
+}
+
+/**
+ * Extract calldata from check results
+ */
+function extractCalldata(
+  checks: AllCheckResults,
+  proposal: ProposalEvent,
+): SimulationCalldata | undefined {
+  for (const checkId in checks) {
+    if (checkId === 'decode-calldata') {
+      const { result } = checks[checkId];
+      for (const infoMsg of result.info) {
+        // Try to extract calldata from info messages
+        if (infoMsg.includes('transfers') || infoMsg.includes('calls')) {
+          return {
+            decoded: infoMsg,
+            raw: proposal.calldatas.join(', '),
+          };
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
  * Generate a structured report from the check results
  */
 function generateStructuredReport(
   governorType: GovernorType,
-  blocks: { current: SimulationBlock; start: SimulationBlock | null; end: SimulationBlock | null },
+  blocks: SimulationBlocks,
   proposal: ProposalEvent,
   checks: AllCheckResults,
   governorAddress: string,
@@ -215,164 +368,46 @@ function generateStructuredReport(
     };
   });
 
-  // Extract state changes
-  const stateChanges: SimulationStateChange[] = [];
-  // Look for state changes in the check results
-  for (const checkId in checks) {
-    const { result } = checks[checkId];
-
-    // Track the current contract name and address
-    let currentContract = '';
-    let currentContractAddress = '';
-
-    for (const infoMsg of result.info) {
-      // Skip non-string entries
-      if (typeof infoMsg !== 'string') continue;
-
-      // Check if this is a contract name line: "ContractName at `0xAddress`"
-      const contractNameMatch = infoMsg.match(/^(.+) at `(0x[a-fA-F0-9]{40})`$/);
-      if (contractNameMatch) {
-        currentContract = contractNameMatch[1].trim();
-        currentContractAddress = contractNameMatch[2];
-        continue;
-      }
-
-      // Try to extract slot changes: "    Slot `0xhash` changed from `"value"` to `"newvalue"`"
-      const slotChangeMatch = infoMsg.match(
-        /^\s+Slot `(0x[a-fA-F0-9]+)` changed from `"(.*?)"` to `"(.*?)"`$/,
-      );
-      if (slotChangeMatch) {
-        stateChanges.push({
-          contract: currentContract,
-          contractAddress: currentContractAddress,
-          key: slotChangeMatch[1],
-          oldValue: slotChangeMatch[2], // Already clean, no quotes
-          newValue: slotChangeMatch[3], // Already clean, no quotes
-        });
-        continue;
-      }
-
-      // Try to extract mapping state changes (if any): "`variable` key `key` changed from `value` to `newvalue`"
-      const mappingStateChangeMatch = infoMsg.match(
-        /`(.+?)`\s+key\s+`(.+?)`\s+changed\s+from\s+`(.+?)`\s+to\s+`(.+?)`/,
-      );
-      if (mappingStateChangeMatch) {
-        stateChanges.push({
-          contract: currentContract || mappingStateChangeMatch[1],
-          contractAddress: currentContractAddress,
-          key: mappingStateChangeMatch[2],
-          oldValue: mappingStateChangeMatch[3],
-          newValue: mappingStateChangeMatch[4],
-        });
-        continue;
-      }
-
-      // Try to extract simple type state changes (if any): "`variable` changed from `value` to `newvalue`"
-      const simpleStateChangeMatch = infoMsg.match(
-        /`(.+?)`\s+changed\s+from\s+`(.+?)`\s+to\s+`(.+?)`/,
-      );
-      if (simpleStateChangeMatch) {
-        stateChanges.push({
-          contract: currentContract,
-          contractAddress: currentContractAddress,
-          key: simpleStateChangeMatch[1],
-          oldValue: simpleStateChangeMatch[2],
-          newValue: simpleStateChangeMatch[3],
-        });
-      }
-    }
-  }
-
-  // Extract events
-  const events: SimulationEvent[] = [];
-  // Look for events in the check results
-  for (const checkId in checks) {
-    const { result } = checks[checkId];
-    for (const infoMsg of result.info) {
-      // Skip non-string entries
-      if (typeof infoMsg !== 'string') continue;
-
-      // Try to extract events from info messages
-      const eventMatch = infoMsg.match(/`(.+?)`\s+at\s+`(.+?)`\s*\n\s+\*\s+`(.+?)`/);
-      if (eventMatch) {
-        events.push({
-          name: eventMatch[1],
-          contract: eventMatch[2],
-          params: [{ name: 'params', value: eventMatch[3], type: 'unknown' }],
-        });
-      }
-    }
-  }
-
-  // Extract calldata
-  let calldata: SimulationCalldata | undefined;
-  // Look for calldata in the check results
-  for (const checkId in checks) {
-    if (checkId === 'decode-calldata') {
-      const { result } = checks[checkId];
-      for (const infoMsg of result.info) {
-        // Try to extract calldata from info messages
-        if (infoMsg.includes('transfers') || infoMsg.includes('calls')) {
-          calldata = {
-            decoded: infoMsg,
-            raw: proposal.calldatas.join(', '),
-          };
-          break;
-        }
-      }
-    }
-  }
-
   // Create the structured report
   return {
     title,
     proposalText,
     status,
-    summary: `Simulation ${status === 'success' ? 'completed successfully' : status === 'warning' ? 'completed with warnings' : 'failed'} for proposal: "${title}".`,
+    summary: `Simulation ${status === 'success' ? 'completed successfully' : status === 'warning' ? 'completed with warnings' : 'completed with errors'} for proposal: "${title}".`,
     checks: formattedChecks,
-    stateChanges,
-    events,
-    calldata,
-    metadata: {
-      proposalId: formatProposalId(governorType, proposal.id!),
-      proposer: proposal.proposer,
+    stateChanges: extractStateChanges(checks),
+    events: extractEvents(checks),
+    calldata: extractCalldata(checks, proposal),
+    metadata: generateReportMetadata(
+      governorType,
+      proposal,
       governorAddress,
+      blocks,
       executor,
-      simulationBlockNumber: blocks.current.number?.toString() ?? 'unknown',
-      simulationTimestamp: blocks.current.timestamp.toString(),
-      proposalCreatedAtBlockNumber: proposalCreatedBlock?.number?.toString() ?? 'unknown',
-      proposalCreatedAtTimestamp: proposalCreatedBlock?.timestamp?.toString() ?? 'unknown',
-      proposalExecutedAtBlockNumber: proposalExecutedBlock?.number?.toString(),
-      proposalExecutedAtTimestamp: proposalExecutedBlock?.timestamp?.toString(),
-    },
+      proposalCreatedBlock,
+      proposalExecutedBlock,
+    ),
   };
 }
 
 /**
  * @notice Write simulation results JSON file for frontend or GitHub app consumption
- * @param governorType The type of governor contract
- * @param blocks The relevant blocks for the proposal
- * @param proposal The proposal details
- * @param checks The check results
- * @param markdownReport The full markdown report
- * @param governorAddress The governor contract address
- * @param outputPath The path where to write the simulation-results.json file
- * @param destinationSimulations Optional destination simulations
- * @param executor Optional executor address for executed proposals
  */
-export function writeSimulationResultsJson(
-  governorType: GovernorType,
-  blocks: { current: SimulationBlock; start: SimulationBlock | null; end: SimulationBlock | null },
-  proposal: ProposalEvent,
-  checks: AllCheckResults,
-  markdownReport: string,
-  governorAddress: string,
-  outputPath: string,
-  destinationSimulations?: SimulationResult['destinationSimulations'],
-  executor?: string,
-  proposalCreatedBlock?: SimulationBlock,
-  proposalExecutedBlock?: SimulationBlock,
-) {
+export function writeSimulationResultsJson(params: WriteSimulationResultsJsonParams) {
+  const {
+    governorType,
+    blocks,
+    proposal,
+    checks,
+    markdownReport,
+    governorAddress,
+    outputPath,
+    destinationSimulations,
+    executor,
+    proposalCreatedBlock,
+    proposalExecutedBlock,
+  } = params;
+
   try {
     // Extract the proposal data in the format expected by the frontend
     const id = formatProposalId(governorType, proposal.id!);
@@ -439,24 +474,25 @@ export function writeSimulationResultsJson(
  * @param filename The name of the file. All report formats will have the same filename with different extensions.
  * @param destinationSimulations Optional destination simulations
  */
-export async function generateAndSaveReports(
-  governorType: GovernorType,
-  blocks: { current: SimulationBlock; start: SimulationBlock | null; end: SimulationBlock | null },
-  proposal: ProposalEvent,
-  checks: AllCheckResults,
-  outputDir: string,
-  governorAddress: string,
-  destinationSimulations?: SimulationResult['destinationSimulations'],
-  destinationChecks?: Record<number, AllCheckResults>,
-  executor?: string,
-  proposalCreatedBlock?: SimulationBlock,
-  proposalExecutedBlock?: SimulationBlock,
-) {
+export async function generateAndSaveReports(params: GenerateReportsParams) {
+  const {
+    governorType,
+    blocks,
+    proposal,
+    checks,
+    outputDir,
+    governorAddress,
+    destinationSimulations,
+    destinationChecks,
+    executor,
+    proposalCreatedBlock,
+    proposalExecutedBlock,
+  } = params;
   console.log(`[Report] Generating report for proposal ${proposal.id} (${proposal.proposalId})`);
   console.log(`[Report] Output directory: ${outputDir}`);
 
   // Prepare the output folder and filename.
-  if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+  if (!existsSync(outputDir)) mkdirSync(outputDir, { recursive: true });
   const id = formatProposalId(governorType, proposal.id!);
   const path = `${outputDir}/${id}`;
 
@@ -523,19 +559,19 @@ export async function generateAndSaveReports(
     ? join(dirname(__dirname), 'frontend', 'public', 'simulation-results.json') // SIM_NAME mode: frontend directory
     : `${path}-simulation-results.json`; // Bulk mode: alongside other reports
 
-  writeSimulationResultsJson(
+  writeSimulationResultsJson({
     governorType,
     blocks,
     proposal,
     checks,
     markdownReport,
     governorAddress,
-    simulationResultsPath,
+    outputPath: simulationResultsPath,
     destinationSimulations,
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
-  );
+  });
 }
 
 /**
@@ -547,7 +583,7 @@ export async function generateAndSaveReports(
  */
 async function toMarkdownProposalReport(
   governorType: GovernorType,
-  blocks: { current: SimulationBlock; start: SimulationBlock | null; end: SimulationBlock | null },
+  blocks: SimulationBlocks,
   proposal: ProposalEvent,
   checks: AllCheckResults,
   destinationSimulations?: SimulationResult['destinationSimulations'],
