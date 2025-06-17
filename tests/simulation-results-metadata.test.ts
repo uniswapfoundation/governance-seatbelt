@@ -196,20 +196,6 @@ describe('Simulation Results Metadata', () => {
       expect(data.report.structuredReport.metadata.governorAddress).toBe(mockGovernorAddress);
     }
   });
-
-  test('should preserve proposer from ProposalCreated event, not tx.from', () => {
-    // This test validates that we extract the correct proposer from ProposalCreated events
-    // rather than using tx.from (which would be the executor for executed proposals)
-
-    // We'll need to mock the tenderly client behavior to test this properly
-    // For now, this serves as documentation of the bug we're fixing
-
-    const originalProposer = '0x1111111111111111111111111111111111111111';
-    const executor = '0x2222222222222222222222222222222222222222';
-
-    // When we fix the bug, the proposer should always be from ProposalCreated event
-    expect(originalProposer).not.toBe(executor);
-  });
 });
 
 describe('File Generation Tests', () => {
