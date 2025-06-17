@@ -654,12 +654,20 @@ async function simulateExecuted(config: SimulationConfigExecuted): Promise<Simul
   };
   const sim = await sendSimulation(simulationPayload);
 
+  // Validate required fields
+  if (!proposal.proposer) {
+    throw new Error(`Missing proposer in ProposalCreated event for proposal ${proposalId}`);
+  }
+  if (!proposal.description) {
+    throw new Error(`Missing description in ProposalCreated event for proposal ${proposalId}`);
+  }
+
   const formattedProposal: ProposalEvent = {
     ...proposal,
     id: proposalId,
     proposalId: proposalId,
-    proposer: proposal.proposer ?? '', // Use original proposer from ProposalCreated event, not tx.from
-    description: proposal.description ?? '',
+    proposer: proposal.proposer, // Required field, validated above
+    description: proposal.description, // Required field, validated above
     targets: [...(proposal.targets ?? [])],
     values: [...(proposal.values ?? [])],
     signatures: [...(proposal.signatures ?? [])],

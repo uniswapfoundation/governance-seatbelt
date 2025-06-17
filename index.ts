@@ -236,7 +236,14 @@ async function main() {
           proposalId: simProposal.id,
         };
 
-        const { sim, proposal, latestBlock, proposalCreatedBlock, proposalExecutedBlock, executor } = await simulate(config);
+        const {
+          sim,
+          proposal,
+          latestBlock,
+          proposalCreatedBlock,
+          proposalExecutedBlock,
+          executor,
+        } = await simulate(config);
         const simulationData: SimulationData & { checkResults?: AllCheckResults } = {
           sim,
           proposal,

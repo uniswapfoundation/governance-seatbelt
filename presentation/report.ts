@@ -161,32 +161,6 @@ function estimateTime(current: SimulationBlock, block: bigint): bigint {
 }
 
 /**
- * Generate metadata for a structured report
- */
-function generateReportMetadata(
-  governorType: GovernorType,
-  proposal: ProposalEvent,
-  governorAddress: string,
-  blocks: SimulationBlocks,
-  executor?: string,
-  proposalCreatedBlock?: SimulationBlock,
-  proposalExecutedBlock?: SimulationBlock,
-) {
-  return {
-    proposalId: formatProposalId(governorType, proposal.id!),
-    proposer: proposal.proposer,
-    governorAddress,
-    executor,
-    simulationBlockNumber: blocks.current.number?.toString() ?? 'unknown',
-    simulationTimestamp: blocks.current.timestamp.toString(),
-    proposalCreatedAtBlockNumber: proposalCreatedBlock?.number?.toString() ?? 'unknown',
-    proposalCreatedAtTimestamp: proposalCreatedBlock?.timestamp?.toString() ?? 'unknown',
-    proposalExecutedAtBlockNumber: proposalExecutedBlock?.number?.toString(),
-    proposalExecutedAtTimestamp: proposalExecutedBlock?.timestamp?.toString(),
-  };
-}
-
-/**
  * Extract state changes from check results
  */
 function extractStateChanges(checks: AllCheckResults): SimulationStateChange[] {
@@ -324,6 +298,14 @@ function generateStructuredReport(
   proposalCreatedBlock?: SimulationBlock,
   proposalExecutedBlock?: SimulationBlock,
 ): StructuredSimulationReport {
+  // Validate required fields
+  if (!proposal.proposer) {
+    throw new Error(`Missing proposer for proposal ${proposal.id}`);
+  }
+  if (!governorAddress) {
+    throw new Error('Governor address is required for metadata');
+  }
+
   // Extract title and proposal text
   const title = getProposalTitle(proposal.description.trim());
   const proposalText = proposal.description.trim();
@@ -378,15 +360,18 @@ function generateStructuredReport(
     stateChanges: extractStateChanges(checks),
     events: extractEvents(checks),
     calldata: extractCalldata(checks, proposal),
-    metadata: generateReportMetadata(
-      governorType,
-      proposal,
+    metadata: {
+      proposalId: formatProposalId(governorType, proposal.id!),
+      proposer: proposal.proposer,
       governorAddress,
-      blocks,
       executor,
-      proposalCreatedBlock,
-      proposalExecutedBlock,
-    ),
+      simulationBlockNumber: blocks.current.number?.toString() ?? 'unknown',
+      simulationTimestamp: blocks.current.timestamp.toString(),
+      proposalCreatedAtBlockNumber: proposalCreatedBlock?.number?.toString() ?? 'unknown',
+      proposalCreatedAtTimestamp: proposalCreatedBlock?.timestamp?.toString() ?? 'unknown',
+      proposalExecutedAtBlockNumber: proposalExecutedBlock?.number?.toString(),
+      proposalExecutedAtTimestamp: proposalExecutedBlock?.timestamp?.toString(),
+    },
   };
 }
 
