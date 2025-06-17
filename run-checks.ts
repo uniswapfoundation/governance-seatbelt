@@ -236,8 +236,10 @@ async function main() {
     finalResult.proposal,
     sourceChecks,
     dir,
+    config.governorAddress,
     finalResult.destinationSimulations,
     destinationChecks,
+    finalResult.executor,
   );
 }
 

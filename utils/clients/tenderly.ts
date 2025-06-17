@@ -650,7 +650,7 @@ async function simulateExecuted(config: SimulationConfigExecuted): Promise<Simul
     ...proposal,
     id: proposalId,
     proposalId: proposalId,
-    proposer: tx.from,
+    proposer: proposal.proposer ?? '', // Use original proposer from ProposalCreated event, not tx.from
     description: proposal.description ?? '',
     targets: [...(proposal.targets ?? [])],
     values: [...(proposal.values ?? [])],
@@ -668,7 +668,7 @@ async function simulateExecuted(config: SimulationConfigExecuted): Promise<Simul
     touchedContracts: sim.contracts.map((contract) => contract.address),
   };
 
-  return { sim, proposal: formattedProposal, latestBlock, deps };
+  return { sim, proposal: formattedProposal, latestBlock, deps, executor: tx.from };
 }
 
 /**

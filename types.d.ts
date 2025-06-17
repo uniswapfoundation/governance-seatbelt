@@ -74,6 +74,7 @@ export interface SimulationResult {
   proposal: ProposalEvent;
   deps: ProposalData;
   latestBlock: SimulationBlock;
+  executor?: string; // Who executed the proposal (for executed proposals)
   destinationSimulations?: Array<{
     chainId: number;
     bridgeType: string; // e.g., 'ArbitrumL1L2'
@@ -593,6 +594,8 @@ export interface StructuredSimulationReport {
     timestamp: string;
     proposalId: string;
     proposer: string;
+    governorAddress: string;
+    executor?: string;
   };
 }
 

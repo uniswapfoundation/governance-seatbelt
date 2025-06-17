@@ -1,6 +1,6 @@
 import fs, { promises as fsp, writeFileSync } from 'node:fs';
 import { existsSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { mdToPdf } from 'md-to-pdf';
 import type { Link, Root } from 'mdast';
 import rehypeSanitize from 'rehype-sanitize';
@@ -166,6 +166,8 @@ function generateStructuredReport(
   blocks: { current: SimulationBlock; start: SimulationBlock | null; end: SimulationBlock | null },
   proposal: ProposalEvent,
   checks: AllCheckResults,
+  governorAddress: string,
+  executor?: string,
 ): StructuredSimulationReport {
   // Extract title and proposal text
   const title = getProposalTitle(proposal.description.trim());
@@ -334,32 +336,35 @@ function generateStructuredReport(
       timestamp: blocks.current.timestamp.toString(),
       proposalId: formatProposalId(governorType, proposal.id!),
       proposer: proposal.proposer,
+      governorAddress,
+      executor,
     },
   };
 }
 
 /**
- * @notice Write simulation results to frontend public directory for easy access
+ * @notice Write simulation results JSON file for frontend or GitHub app consumption
  * @param governorType The type of governor contract
  * @param blocks The relevant blocks for the proposal
  * @param proposal The proposal details
  * @param checks The check results
  * @param markdownReport The full markdown report
+ * @param governorAddress The governor contract address
+ * @param outputPath The path where to write the simulation-results.json file
  * @param destinationSimulations Optional destination simulations
+ * @param executor Optional executor address for executed proposals
  */
-export function writeFrontendData(
+export function writeSimulationResultsJson(
   governorType: GovernorType,
   blocks: { current: SimulationBlock; start: SimulationBlock | null; end: SimulationBlock | null },
   proposal: ProposalEvent,
   checks: AllCheckResults,
   markdownReport: string,
+  governorAddress: string,
+  outputPath: string,
   destinationSimulations?: SimulationResult['destinationSimulations'],
+  executor?: string,
 ) {
-  // Only write frontend data if we're in proposal creation mode (SIM_NAME is set)
-  if (!process.env.SIM_NAME) {
-    return;
-  }
-
   try {
     // Extract the proposal data in the format expected by the frontend
     const id = formatProposalId(governorType, proposal.id!);
@@ -373,7 +378,14 @@ export function writeFrontendData(
     };
 
     // Generate the structured report
-    const structuredReport = generateStructuredReport(governorType, blocks, proposal, checks);
+    const structuredReport = generateStructuredReport(
+      governorType,
+      blocks,
+      proposal,
+      checks,
+      governorAddress,
+      executor,
+    );
 
     // Create a simplified report structure for the frontend
     const reportForFrontend = {
@@ -383,28 +395,27 @@ export function writeFrontendData(
       structuredReport,
     };
 
-    // Use the correct path to the frontend/public directory
-    const projectRoot = join(__dirname, '..');
-    const frontendPublicDir = join(projectRoot, 'frontend', 'public');
-
     // Create the directory if it doesn't exist
-    if (!existsSync(frontendPublicDir)) {
-      mkdirSync(frontendPublicDir, { recursive: true });
+    const outputDir = dirname(outputPath);
+    if (!existsSync(outputDir)) {
+      mkdirSync(outputDir, { recursive: true });
     }
 
-    // Write the frontend data
+    // Write the simulation results JSON
     writeFileSync(
-      join(frontendPublicDir, 'simulation-results.json'),
-      JSON.stringify([{ proposalData, report: reportForFrontend }], (_, value) =>
+      outputPath,
+      JSON.stringify({ proposalData, report: reportForFrontend }, (_, value) =>
         typeof value === 'bigint' ? value.toString() : value,
       ),
     );
-    console.log('Frontend data written for proposal creation');
+    console.log(`Simulation results JSON written to: ${outputPath}`);
 
-    // TODO: Potentially add destinationSimulations data to the frontend JSON if needed
-    console.log('[Frontend Data] Destination Sims: ', destinationSimulations); // Log for now
+    // TODO: Potentially add destinationSimulations data if needed
+    if (destinationSimulations && destinationSimulations.length > 0) {
+      console.log('[Frontend Data] Destination Sims: ', destinationSimulations.length);
+    }
   } catch (error) {
-    console.error('Error writing frontend data:', error);
+    console.error('Error writing simulation results JSON:', error);
   }
 }
 
@@ -424,8 +435,10 @@ export async function generateAndSaveReports(
   proposal: ProposalEvent,
   checks: AllCheckResults,
   outputDir: string,
+  governorAddress: string,
   destinationSimulations?: SimulationResult['destinationSimulations'],
   destinationChecks?: Record<number, AllCheckResults>,
+  executor?: string,
 ) {
   console.log(`[Report] Generating report for proposal ${proposal.id} (${proposal.proposalId})`);
   console.log(`[Report] Output directory: ${outputDir}`);
@@ -462,7 +475,14 @@ export async function generateAndSaveReports(
   );
 
   // Generate the structured report for JSON output
-  const structuredReport = generateStructuredReport(governorType, blocks, proposal, checks);
+  const structuredReport = generateStructuredReport(
+    governorType,
+    blocks,
+    proposal,
+    checks,
+    governorAddress,
+    executor,
+  );
 
   // Save off all reports. The Markdown and PDF reports use the `markdownReport`.
   await Promise.all([
@@ -484,8 +504,22 @@ export async function generateAndSaveReports(
     ),
   ]);
 
-  // Write frontend data if in proposal creation mode
-  writeFrontendData(governorType, blocks, proposal, checks, markdownReport, destinationSimulations);
+  // Write simulation results JSON for both SIM_NAME and bulk modes
+  const simulationResultsPath = process.env.SIM_NAME
+    ? join(dirname(__dirname), 'frontend', 'public', 'simulation-results.json') // SIM_NAME mode: frontend directory
+    : `${path}-simulation-results.json`; // Bulk mode: alongside other reports
+
+  writeSimulationResultsJson(
+    governorType,
+    blocks,
+    proposal,
+    checks,
+    markdownReport,
+    governorAddress,
+    simulationResultsPath,
+    destinationSimulations,
+    executor,
+  );
 }
 
 /**

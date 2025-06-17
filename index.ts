@@ -125,8 +125,10 @@ async function main() {
       proposal,
       mainnetResults,
       dir,
+      config.governorAddress,
       finalResult.destinationSimulations,
       destinationChecks,
+      finalResult.executor,
     );
     console.log(`[Index] Reports saved for ${SIM_NAME}.`);
   } else {
@@ -274,7 +276,17 @@ async function main() {
 
         // Generate reports immediately
         const dir = `./reports/${config.daoName}/${config.governorAddress}`;
-        await generateAndSaveReports(governorType, blocks, proposal, checkResults, dir);
+        await generateAndSaveReports(
+          governorType,
+          blocks,
+          proposal,
+          checkResults,
+          dir,
+          config.governorAddress,
+          undefined,
+          undefined,
+          simulationData.executor,
+        );
 
         // Cache everything together
         simulationData.checkResults = checkResults;
