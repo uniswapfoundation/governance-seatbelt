@@ -75,6 +75,8 @@ export interface SimulationResult {
   deps: ProposalData;
   latestBlock: SimulationBlock;
   executor?: string; // Who executed the proposal (for executed proposals)
+  proposalCreatedBlock?: SimulationBlock; // Block when proposal was created
+  proposalExecutedBlock?: SimulationBlock; // Block when proposal was executed (for executed proposals)
   destinationSimulations?: Array<{
     chainId: number;
     bridgeType: string; // e.g., 'ArbitrumL1L2'
@@ -590,12 +592,16 @@ export interface StructuredSimulationReport {
   events: SimulationEvent[];
   calldata?: SimulationCalldata;
   metadata: {
-    blockNumber: string;
-    timestamp: string;
     proposalId: string;
     proposer: string;
     governorAddress: string;
     executor?: string;
+    simulationBlockNumber: string;
+    simulationTimestamp: string;
+    proposalCreatedAtBlockNumber: string;
+    proposalCreatedAtTimestamp: string;
+    proposalExecutedAtBlockNumber?: string;
+    proposalExecutedAtTimestamp?: string;
   };
 }
 

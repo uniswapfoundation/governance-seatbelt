@@ -326,7 +326,10 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
     touchedContracts: sim.contracts.map((contract) => contract.address),
   };
 
-  return { sim, proposal, latestBlock, deps };
+  // For new proposals, use simulation timing as created timing since they don't exist on-chain yet
+  const proposalCreatedBlock = latestBlock;
+
+  return { sim, proposal, latestBlock, deps, proposalCreatedBlock };
 }
 
 /**
@@ -572,7 +575,10 @@ async function simulateProposed(config: SimulationConfigProposed): Promise<Simul
     touchedContracts: sim.contracts.map((contract) => contract.address),
   };
 
-  return { sim, proposal: formattedProposal, latestBlock, deps };
+  // Get block details for proposal creation timing
+  const proposalCreatedBlock = await publicClient.getBlock({ blockNumber: proposalCreatedEvent.blockNumber });
+
+  return { sim, proposal: formattedProposal, latestBlock, deps, proposalCreatedBlock };
 }
 
 /**
@@ -668,7 +674,21 @@ async function simulateExecuted(config: SimulationConfigExecuted): Promise<Simul
     touchedContracts: sim.contracts.map((contract) => contract.address),
   };
 
-  return { sim, proposal: formattedProposal, latestBlock, deps, executor: tx.from };
+  // Get block details for proposal creation and execution timing
+  const [proposalCreatedBlock, proposalExecutedBlock] = await Promise.all([
+    publicClient.getBlock({ blockNumber: proposalCreatedEvent.blockNumber }),
+    publicClient.getBlock({ blockNumber: proposalExecutedEvent.blockNumber }),
+  ]);
+
+  return { 
+    sim, 
+    proposal: formattedProposal, 
+    latestBlock, 
+    deps, 
+    executor: tx.from,
+    proposalCreatedBlock,
+    proposalExecutedBlock,
+  };
 }
 
 /**

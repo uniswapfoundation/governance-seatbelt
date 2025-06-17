@@ -168,6 +168,8 @@ function generateStructuredReport(
   checks: AllCheckResults,
   governorAddress: string,
   executor?: string,
+  proposalCreatedBlock?: SimulationBlock,
+  proposalExecutedBlock?: SimulationBlock,
 ): StructuredSimulationReport {
   // Extract title and proposal text
   const title = getProposalTitle(proposal.description.trim());
@@ -332,12 +334,16 @@ function generateStructuredReport(
     events,
     calldata,
     metadata: {
-      blockNumber: blocks.current.number?.toString() ?? 'unknown',
-      timestamp: blocks.current.timestamp.toString(),
       proposalId: formatProposalId(governorType, proposal.id!),
       proposer: proposal.proposer,
       governorAddress,
       executor,
+      simulationBlockNumber: blocks.current.number?.toString() ?? 'unknown',
+      simulationTimestamp: blocks.current.timestamp.toString(),
+      proposalCreatedAtBlockNumber: proposalCreatedBlock?.number?.toString() ?? 'unknown',
+      proposalCreatedAtTimestamp: proposalCreatedBlock?.timestamp?.toString() ?? 'unknown',
+      proposalExecutedAtBlockNumber: proposalExecutedBlock?.number?.toString(),
+      proposalExecutedAtTimestamp: proposalExecutedBlock?.timestamp?.toString(),
     },
   };
 }
@@ -364,6 +370,8 @@ export function writeSimulationResultsJson(
   outputPath: string,
   destinationSimulations?: SimulationResult['destinationSimulations'],
   executor?: string,
+  proposalCreatedBlock?: SimulationBlock,
+  proposalExecutedBlock?: SimulationBlock,
 ) {
   try {
     // Extract the proposal data in the format expected by the frontend
@@ -385,6 +393,8 @@ export function writeSimulationResultsJson(
       checks,
       governorAddress,
       executor,
+      proposalCreatedBlock,
+      proposalExecutedBlock,
     );
 
     // Create a simplified report structure for the frontend
@@ -439,6 +449,8 @@ export async function generateAndSaveReports(
   destinationSimulations?: SimulationResult['destinationSimulations'],
   destinationChecks?: Record<number, AllCheckResults>,
   executor?: string,
+  proposalCreatedBlock?: SimulationBlock,
+  proposalExecutedBlock?: SimulationBlock,
 ) {
   console.log(`[Report] Generating report for proposal ${proposal.id} (${proposal.proposalId})`);
   console.log(`[Report] Output directory: ${outputDir}`);
@@ -482,6 +494,8 @@ export async function generateAndSaveReports(
     checks,
     governorAddress,
     executor,
+    proposalCreatedBlock,
+    proposalExecutedBlock,
   );
 
   // Save off all reports. The Markdown and PDF reports use the `markdownReport`.
@@ -519,6 +533,8 @@ export async function generateAndSaveReports(
     simulationResultsPath,
     destinationSimulations,
     executor,
+    proposalCreatedBlock,
+    proposalExecutedBlock,
   );
 }
 

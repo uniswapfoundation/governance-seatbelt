@@ -240,6 +240,8 @@ async function main() {
     finalResult.destinationSimulations,
     destinationChecks,
     finalResult.executor,
+    finalResult.proposalCreatedBlock,
+    finalResult.proposalExecutedBlock,
   );
 }
 

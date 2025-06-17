@@ -13,18 +13,20 @@ describe('Type Validation for Metadata Updates', () => {
       stateChanges: [],
       events: [],
       metadata: {
-        blockNumber: '18200000',
-        timestamp: '1700000000',
         proposalId: '123',
         proposer: '0x1234567890abcdef1234567890abcdef12345678',
-        governorAddress: '0x9876543210fedcba9876543210fedcba98765432', // This should be valid
+        governorAddress: '0x9876543210fedcba9876543210fedcba98765432',
+        simulationBlockNumber: '18200000',
+        simulationTimestamp: '1700000000',
+        proposalCreatedAtBlockNumber: '17800000',
+        proposalCreatedAtTimestamp: '1695000000',
       },
     };
 
     // These should pass once types are updated
     expect(mockReport.metadata.governorAddress).toBe('0x9876543210fedcba9876543210fedcba98765432');
     expect(mockReport.metadata.proposer).toBe('0x1234567890abcdef1234567890abcdef12345678');
-    expect(mockReport.metadata.blockNumber).toBe('18200000');
+    expect(mockReport.metadata.simulationBlockNumber).toBe('18200000');
   });
 
   test('StructuredSimulationReport metadata should optionally include executor', () => {
@@ -38,12 +40,16 @@ describe('Type Validation for Metadata Updates', () => {
       stateChanges: [],
       events: [],
       metadata: {
-        blockNumber: '18200000',
-        timestamp: '1700000000',
         proposalId: '123',
         proposer: '0x1234567890abcdef1234567890abcdef12345678',
         governorAddress: '0x9876543210fedcba9876543210fedcba98765432',
-        executor: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef', // This should be valid
+        executor: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+        simulationBlockNumber: '18200000',
+        simulationTimestamp: '1700000000',
+        proposalCreatedAtBlockNumber: '17800000',
+        proposalCreatedAtTimestamp: '1695000000',
+        proposalExecutedAtBlockNumber: '17850000',
+        proposalExecutedAtTimestamp: '1696000000',
       },
     };
 
@@ -64,12 +70,14 @@ describe('Type Validation for Metadata Updates', () => {
       stateChanges: [],
       events: [],
       metadata: {
-        blockNumber: '18200000',
-        timestamp: '1700000000',
         proposalId: '123',
         proposer: '0x1234567890abcdef1234567890abcdef12345678',
         governorAddress: '0x9876543210fedcba9876543210fedcba98765432',
-        // executor is optional for non-executed proposals
+        simulationBlockNumber: '18200000',
+        simulationTimestamp: '1700000000',
+        proposalCreatedAtBlockNumber: '17800000',
+        proposalCreatedAtTimestamp: '1695000000',
+        // executor and execution timing are optional for non-executed proposals
       },
     };
 
@@ -82,19 +90,23 @@ describe('Type Validation for Metadata Updates', () => {
   test('should validate required vs optional metadata fields', () => {
     // Test that all required fields are present
     const validMetadata = {
-      blockNumber: '18200000',
-      timestamp: '1700000000',
       proposalId: '123',
       proposer: '0x1234567890abcdef1234567890abcdef12345678',
       governorAddress: '0x9876543210fedcba9876543210fedcba98765432',
+      simulationBlockNumber: '18200000',
+      simulationTimestamp: '1700000000',
+      proposalCreatedAtBlockNumber: '17800000',
+      proposalCreatedAtTimestamp: '1695000000',
     };
 
     // All required fields should be strings or addresses
-    expect(typeof validMetadata.blockNumber).toBe('string');
-    expect(typeof validMetadata.timestamp).toBe('string');
     expect(typeof validMetadata.proposalId).toBe('string');
     expect(typeof validMetadata.proposer).toBe('string');
     expect(typeof validMetadata.governorAddress).toBe('string');
+    expect(typeof validMetadata.simulationBlockNumber).toBe('string');
+    expect(typeof validMetadata.simulationTimestamp).toBe('string');
+    expect(typeof validMetadata.proposalCreatedAtBlockNumber).toBe('string');
+    expect(typeof validMetadata.proposalCreatedAtTimestamp).toBe('string');
 
     // Validate address format (basic check)
     expect(validMetadata.proposer).toMatch(/^0x[a-fA-F0-9]{40}$/);

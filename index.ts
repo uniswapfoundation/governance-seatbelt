@@ -129,6 +129,8 @@ async function main() {
       finalResult.destinationSimulations,
       destinationChecks,
       finalResult.executor,
+      finalResult.proposalCreatedBlock,
+      finalResult.proposalExecutedBlock,
     );
     console.log(`[Index] Reports saved for ${SIM_NAME}.`);
   } else {
@@ -286,6 +288,8 @@ async function main() {
           undefined,
           undefined,
           simulationData.executor,
+          simulationData.proposalCreatedBlock,
+          simulationData.proposalExecutedBlock,
         );
 
         // Cache everything together

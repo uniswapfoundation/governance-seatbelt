@@ -22,6 +22,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `cd checks && bun test` - Run all tests in checks directory
 - `cd checks && bun test <test-file>` - Run specific test file
 
+**Running Specific Proposals:**
+- `bun run check-proposal <proposal-id>` - Run checks on specific proposal using environment variables
+- `./run-proposal.sh <proposal-id>` - Run checks on specific Uniswap proposal (sets DAO_NAME and GOVERNOR_ADDRESS)
+- `DAO_NAME=<dao> GOVERNOR_ADDRESS=<address> bun run-checks.ts <proposal-id>` - Run checks on specific proposal with custom DAO
+
 ## Architecture Overview
 
 This is a governance safety tool that simulates on-chain proposals and runs safety checks against them.
