@@ -1,4 +1,4 @@
-import { promises as fsp, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { existsSync, promises as fsp, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { mdToPdf } from 'md-to-pdf';
 import type { Link, Root } from 'mdast';

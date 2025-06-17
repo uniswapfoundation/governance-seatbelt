@@ -576,7 +576,9 @@ async function simulateProposed(config: SimulationConfigProposed): Promise<Simul
   };
 
   // Get block details for proposal creation timing
-  const proposalCreatedBlock = await publicClient.getBlock({ blockNumber: proposalCreatedEvent.blockNumber });
+  const proposalCreatedBlock = await publicClient.getBlock({
+    blockNumber: proposalCreatedEvent.blockNumber,
+  });
 
   return { sim, proposal: formattedProposal, latestBlock, deps, proposalCreatedBlock };
 }
@@ -680,11 +682,11 @@ async function simulateExecuted(config: SimulationConfigExecuted): Promise<Simul
     publicClient.getBlock({ blockNumber: proposalExecutedEvent.blockNumber }),
   ]);
 
-  return { 
-    sim, 
-    proposal: formattedProposal, 
-    latestBlock, 
-    deps, 
+  return {
+    sim,
+    proposal: formattedProposal,
+    latestBlock,
+    deps,
     executor: tx.from,
     proposalCreatedBlock,
     proposalExecutedBlock,
