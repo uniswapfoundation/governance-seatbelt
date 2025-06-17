@@ -236,13 +236,16 @@ async function main() {
           proposalId: simProposal.id,
         };
 
-        const { sim, proposal, latestBlock } = await simulate(config);
+        const { sim, proposal, latestBlock, proposalCreatedBlock, proposalExecutedBlock, executor } = await simulate(config);
         const simulationData: SimulationData & { checkResults?: AllCheckResults } = {
           sim,
           proposal,
           latestBlock,
           config,
           deps: proposalData,
+          proposalCreatedBlock,
+          proposalExecutedBlock,
+          executor,
         };
 
         // Run checks immediately after simulation
