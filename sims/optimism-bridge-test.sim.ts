@@ -1,9 +1,6 @@
-import { encodeFunctionData, encodeAbiParameters } from 'viem';
+import { encodeAbiParameters } from 'viem';
 import type { Address } from 'viem';
 import type { SimulationConfigNew } from '../types';
-import L1BaseCrossChainMessengerAbi from '../utils/abis/L1BaseCrossChainMessenger.json' assert {
-  type: 'json',
-};
 
 /**
  * Test simulation for Optimism bridge functionality.
@@ -31,7 +28,7 @@ const call1 = {
   target: L1_CROSS_DOMAIN_MESSENGER_OP,
   calldata: encodeAbiParameters(
     [{ type: 'address' }, { type: 'bytes' }, { type: 'uint32' }],
-    [L2_RECIPIENT_OP, testMessage, 1000000] // Fixed: uint32 gas limit, not uint256
+    [L2_RECIPIENT_OP, testMessage, 1000000], // Fixed: uint32 gas limit, not uint256
   ),
   value: l2GasPayment,
   signature: 'sendMessage(address,bytes,uint32)', // Fixed: uint32 not uint256
@@ -41,7 +38,7 @@ const call2 = {
   target: L1_CROSS_DOMAIN_MESSENGER_BASE,
   calldata: encodeAbiParameters(
     [{ type: 'address' }, { type: 'bytes' }, { type: 'uint32' }],
-    [L2_RECIPIENT_BASE, testMessage, 1000000] // Fixed: uint32 gas limit, not uint256
+    [L2_RECIPIENT_BASE, testMessage, 1000000], // Fixed: uint32 gas limit, not uint256
   ),
   value: l2GasPayment,
   signature: 'sendMessage(address,bytes,uint32)', // Fixed: uint32 not uint256
