@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { CallTrace, TenderlySimulation } from '../../types';
 import { parseArbitrumL1L2Messages } from '../../utils/bridges/arbitrum';
+import { parseOptimismL1L2Messages } from '../../utils/bridges/optimism';
 
 // Helper function to create a mock simulation with minimal required fields
 function createMockSimulation(calls: CallTrace[]): TenderlySimulation {
@@ -123,6 +124,208 @@ describe('Cross-Chain Implementation', () => {
 
       const messages = parseArbitrumL1L2Messages(mockSim);
       expect(messages[0]?.l2FromAddress?.toLowerCase()).toBe(expectedAlias.toLowerCase());
+    });
+  });
+
+  describe('Optimism L1→L2 Message Parsing', () => {
+    test('should extract messages from sendMessage calls to OP Mainnet', () => {
+      // Mock simulation with OP Mainnet L1CrossDomainMessenger call
+      // sendMessage(address,bytes,uint32) with deposit() call to 0x4200000000000000000000000000000000000006
+      const mockSim = createMockSimulation([
+        {
+          to: '0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1', // OP Mainnet L1CrossDomainMessenger
+          from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC', // Timelock
+          input:
+            '0x3dbb202b0000000000000000000000004200000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000f42400000000000000000000000000000000000000000000000000000000000000004d0e30db000000000000000000000000000000000000000000000000000000000',
+          value: '0',
+          calls: [],
+        },
+      ]);
+
+      const messages = parseOptimismL1L2Messages(mockSim);
+
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({
+        bridgeType: 'OptimismL1L2',
+        destinationChainId: '10',
+        l2TargetAddress: '0x4200000000000000000000000000000000000006',
+        l2InputData: '0xd0e30db0', // deposit() function selector
+        l2Value: '0',
+        l2FromAddress: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC', // Preserved on Optimism
+      });
+    });
+
+    test('should extract messages from sendMessage calls to Base', () => {
+      // Mock simulation with Base L1CrossDomainMessenger call
+      const mockSim = createMockSimulation([
+        {
+          to: '0x866E82a600A1414e583f7F13623F1aC5d58b0Afa', // Base L1CrossDomainMessenger
+          from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC', // Timelock
+          input:
+            '0x3dbb202b0000000000000000000000004200000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000f42400000000000000000000000000000000000000000000000000000000000000004d0e30db000000000000000000000000000000000000000000000000000000000',
+          value: '0',
+          calls: [],
+        },
+      ]);
+
+      const messages = parseOptimismL1L2Messages(mockSim);
+
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({
+        bridgeType: 'OptimismL1L2',
+        destinationChainId: '8453',
+        l2TargetAddress: '0x4200000000000000000000000000000000000006',
+        l2InputData: '0xd0e30db0',
+        l2Value: '0',
+        l2FromAddress: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+      });
+    });
+
+    test('should handle multiple messages to different chains', () => {
+      const mockSim = createMockSimulation([
+        {
+          to: '0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1', // OP Mainnet
+          from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+          input:
+            '0x3dbb202b0000000000000000000000004200000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000f42400000000000000000000000000000000000000000000000000000000000000004d0e30db000000000000000000000000000000000000000000000000000000000',
+          value: '0',
+          calls: [],
+        },
+        {
+          to: '0x866E82a600A1414e583f7F13623F1aC5d58b0Afa', // Base
+          from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+          input:
+            '0x3dbb202b0000000000000000000000004200000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000f42400000000000000000000000000000000000000000000000000000000000000004d0e30db000000000000000000000000000000000000000000000000000000000',
+          value: '0',
+          calls: [],
+        },
+      ]);
+
+      const messages = parseOptimismL1L2Messages(mockSim);
+
+      expect(messages).toHaveLength(2);
+      expect(messages.map((m) => m.destinationChainId).sort()).toEqual(['10', '8453']);
+    });
+
+    test('should handle empty or invalid input data', () => {
+      const mockSim = createMockSimulation([
+        {
+          to: '0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1',
+          from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+          input: '0x', // Empty input
+          calls: [],
+        },
+        {
+          to: '0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1',
+          from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+          input: '0x123', // Too short
+          calls: [],
+        },
+        {
+          to: '0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1',
+          from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+          input: '0x12345678', // Valid length but wrong selector
+          calls: [],
+        },
+      ]);
+
+      const messages = parseOptimismL1L2Messages(mockSim);
+      expect(messages).toHaveLength(0);
+    });
+
+    test('should handle non-sendMessage function calls', () => {
+      const mockSim = createMockSimulation([
+        {
+          to: '0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1',
+          from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+          input:
+            '0xa9059cbb000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000', // Different function selector
+          calls: [],
+        },
+      ]);
+
+      const messages = parseOptimismL1L2Messages(mockSim);
+      expect(messages).toHaveLength(0);
+    });
+
+    test('should deduplicate messages with same target, data, and chain', () => {
+      const mockSim = createMockSimulation([
+        {
+          to: '0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1',
+          from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+          input:
+            '0x3dbb202b0000000000000000000000004200000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000f42400000000000000000000000000000000000000000000000000000000000000004d0e30db000000000000000000000000000000000000000000000000000000000',
+          value: '0',
+          calls: [],
+        },
+        {
+          to: '0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1',
+          from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+          input:
+            '0x3dbb202b0000000000000000000000004200000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000f42400000000000000000000000000000000000000000000000000000000000000004d0e30db000000000000000000000000000000000000000000000000000000000',
+          value: '0',
+          calls: [],
+        },
+      ]);
+
+      const messages = parseOptimismL1L2Messages(mockSim);
+      expect(messages).toHaveLength(1); // Should deduplicate to 1 message
+    });
+
+    test('should handle nested calls', () => {
+      const mockSim = createMockSimulation([
+        {
+          to: '0xSomeOtherContract',
+          from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+          input: '0x123',
+          calls: [
+            {
+              to: '0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1', // Nested messenger call
+              from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+              input:
+                '0x3dbb202b0000000000000000000000004200000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000f42400000000000000000000000000000000000000000000000000000000000000004d0e30db000000000000000000000000000000000000000000000000000000000',
+              value: '0',
+              calls: [],
+            },
+          ],
+        },
+      ]);
+
+      const messages = parseOptimismL1L2Messages(mockSim);
+      expect(messages).toHaveLength(1);
+    });
+
+    test('should handle invalid message lengths gracefully', () => {
+      const mockSim = createMockSimulation([
+        {
+          to: '0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1',
+          from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+          // Malformed data with impossible message length
+          input:
+            '0x3dbb202b0000000000000000000000004200000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000f4240ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+          value: '0',
+          calls: [],
+        },
+      ]);
+
+      const messages = parseOptimismL1L2Messages(mockSim);
+      expect(messages).toHaveLength(0); // Should handle invalid length gracefully
+    });
+
+    test('should handle unknown messenger addresses', () => {
+      const mockSim = createMockSimulation([
+        {
+          to: '0x1234567890123456789012345678901234567890', // Unknown messenger
+          from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+          input:
+            '0x3dbb202b0000000000000000000000004200000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000f42400000000000000000000000000000000000000000000000000000000000000004d0e30db000000000000000000000000000000000000000000000000000000000',
+          value: '0',
+          calls: [],
+        },
+      ]);
+
+      const messages = parseOptimismL1L2Messages(mockSim);
+      expect(messages).toHaveLength(0); // Should skip unknown messengers
     });
   });
 });
