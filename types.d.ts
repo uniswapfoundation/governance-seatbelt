@@ -176,15 +176,17 @@ export interface AllCheckResults {
 }
 
 // --- Extracted Cross-Chain Message Type ---
+export type BridgeType = 'ArbitrumL1L2' | 'OptimismL1L2';
+
 /**
  * @notice Holds the parameters extracted from a source chain simulation
  * that are necessary to initiate a simulation on a destination chain via a bridge.
  */
 export interface ExtractedCrossChainMessage {
   /** @notice Identifier for the type of bridge/messaging protocol used (e.g., 'ArbitrumL1L2'). */
-  bridgeType: string;
+  bridgeType: BridgeType;
   /** @notice The chain ID of the destination network. */
-  destinationChainId: '42161'; // Only Arbitrum is supported for now
+  destinationChainId: string;
   /** @notice The target contract address to be called on the destination chain. */
   l2TargetAddress: Address;
   /** @notice The encoded calldata to be used in the transaction on the destination chain. */

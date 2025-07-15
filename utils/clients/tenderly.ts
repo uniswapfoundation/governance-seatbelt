@@ -25,6 +25,7 @@ import type {
 } from '../../types.d';
 import { GOVERNOR_ABI } from '../abis/GovernorBravo';
 import { parseArbitrumL1L2Messages } from '../bridges/arbitrum';
+import { parseOptimismL1L2Messages } from '../bridges/optimism';
 import {
   BLOCK_GAS_LIMIT,
   TENDERLY_ACCESS_TOKEN,
@@ -102,6 +103,8 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
     calldatas,
     description,
   });
+  
+  console.log('[DEBUG] Generated proposal ID:', proposalId);
 
   const startBlock = latestBlock.number - 100n; // arbitrarily subtract 100
   const proposal: ProposalEvent = {
@@ -125,8 +128,9 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
   // Set `from` arbitrarily.
   const from = DEFAULT_FROM;
 
-  // Run simulation at the block right after the proposal ends.
-  const simBlock = proposal.endBlock + 1n;
+  // Run simulation at a recent block to avoid OptimismPortal2 block number conflicts
+  // Use latest block instead of proposal.endBlock + 1 to prevent arithmetic underflow
+  const simBlock = latestBlock.number;
 
   // For OZ governors we arbitrarily choose execution time. For Bravo governors, we
   // compute the approximate earliest possible execution time based on governance parameters. This
@@ -178,6 +182,7 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
   console.log(`[Tenderly] Setting up storage overrides for proposal ${proposalId}`);
   console.log(`[Tenderly] Proposal targets: ${targets.length} targets`);
   console.log(`[Tenderly] Storage key format: proposals[${proposalId}]`);
+  console.log(`[Tenderly] Setting proposalCount to: ${proposalId.toString()}`);
 
   // Use the Tenderly API to get the encoded state overrides for governor storage
   let governorStateOverrides: Record<string, string> = {};
@@ -276,8 +281,8 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
     gas: BLOCK_GAS_LIMIT,
     gas_price: '0',
     value: '0', // We'll update this below if ETH transfers are needed
-    save_if_fails: false, // Set to true to save the simulation to your Tenderly dashboard if it fails.
-    save: false, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
+    save_if_fails: true, // Set to true to save the simulation to your Tenderly dashboard if it fails.
+    save: true, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
     generate_access_list: true, // not required, but useful as a sanity check to ensure consistency in the simulation response
     block_header: {
       // this data represents what block.number and block.timestamp should return in the EVM during the simulation
@@ -302,6 +307,8 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
   const totalValue = config.values.reduce((sum, val) => sum + val, 0n);
 
   if (totalValue > 0n) {
+    console.log('[Tenderly] Total ETH value needed:', totalValue.toString(), 'wei');
+    console.log('[Tenderly] Setting balances for from:', from, 'and timelock:', timelock.address);
     // If we need to send ETH, update the value and from address balance
     simulationPayload.value = totalValue.toString();
 
@@ -313,10 +320,46 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
       ...simulationPayload.state_objects[from],
       balance: totalValue.toString(),
     };
+
+    // Also ensure the timelock has enough ETH to execute the proposal
+    simulationPayload.state_objects[timelock.address] = {
+      ...simulationPayload.state_objects[timelock.address],
+      balance: totalValue.toString(),
+    };
   }
 
   // Run the simulation
   const sim = await sendSimulation(simulationPayload);
+  
+  // Enhanced error logging for debugging
+  if (!sim.transaction.status) {
+    console.error('[Tenderly] Simulation failed for proposal execution');
+    
+    // Log the main error
+    const mainError = sim.transaction.transaction_info?.call_trace?.error_reason;
+    if (mainError) {
+      console.error('[Tenderly] Main error:', mainError);
+    }
+    
+    // Check for errors in nested calls
+    const trace = sim.transaction.transaction_info?.call_trace;
+    if (trace?.calls && trace.calls.length > 0) {
+      console.error('[Tenderly] Analyzing', trace.calls.length, 'nested calls...');
+      
+      const analyzeCall = (call: any, depth: number = 0) => {
+        const indent = '  '.repeat(depth);
+        if (call.error_reason) {
+          console.error(`${indent}[Call Error] ${call.function_name || 'unknown'} at ${call.to}: ${call.error_reason}`);
+        }
+        if (call.calls && call.calls.length > 0) {
+          call.calls.forEach((nestedCall: any) => analyzeCall(nestedCall, depth + 1));
+        }
+      };
+      
+      trace.calls.forEach((call: any) => analyzeCall(call, 1));
+    }
+  }
+  
   const deps: ProposalData = {
     governor,
     timelock,
@@ -562,10 +605,46 @@ async function simulateProposed(config: SimulationConfigProposed): Promise<Simul
       ...simulationPayload.state_objects[from],
       balance: totalValue.toString(),
     };
+
+    // Also ensure the timelock has enough ETH to execute the proposal
+    simulationPayload.state_objects[timelock.address] = {
+      ...simulationPayload.state_objects[timelock.address],
+      balance: totalValue.toString(),
+    };
   }
 
   // Run the simulation
   const sim = await sendSimulation(simulationPayload);
+  
+  // Enhanced error logging for debugging
+  if (!sim.transaction.status) {
+    console.error('[Tenderly] Simulation failed for proposal execution');
+    
+    // Log the main error
+    const mainError = sim.transaction.transaction_info?.call_trace?.error_reason;
+    if (mainError) {
+      console.error('[Tenderly] Main error:', mainError);
+    }
+    
+    // Check for errors in nested calls
+    const trace = sim.transaction.transaction_info?.call_trace;
+    if (trace?.calls && trace.calls.length > 0) {
+      console.error('[Tenderly] Analyzing', trace.calls.length, 'nested calls...');
+      
+      const analyzeCall = (call: any, depth: number = 0) => {
+        const indent = '  '.repeat(depth);
+        if (call.error_reason) {
+          console.error(`${indent}[Call Error] ${call.function_name || 'unknown'} at ${call.to}: ${call.error_reason}`);
+        }
+        if (call.calls && call.calls.length > 0) {
+          call.calls.forEach((nestedCall: any) => analyzeCall(nestedCall, depth + 1));
+        }
+      };
+      
+      trace.calls.forEach((call: any) => analyzeCall(call, 1));
+    }
+  }
+  
   const deps: ProposalData = {
     governor,
     timelock,
@@ -648,8 +727,8 @@ async function simulateExecuted(config: SimulationConfigExecuted): Promise<Simul
     gas: Number(tx.gas),
     gas_price: tx.gasPrice?.toString(),
     value: tx.value.toString(),
-    save_if_fails: false, // Set to true to save the simulation to your Tenderly dashboard if it fails.
-    save: false, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
+    save_if_fails: true, // Set to true to save the simulation to your Tenderly dashboard if it fails.
+    save: true, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
     generate_access_list: true,
   };
   const sim = await sendSimulation(simulationPayload);
@@ -723,8 +802,11 @@ export async function handleCrossChainSimulations(
 
   // 1. Parse source simulation for cross-chain messages
   console.log('[CrossChainHandler] Parsing source sim for messages...');
-  // TODO: Extend this to handle multiple bridge types if needed
-  const extractedMessages = parseArbitrumL1L2Messages(result.sim);
+
+  // Parse messages from both Arbitrum and Optimism bridges
+  const arbMessages = parseArbitrumL1L2Messages(result.sim);
+  const opMessages = parseOptimismL1L2Messages(result.sim);
+  const extractedMessages = [...arbMessages, ...opMessages];
 
   if (extractedMessages.length === 0) {
     console.log('[CrossChainHandler] No cross-chain messages detected.');

@@ -1,6 +1,6 @@
 import { http, createPublicClient } from 'viem';
 import type { PublicClient } from 'viem';
-import { arbitrum, mainnet } from 'viem/chains';
+import { arbitrum, base, mainnet, optimism } from 'viem/chains';
 
 export interface ChainConfig {
   chainId: number;
@@ -15,6 +15,10 @@ export interface ChainConfig {
 if (!process.env.MAINNET_RPC_URL || !process.env.ARBITRUM_RPC_URL) {
   throw new Error('MAINNET_RPC_URL and ARBITRUM_RPC_URL must be set');
 }
+
+// Optional RPC URLs for Optimism and Base
+const OPTIMISM_RPC_URL = process.env.OPTIMISM_RPC_URL || 'https://mainnet.optimism.io';
+const BASE_RPC_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
 
 export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   [mainnet.id]: {
@@ -34,6 +38,24 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       apiKey: process.env.ETHERSCAN_API_KEY, // Single API key for all chains
     },
     rpcUrl: process.env.ARBITRUM_RPC_URL,
+  },
+  [optimism.id]: {
+    chainId: optimism.id,
+    blockExplorer: {
+      baseUrl: optimism.blockExplorers?.default.url,
+      apiUrl: 'https://api.etherscan.io/v2/api', // Using v2 unified API
+      apiKey: process.env.ETHERSCAN_API_KEY, // Single API key for all chains
+    },
+    rpcUrl: OPTIMISM_RPC_URL,
+  },
+  [base.id]: {
+    chainId: base.id,
+    blockExplorer: {
+      baseUrl: base.blockExplorers?.default.url,
+      apiUrl: 'https://api.etherscan.io/v2/api', // Using v2 unified API
+      apiKey: process.env.ETHERSCAN_API_KEY, // Single API key for all chains
+    },
+    rpcUrl: BASE_RPC_URL,
   },
 };
 
@@ -55,6 +77,14 @@ const clients: Record<number, PublicClient> = {
     chain: arbitrum,
     transport: http(CHAIN_CONFIGS[arbitrum.id].rpcUrl),
   }),
+  [optimism.id]: createPublicClient({
+    chain: optimism,
+    transport: http(CHAIN_CONFIGS[optimism.id].rpcUrl),
+  }) as PublicClient,
+  [base.id]: createPublicClient({
+    chain: base,
+    transport: http(CHAIN_CONFIGS[base.id].rpcUrl),
+  }) as PublicClient,
 };
 
 export const publicClient = clients[mainnet.id];
