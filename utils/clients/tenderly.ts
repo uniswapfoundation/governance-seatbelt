@@ -311,7 +311,6 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
       ...simulationPayload.state_objects[from],
       balance: totalValue.toString(),
     };
-
   }
 
   // Run the simulation
@@ -562,7 +561,6 @@ async function simulateProposed(config: SimulationConfigProposed): Promise<Simul
       ...simulationPayload.state_objects[from],
       balance: totalValue.toString(),
     };
-
   }
 
   // Run the simulation
