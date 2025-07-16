@@ -118,13 +118,13 @@ export function parseOptimismL1L2Messages(
 
       // Read the length of the bytes data (32 bytes)
       const messageLengthHex = data.slice(MESSAGE_LENGTH_OFFSET, MESSAGE_LENGTH_SIZE);
-      
+
       // Check for malformed or extremely large message lengths
       if (messageLengthHex.length !== 64) {
         console.log(`[Optimism Parser] Invalid message length field: ${messageLengthHex}`);
         continue;
       }
-      
+
       const messageLength = Number.parseInt(messageLengthHex, 16);
 
       // Validate message length and available data
