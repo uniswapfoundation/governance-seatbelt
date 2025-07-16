@@ -312,11 +312,9 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
       balance: totalValue.toString(),
     };
 
-    // Also ensure the timelock has enough ETH to execute the proposal
-    simulationPayload.state_objects[timelock.address] = {
-      ...simulationPayload.state_objects[timelock.address],
-      balance: totalValue.toString(),
-    };
+    // Note: We don't artificially inflate the timelock balance here
+    // If the timelock lacks sufficient ETH, this will be caught in the simulation
+    // and should be reported as a funding requirement in the proposal execution
   }
 
   // Run the simulation
@@ -568,11 +566,9 @@ async function simulateProposed(config: SimulationConfigProposed): Promise<Simul
       balance: totalValue.toString(),
     };
 
-    // Also ensure the timelock has enough ETH to execute the proposal
-    simulationPayload.state_objects[timelock.address] = {
-      ...simulationPayload.state_objects[timelock.address],
-      balance: totalValue.toString(),
-    };
+    // Note: We don't artificially inflate the timelock balance here
+    // If the timelock lacks sufficient ETH, this will be caught in the simulation
+    // and should be reported as a funding requirement in the proposal execution
   }
 
   // Run the simulation

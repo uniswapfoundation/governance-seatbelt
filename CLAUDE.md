@@ -68,6 +68,14 @@ Requires `.env` file with:
 4. Runs checks on both chains
 5. Generates combined reports
 
+**Cross-chain Testing:**
+To verify cross-chain functionality is working correctly, run these test simulations:
+- `SIM_NAME=uni-transfer bun start` - Non-cross-chain simulation (should succeed)
+- `SIM_NAME=arb-distro bun start` - Arbitrum cross-chain simulation (should succeed)
+- `SIM_NAME=optimism-bridge-test bun start` - Optimism cross-chain simulation (should succeed)
+
+All three simulations should complete successfully without failures for the system to be considered working correctly.
+
 ## Pull Request Guidelines
 
 **Repository Setup:**
