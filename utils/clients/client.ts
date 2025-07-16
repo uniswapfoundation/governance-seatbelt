@@ -13,7 +13,9 @@ export interface ChainConfig {
 }
 
 if (!process.env.MAINNET_RPC_URL || !process.env.ARBITRUM_RPC_URL) {
-  throw new Error('MAINNET_RPC_URL and ARBITRUM_RPC_URL must be set');
+  throw new Error(
+    'MAINNET_RPC_URL and ARBITRUM_RPC_URL must be set. Optional: OPTIMISM_RPC_URL, BASE_RPC_URL',
+  );
 }
 
 // Optional RPC URLs for Optimism and Base

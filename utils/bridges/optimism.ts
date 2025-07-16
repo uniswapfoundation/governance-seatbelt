@@ -10,14 +10,17 @@ const OPTIMISM_MESSENGERS: Record<string, Address> = {
 };
 
 // Constants for ABI decoding
-const SEND_MESSAGE_SELECTOR = '0x3dbb202b';
-const FUNCTION_SELECTOR_LENGTH = 10; // 4 bytes = 8 hex chars + 0x prefix
-const ADDRESS_OFFSET_START = 24; // Skip padding to get to actual address (12 bytes padding + 20 bytes address)
-const ADDRESS_OFFSET_END = 64; // 32 bytes total for address parameter
-const MESSAGE_LENGTH_OFFSET = 192; // 3 * 32 bytes (target + bytes offset + gas limit) * 2 hex chars
-const MESSAGE_LENGTH_SIZE = 256; // 32 bytes for length field
-const MESSAGE_DATA_OFFSET = 256; // Start of actual message data
-const MIN_SEND_MESSAGE_INPUT_LENGTH = 256; // Minimum expected length for a valid sendMessage call
+const ABI_CONSTANTS = {
+  SEND_MESSAGE_SELECTOR: '0x3dbb202b',
+  FUNCTION_SELECTOR_LENGTH: 10, // 4 bytes = 8 hex chars + 0x prefix
+  ADDRESS_OFFSET_START: 24, // Skip padding to get to actual address (12 bytes padding + 20 bytes address)
+  ADDRESS_OFFSET_END: 64, // 32 bytes total for address parameter
+  MESSAGE_LENGTH_OFFSET: 192, // 3 * 32 bytes (target + bytes offset + gas limit) * 2 hex chars
+  MESSAGE_LENGTH_SIZE: 256, // 32 bytes for length field
+  MESSAGE_DATA_OFFSET: 256, // Start of actual message data
+  MIN_SEND_MESSAGE_INPUT_LENGTH: 256, // Minimum expected length for a valid sendMessage call
+  MAX_MESSAGE_LENGTH: 1000000, // Reasonable upper bound for message size (1MB)
+} as const;
 
 // Get all messenger addresses as lowercase for comparison
 const MESSENGER_ADDRESSES = Object.values(OPTIMISM_MESSENGERS).map((addr) => addr.toLowerCase());
@@ -79,9 +82,9 @@ export function parseOptimismL1L2Messages(
     if (!call || !call.input || !call.from || !call.to) continue;
 
     // Skip empty or invalid calldata - must have at least minimum length for sendMessage
-    if (call.input === '0x' || call.input.length < MIN_SEND_MESSAGE_INPUT_LENGTH) {
+    if (call.input === '0x' || call.input.length < ABI_CONSTANTS.MIN_SEND_MESSAGE_INPUT_LENGTH) {
       console.log(
-        `[Optimism Parser] Skipping call with invalid input length: ${call.input?.length || 0} chars (min: ${MIN_SEND_MESSAGE_INPUT_LENGTH})`,
+        `[Optimism Parser] Skipping call with invalid input length: ${call.input?.length || 0} chars (min: ${ABI_CONSTANTS.MIN_SEND_MESSAGE_INPUT_LENGTH})`,
       );
       continue;
     }
@@ -95,18 +98,18 @@ export function parseOptimismL1L2Messages(
 
     try {
       // Check for sendMessage function selector
-      const selector = call.input.slice(0, FUNCTION_SELECTOR_LENGTH);
-      if (selector !== SEND_MESSAGE_SELECTOR) {
+      const selector = call.input.slice(0, ABI_CONSTANTS.FUNCTION_SELECTOR_LENGTH);
+      if (selector !== ABI_CONSTANTS.SEND_MESSAGE_SELECTOR) {
         console.log(`[Optimism Parser] Skipping non-sendMessage call: ${selector}`);
         continue;
       }
 
       // Decode sendMessage(address _target, bytes _message, uint32 _minGasLimit)
       // Skip function selector (4 bytes)
-      const data = call.input.slice(FUNCTION_SELECTOR_LENGTH);
+      const data = call.input.slice(ABI_CONSTANTS.FUNCTION_SELECTOR_LENGTH);
 
       // Validate we have enough data for basic parameters
-      if (data.length < MESSAGE_DATA_OFFSET) {
+      if (data.length < ABI_CONSTANTS.MESSAGE_DATA_OFFSET) {
         console.log(
           `[Optimism Parser] Insufficient data for sendMessage parameters: ${data.length} chars`,
         );
@@ -114,10 +117,15 @@ export function parseOptimismL1L2Messages(
       }
 
       // Extract target address (32 bytes, but address is in the last 20 bytes)
-      const targetAddress = getAddress(`0x${data.slice(ADDRESS_OFFSET_START, ADDRESS_OFFSET_END)}`);
+      const targetAddress = getAddress(
+        `0x${data.slice(ABI_CONSTANTS.ADDRESS_OFFSET_START, ABI_CONSTANTS.ADDRESS_OFFSET_END)}`,
+      );
 
       // Read the length of the bytes data (32 bytes)
-      const messageLengthHex = data.slice(MESSAGE_LENGTH_OFFSET, MESSAGE_LENGTH_SIZE);
+      const messageLengthHex = data.slice(
+        ABI_CONSTANTS.MESSAGE_LENGTH_OFFSET,
+        ABI_CONSTANTS.MESSAGE_LENGTH_SIZE,
+      );
 
       // Check for malformed or extremely large message lengths
       if (messageLengthHex.length !== 64) {
@@ -128,13 +136,17 @@ export function parseOptimismL1L2Messages(
       const messageLength = Number.parseInt(messageLengthHex, 16);
 
       // Validate message length and available data
-      if (!Number.isFinite(messageLength) || messageLength < 0 || messageLength > 1000000) {
-        // Sanity check: reject obviously invalid lengths
+      if (
+        !Number.isFinite(messageLength) ||
+        messageLength < 0 ||
+        messageLength > ABI_CONSTANTS.MAX_MESSAGE_LENGTH
+      ) {
+        // Sanity check: reject obviously invalid lengths (1MB limit prevents DoS)
         console.log(`[Optimism Parser] Invalid message length: ${messageLength}`);
         continue;
       }
 
-      const expectedDataEnd = MESSAGE_DATA_OFFSET + messageLength * 2;
+      const expectedDataEnd = ABI_CONSTANTS.MESSAGE_DATA_OFFSET + messageLength * 2;
       if (data.length < expectedDataEnd) {
         console.log(
           `[Optimism Parser] Insufficient data for message: expected ${expectedDataEnd}, got ${data.length}`,
@@ -143,7 +155,8 @@ export function parseOptimismL1L2Messages(
       }
 
       // Read the actual message data
-      const messageData = `0x${data.slice(MESSAGE_DATA_OFFSET, expectedDataEnd)}` as Hex;
+      const messageData =
+        `0x${data.slice(ABI_CONSTANTS.MESSAGE_DATA_OFFSET, expectedDataEnd)}` as Hex;
 
       // Extract value from the call
       const l2Value = call.value || '0';
