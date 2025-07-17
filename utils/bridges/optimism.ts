@@ -73,6 +73,11 @@ export function parseOptimismL1L2Messages(
   // Map to store unique messages
   const messagesByTargetAndCalldata = new Map<string, ExtractedCrossChainMessage>();
 
+  // Handle null or undefined transaction info gracefully
+  if (!sourceSim?.transaction?.transaction_info?.call_trace) {
+    return [];
+  }
+  
   // Find all calls to Optimism messengers
   const messengerCalls = findOptimismMessengerCalls(
     sourceSim.transaction.transaction_info.call_trace,
