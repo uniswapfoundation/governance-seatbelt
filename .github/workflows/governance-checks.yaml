@@ -35,16 +35,25 @@ jobs:
           path: |
             cache
             reports
-          key: ${{ runner.os }}-governance-cache-${{ github.run_number }}
+          key: ${{ runner.os }}-governance-cache-${{ hashFiles('package.json', 'bun.lockb', '**/*.ts', '**/*.js', 'checks/**/*', 'utils/**/*', 'presentation/**/*') }}
           restore-keys: |
             ${{ runner.os }}-governance-cache-
 
       - name: Install dependencies
         run: bun install
 
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-slither-v1
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install Slither dependencies
         run: |
           pip3 install solc-select slither-analyzer
+          # Required solc versions for analyzing relevant Uniswap contracts
           solc-select install 0.8.19
           solc-select install 0.8.20
           solc-select use 0.8.20
