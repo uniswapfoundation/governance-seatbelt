@@ -13,7 +13,6 @@ import { createMockSimulation } from './test-utils';
 
 describe('Cross-Chain Error Handling and Recovery Tests', () => {
   describe('Bridge Parsing Error Recovery', () => {
-
     test('should handle corrupted Arbitrum call data gracefully', () => {
       const corruptedSimulation = createMockSimulation([
         {

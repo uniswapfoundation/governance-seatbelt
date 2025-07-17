@@ -61,7 +61,7 @@ export function parseArbitrumL1L2Messages(
   if (!sourceSim?.transaction?.transaction_info?.call_trace) {
     return [];
   }
-  
+
   // Find all calls to the Arbitrum Delayed Inbox
   const inboxCalls = findArbitrumInboxCalls(sourceSim.transaction.transaction_info.call_trace);
 

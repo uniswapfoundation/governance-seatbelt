@@ -1,11 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import type { CallTrace, TenderlySimulation } from '../../types';
+import type { CallTrace } from '../../types';
 import { parseArbitrumL1L2Messages } from '../../utils/bridges/arbitrum';
 import { parseOptimismL1L2Messages } from '../../utils/bridges/optimism';
 import { createRealisticSimulation } from './test-utils';
 
 describe('Cross-Chain Bridge Parsing Integration Tests', () => {
-
   describe('Arbitrum Bridge Parsing - Real World Scenarios', () => {
     test('should parse complex nested Arbitrum calls', () => {
       const complexSimulation = createRealisticSimulation([

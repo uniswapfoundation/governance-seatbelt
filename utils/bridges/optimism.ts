@@ -77,7 +77,7 @@ export function parseOptimismL1L2Messages(
   if (!sourceSim?.transaction?.transaction_info?.call_trace) {
     return [];
   }
-  
+
   // Find all calls to Optimism messengers
   const messengerCalls = findOptimismMessengerCalls(
     sourceSim.transaction.transaction_info.call_trace,

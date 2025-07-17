@@ -330,11 +330,11 @@ describe('Cross-Chain Integration Tests', () => {
         // Validate that checks ran successfully with cross-chain simulations
         expect(results).toBeDefined();
         expect(typeof results).toBe('object');
-        
+
         // Verify that we have check results (the important thing is that checks ran with cross-chain data)
         const checkNames = Object.keys(results);
         expect(checkNames.length).toBeGreaterThan(0);
-        
+
         // Verify that destination simulations were provided to the checks
         expect(crossChainResult.destinationSimulations.length).toBeGreaterThan(0);
       }

@@ -5,7 +5,6 @@ import { parseOptimismL1L2Messages } from '../../utils/bridges/optimism';
 import { createMockSimulation } from './test-utils';
 
 describe('Cross-Chain Unit Integration Tests', () => {
-
   describe('Arbitrum Bridge Integration', () => {
     test('should parse real Arbitrum transaction patterns', () => {
       // Based on actual Arbitrum governance transaction patterns
