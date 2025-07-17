@@ -35,7 +35,7 @@ jobs:
           path: |
             cache
             reports
-          key: ${{ runner.os }}-governance-cache-${{ hashFiles('package.json', 'bun.lockb', '**/*.ts', '**/*.js', 'checks/**/*', 'utils/**/*', 'presentation/**/*') }}
+          key: ${{ runner.os }}-governance-cache-${{ hashFiles('package.json', 'bun.lockb', 'index.ts', 'run-checks.ts', 'types.d.ts', 'checks/**/*', 'utils/**/*', 'presentation/**/*', 'sims/**/*') }}
           restore-keys: |
             ${{ runner.os }}-governance-cache-
 
