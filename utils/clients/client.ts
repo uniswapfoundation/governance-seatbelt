@@ -14,13 +14,16 @@ export interface ChainConfig {
 
 if (!process.env.MAINNET_RPC_URL || !process.env.ARBITRUM_RPC_URL) {
   throw new Error(
-    'MAINNET_RPC_URL and ARBITRUM_RPC_URL must be set. Optional: OPTIMISM_RPC_URL, BASE_RPC_URL',
+    'MAINNET_RPC_URL and ARBITRUM_RPC_URL must be set. Optional: OPTIMISM_RPC_URL, BASE_RPC_URL, or ALCHEMY_API_KEY',
   );
 }
 
-// Optional RPC URLs for Optimism and Base
-const OPTIMISM_RPC_URL = process.env.OPTIMISM_RPC_URL || 'https://mainnet.optimism.io';
-const BASE_RPC_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
+// Optional RPC URLs for Optimism and Base - can be computed from Alchemy API key
+const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
+const OPTIMISM_RPC_URL = process.env.OPTIMISM_RPC_URL || 
+  (ALCHEMY_API_KEY ? `https://opt-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}` : 'https://mainnet.optimism.io');
+const BASE_RPC_URL = process.env.BASE_RPC_URL || 
+  (ALCHEMY_API_KEY ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}` : 'https://mainnet.base.org');
 
 export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   [mainnet.id]: {
