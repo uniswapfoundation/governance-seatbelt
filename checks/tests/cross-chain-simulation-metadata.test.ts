@@ -190,9 +190,12 @@ describe('Cross-Chain Simulation Metadata Tests', () => {
         // Basic validation that the structure is correct
         expect(crossChainResult.destinationSimulations).toBeDefined();
         expect(Array.isArray(crossChainResult.destinationSimulations)).toBe(true);
-        
+
         // If there are destination simulations, deps should be valid
-        if (crossChainResult.destinationSimulations && crossChainResult.destinationSimulations.length > 0) {
+        if (
+          crossChainResult.destinationSimulations &&
+          crossChainResult.destinationSimulations.length > 0
+        ) {
           // Just verify deps is not null/undefined and is an object
           expect(crossChainResult.deps).not.toBeNull();
           expect(typeof crossChainResult.deps).toBe('object');
