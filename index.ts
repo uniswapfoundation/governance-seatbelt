@@ -32,7 +32,7 @@ import { PROPOSAL_STATES } from './utils/contracts/governor-bravo';
 /**
  * @notice Fetch block data for proposal start and end blocks
  */
-async function fetchBlockData(proposal: any, latestBlock: any) {
+async function fetchBlockData(proposal: SimulationResult['proposal'], latestBlock: SimulationResult['latestBlock']) {
   const [startBlock, endBlock] = await Promise.all([
     proposal.startBlock <= (latestBlock.number ?? 0n)
       ? publicClient.getBlock({ blockNumber: proposal.startBlock })
@@ -53,7 +53,7 @@ async function fetchBlockData(proposal: any, latestBlock: any) {
  * @notice Process cross-chain destination simulations and run checks
  */
 async function processDestinationSimulations(
-  proposal: any,
+  proposal: SimulationResult['proposal'],
   deps: ProposalData,
   destinationSimulations: SimulationResult['destinationSimulations'],
 ) {
@@ -90,26 +90,33 @@ async function processSimulation(
   simulationResult: SimulationResult,
   proposalId: string,
   proposalState: string,
+  shouldCache = true,
 ) {
-  const { sim, proposal, latestBlock, proposalCreatedBlock, proposalExecutedBlock, executor } =
+  const { sim, proposal, latestBlock, proposalCreatedBlock, proposalExecutedBlock, executor, deps, destinationSimulations } =
     simulationResult;
 
-  // Run checks
+  // Use deps from simulationResult if available, otherwise use proposalData
+  const finalDeps = deps || proposalData;
+
+  // Run checks for mainnet using runChecksForChain for consistency
   console.log(`  Running checks for proposal ${proposalId}...`);
-  const checkResults: AllCheckResults = Object.fromEntries(
-    await Promise.all(
-      Object.keys(ALL_CHECKS).map(async (checkId) => [
-        checkId,
-        {
-          name: ALL_CHECKS[checkId].name,
-          result: await ALL_CHECKS[checkId].checkProposal(proposal, sim, proposalData),
-        },
-      ]),
-    ),
+  const mainnetResults = await runChecksForChain(
+    proposal,
+    sim,
+    finalDeps,
+    1, // Mainnet chain ID
+    destinationSimulations,
   );
 
   // Fetch block data
   const blocks = await fetchBlockData(proposal, latestBlock);
+
+  // Process destination simulations and run checks
+  const destinationChecks = await processDestinationSimulations(
+    proposal,
+    finalDeps,
+    destinationSimulations,
+  );
 
   // Generate reports
   const dir = `./reports/${config.daoName}/${config.governorAddress}`;
@@ -117,33 +124,38 @@ async function processSimulation(
     governorType,
     blocks,
     proposal,
-    checks: checkResults,
+    checks: mainnetResults,
     outputDir: dir,
     governorAddress: config.governorAddress,
+    destinationSimulations,
+    destinationChecks,
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
   });
 
-  // Cache results
+  // Prepare simulation data
   const simulationData: SimulationData = {
     sim,
     proposal,
     latestBlock,
     config,
-    deps: proposalData,
+    deps: finalDeps,
     proposalCreatedBlock,
     proposalExecutedBlock,
     executor,
   };
 
-  await cacheProposal(
-    config.daoName,
-    config.governorAddress,
-    proposal.id.toString(),
-    proposalState, // ASK: MARCO : THIS WAS HARCODED TO 1
-    simulationData,
-  );
+  // Cache results if requested
+  if (shouldCache) {
+    await cacheProposal(
+      config.daoName,
+      config.governorAddress,
+      proposal.id.toString(),
+      proposalState,
+      simulationData,
+    );
+  }
 
   return simulationData;
 }
@@ -189,46 +201,18 @@ async function main() {
       console.error(`[Index][FAILURE] One or more destination simulations failed for ${SIM_NAME}.`);
     }
 
-    // 3. Run checks (using potentially failed sim data)
-    console.log(`[Index] Running checks for ${SIM_NAME} simulation...`);
-
-    // Run checks for mainnet
-    const mainnetResults = await runChecksForChain(
-      proposal,
-      finalResult.sim,
-      deps,
-      1, // Mainnet chain ID
-      finalResult.destinationSimulations,
-    );
-
-    // 4. Generate reports (reflecting potential failures)
-    console.log(`[Index] Generating reports for ${SIM_NAME}...`);
-
-    // Fetch block data
-    const blocks = await fetchBlockData(proposal, finalResult.latestBlock);
-
-    // Process destination simulations
-    const destinationChecks = await processDestinationSimulations(
-      proposal,
-      deps,
-      finalResult.destinationSimulations,
-    );
-
-    // Generate reports
-    const dir = `./reports/${config.daoName}/${config.governorAddress}`;
-    await generateAndSaveReports({
+    // 3. Process simulation (checks, reports, etc.)
+    console.log(`[Index] Processing ${SIM_NAME} simulation...`);
+    
+    await processSimulation(
+      config,
       governorType,
-      blocks,
-      proposal,
-      checks: mainnetResults,
-      outputDir: dir,
-      governorAddress: config.governorAddress,
-      destinationSimulations: finalResult.destinationSimulations,
-      destinationChecks,
-      executor: finalResult.executor,
-      proposalCreatedBlock: finalResult.proposalCreatedBlock,
-      proposalExecutedBlock: finalResult.proposalExecutedBlock,
-    });
+      deps, // Use deps from finalResult
+      finalResult,
+      proposal.id.toString(),
+      'Custom', // State for custom simulations
+      false, // Don't cache custom simulations
+    );
 
     console.log(`[Index] Reports saved for ${SIM_NAME}.`);
   } else {
@@ -334,12 +318,28 @@ async function main() {
           proposalId: simProposal.id,
         };
 
-        const simulationResult = await simulate(config);
+        // 1. Run source simulation
+        const sourceResult = await simulate(config);
+        
+        // 2. Handle potential cross-chain messages
+        console.log(`  Handling cross-chain messages for proposal ${simProposal.id}...`);
+        const finalResult = await handleCrossChainSimulations(sourceResult);
+        
+        // Check if simulations failed
+        if (!finalResult.sim.transaction.status) {
+          console.error(
+            `  [FAILURE] Source simulation failed for proposal ${simProposal.id}. Proceeding to checks/reporting anyway.`,
+          );
+        }
+        if (finalResult.crossChainFailure) {
+          console.error(`  [FAILURE] One or more destination simulations failed for proposal ${simProposal.id}.`);
+        }
+        
         const simulationData = await processSimulation(
           config,
           governorType,
           proposalData,
-          simulationResult,
+          finalResult,
           simProposal.id.toString(),
           simProposal.state,
         );
