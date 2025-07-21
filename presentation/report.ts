@@ -531,6 +531,9 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
         launch_options: {
           args: process.env.CI ? ['--no-sandbox', '--disable-setuid-sandbox'] : [],
           timeout: 60000, // Increase timeout to 60 seconds
+          ...(process.env.CHROME_EXECUTABLE_PATH && {
+            executablePath: process.env.CHROME_EXECUTABLE_PATH,
+          }),
         },
         pdf_options: {
           timeout: 60000, // Increase timeout to 60 seconds
