@@ -4,7 +4,6 @@
 
 import { existsSync } from 'node:fs';
 import { getAddress } from 'viem';
-import ALL_CHECKS from './checks';
 import { generateAndSaveReports } from './presentation/report';
 import { runChecksForChain } from './run-checks';
 import type {
@@ -32,7 +31,10 @@ import { PROPOSAL_STATES } from './utils/contracts/governor-bravo';
 /**
  * @notice Fetch block data for proposal start and end blocks
  */
-async function fetchBlockData(proposal: SimulationResult['proposal'], latestBlock: SimulationResult['latestBlock']) {
+async function fetchBlockData(
+  proposal: SimulationResult['proposal'],
+  latestBlock: SimulationResult['latestBlock'],
+) {
   const [startBlock, endBlock] = await Promise.all([
     proposal.startBlock <= (latestBlock.number ?? 0n)
       ? publicClient.getBlock({ blockNumber: proposal.startBlock })
@@ -86,17 +88,29 @@ async function processDestinationSimulations(
 async function processSimulation(
   config: SimulationConfig,
   governorType: GovernorType,
-  proposalData: ProposalData,
+  fallbackDeps: ProposalData,
   simulationResult: SimulationResult,
   proposalId: string,
   proposalState: string,
   shouldCache = true,
 ) {
-  const { sim, proposal, latestBlock, proposalCreatedBlock, proposalExecutedBlock, executor, deps, destinationSimulations } =
-    simulationResult;
+  const {
+    sim,
+    proposal,
+    latestBlock,
+    proposalCreatedBlock,
+    proposalExecutedBlock,
+    executor,
+    deps,
+    destinationSimulations,
+  } = simulationResult;
 
-  // Use deps from simulationResult if available, otherwise use proposalData
-  const finalDeps = deps || proposalData;
+  // Use deps from simulationResult if available, otherwise use fallbackDeps
+  const finalDeps = deps || fallbackDeps;
+
+  // Note: deps from simulate() already contains targets and touchedContracts
+  // The fallbackDeps parameter is only used if simulationResult.deps is undefined,
+  // which shouldn't happen in normal operation
 
   // Run checks for mainnet using runChecksForChain for consistency
   console.log(`  Running checks for proposal ${proposalId}...`);
@@ -174,7 +188,10 @@ async function main() {
   if (SIM_NAME) {
     // If a SIM_NAME is provided, we run that simulation
     const configPath = `./sims/${SIM_NAME}.sim.ts`;
-    const config: SimulationConfig = await import(configPath).then((d) => d.config); // dynamic path `import` statements not allowed
+    if (!existsSync(configPath)) {
+      throw new Error(`Simulation config file not found for '${SIM_NAME}' at path: ${configPath}`);
+    }
+    const config: SimulationConfig = await import(configPath).then((d) => d.config);
 
     governorType = await inferGovernorType(config.governorAddress);
 
@@ -203,7 +220,7 @@ async function main() {
 
     // 3. Process simulation (checks, reports, etc.)
     console.log(`[Index] Processing ${SIM_NAME} simulation...`);
-    
+
     await processSimulation(
       config,
       governorType,
@@ -320,11 +337,11 @@ async function main() {
 
         // 1. Run source simulation
         const sourceResult = await simulate(config);
-        
+
         // 2. Handle potential cross-chain messages
         console.log(`  Handling cross-chain messages for proposal ${simProposal.id}...`);
         const finalResult = await handleCrossChainSimulations(sourceResult);
-        
+
         // Check if simulations failed
         if (!finalResult.sim.transaction.status) {
           console.error(
@@ -332,9 +349,11 @@ async function main() {
           );
         }
         if (finalResult.crossChainFailure) {
-          console.error(`  [FAILURE] One or more destination simulations failed for proposal ${simProposal.id}.`);
+          console.error(
+            `  [FAILURE] One or more destination simulations failed for proposal ${simProposal.id}.`,
+          );
         }
-        
+
         const simulationData = await processSimulation(
           config,
           governorType,
