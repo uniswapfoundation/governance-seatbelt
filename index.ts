@@ -14,6 +14,7 @@ import type {
   SimulationConfig,
   SimulationConfigBase,
   SimulationData,
+  SimulationResult,
 } from './types';
 import { cacheProposal, getCachedProposal, needsSimulation } from './utils/cache/proposalCache';
 import { getChainConfig, publicClient } from './utils/clients/client';
@@ -27,6 +28,125 @@ import {
   inferGovernorType,
 } from './utils/contracts/governor';
 import { PROPOSAL_STATES } from './utils/contracts/governor-bravo';
+
+/**
+ * @notice Fetch block data for proposal start and end blocks
+ */
+async function fetchBlockData(proposal: any, latestBlock: any) {
+  const [startBlock, endBlock] = await Promise.all([
+    proposal.startBlock <= (latestBlock.number ?? 0n)
+      ? publicClient.getBlock({ blockNumber: proposal.startBlock })
+      : null,
+    proposal.endBlock <= (latestBlock.number ?? 0n)
+      ? publicClient.getBlock({ blockNumber: proposal.endBlock })
+      : null,
+  ]);
+
+  return {
+    current: latestBlock,
+    start: startBlock,
+    end: endBlock,
+  };
+}
+
+/**
+ * @notice Process cross-chain destination simulations and run checks
+ */
+async function processDestinationSimulations(
+  proposal: any,
+  deps: ProposalData,
+  destinationSimulations: SimulationResult['destinationSimulations'],
+) {
+  const destinationChecks: Record<number, AllCheckResults> = {};
+
+  if (destinationSimulations) {
+    for (const destSim of destinationSimulations) {
+      if (destSim.sim) {
+        const l2Deps = {
+          ...deps,
+          chainConfig: getChainConfig(destSim.chainId),
+        };
+        destinationChecks[destSim.chainId] = await runChecksForChain(
+          proposal,
+          destSim.sim,
+          l2Deps,
+          destSim.chainId,
+          destinationSimulations,
+        );
+      }
+    }
+  }
+
+  return destinationChecks;
+}
+
+/**
+ * @notice Process a single simulation with checks and reporting
+ */
+async function processSimulation(
+  config: SimulationConfig,
+  governorType: GovernorType,
+  proposalData: ProposalData,
+  simulationResult: SimulationResult,
+  proposalId: string,
+  proposalState: string,
+) {
+  const { sim, proposal, latestBlock, proposalCreatedBlock, proposalExecutedBlock, executor } =
+    simulationResult;
+
+  // Run checks
+  console.log(`  Running checks for proposal ${proposalId}...`);
+  const checkResults: AllCheckResults = Object.fromEntries(
+    await Promise.all(
+      Object.keys(ALL_CHECKS).map(async (checkId) => [
+        checkId,
+        {
+          name: ALL_CHECKS[checkId].name,
+          result: await ALL_CHECKS[checkId].checkProposal(proposal, sim, proposalData),
+        },
+      ]),
+    ),
+  );
+
+  // Fetch block data
+  const blocks = await fetchBlockData(proposal, latestBlock);
+
+  // Generate reports
+  const dir = `./reports/${config.daoName}/${config.governorAddress}`;
+  await generateAndSaveReports({
+    governorType,
+    blocks,
+    proposal,
+    checks: checkResults,
+    outputDir: dir,
+    governorAddress: config.governorAddress,
+    executor,
+    proposalCreatedBlock,
+    proposalExecutedBlock,
+  });
+
+  // Cache results
+  const simulationData: SimulationData = {
+    sim,
+    proposal,
+    latestBlock,
+    config,
+    deps: proposalData,
+    proposalCreatedBlock,
+    proposalExecutedBlock,
+    executor,
+  };
+
+  await cacheProposal(
+    config.daoName,
+    config.governorAddress,
+    proposal.id.toString(),
+    proposalState, // ASK: MARCO : THIS WAS HARCODED TO 1
+    simulationData,
+  );
+
+  return simulationData;
+}
 
 /**
  * @notice Simulate governance proposals and run proposal checks against them
@@ -83,42 +203,19 @@ async function main() {
 
     // 4. Generate reports (reflecting potential failures)
     console.log(`[Index] Generating reports for ${SIM_NAME}...`);
-    // Fetch full block data for start and end blocks
-    const [startBlock, endBlock] = await Promise.all([
-      proposal.startBlock <= (finalResult.latestBlock.number ?? 0n)
-        ? publicClient.getBlock({ blockNumber: proposal.startBlock })
-        : null,
-      proposal.endBlock <= (finalResult.latestBlock.number ?? 0n)
-        ? publicClient.getBlock({ blockNumber: proposal.endBlock })
-        : null,
-    ]);
-    const blocks = {
-      current: finalResult.latestBlock,
-      start: startBlock,
-      end: endBlock,
-    };
+
+    // Fetch block data
+    const blocks = await fetchBlockData(proposal, finalResult.latestBlock);
+
+    // Process destination simulations
+    const destinationChecks = await processDestinationSimulations(
+      proposal,
+      deps,
+      finalResult.destinationSimulations,
+    );
+
+    // Generate reports
     const dir = `./reports/${config.daoName}/${config.governorAddress}`;
-
-    // Run checks for each L2 chain and collect destination checks
-    const destinationChecks: Record<number, AllCheckResults> = {};
-    if (finalResult.destinationSimulations) {
-      for (const destSim of finalResult.destinationSimulations) {
-        if (destSim.sim) {
-          const l2Deps = {
-            ...deps,
-            chainConfig: getChainConfig(destSim.chainId),
-          };
-          destinationChecks[destSim.chainId] = await runChecksForChain(
-            proposal,
-            destSim.sim,
-            l2Deps,
-            destSim.chainId,
-            finalResult.destinationSimulations,
-          );
-        }
-      }
-    }
-
     await generateAndSaveReports({
       governorType,
       blocks,
@@ -132,11 +229,13 @@ async function main() {
       proposalCreatedBlock: finalResult.proposalCreatedBlock,
       proposalExecutedBlock: finalResult.proposalExecutedBlock,
     });
+
     console.log(`[Index] Reports saved for ${SIM_NAME}.`);
   } else {
     // If no SIM_NAME is provided, we get proposals to simulate from the chain
     if (!GOVERNOR_ADDRESS) throw new Error('Must provide a GOVERNOR_ADDRESS');
     if (!DAO_NAME) throw new Error('Must provide a DAO_NAME');
+
     const latestBlock = await publicClient.getBlock();
     if (!latestBlock.number) throw new Error('Failed to get latest block number');
 
@@ -161,24 +260,23 @@ async function main() {
 
     // If we aren't simulating all proposals, filter down to just the active ones. For now we
     // assume we're simulating all by default
-    const proposalsToSimulate = simProposals.filter((simProposal) =>
-      needsSimulation({
+    const proposalsToSimulate: typeof simProposals = [];
+    const cachedProposals: typeof simProposals = [];
+
+    for (const simProposal of simProposals) {
+      const needsSim = needsSimulation({
         daoName: DAO_NAME!,
         governorAddress: GOVERNOR_ADDRESS!,
         proposalId: simProposal.id.toString(),
         currentState: simProposal.state,
-      }),
-    );
+      });
 
-    const cachedProposals = simProposals.filter(
-      (simProposal) =>
-        !needsSimulation({
-          daoName: DAO_NAME!,
-          governorAddress: GOVERNOR_ADDRESS!,
-          proposalId: simProposal.id.toString(),
-          currentState: simProposal.state,
-        }),
-    );
+      if (needsSim) {
+        proposalsToSimulate.push(simProposal);
+      } else {
+        cachedProposals.push(simProposal);
+      }
+    }
 
     // Load cached proposals
     for (const cachedProposal of cachedProposals) {
@@ -236,83 +334,17 @@ async function main() {
           proposalId: simProposal.id,
         };
 
-        const {
-          sim,
-          proposal,
-          latestBlock,
-          proposalCreatedBlock,
-          proposalExecutedBlock,
-          executor,
-        } = await simulate(config);
-        const simulationData: SimulationData & { checkResults?: AllCheckResults } = {
-          sim,
-          proposal,
-          latestBlock,
+        const simulationResult = await simulate(config);
+        const simulationData = await processSimulation(
           config,
-          deps: proposalData,
-          proposalCreatedBlock,
-          proposalExecutedBlock,
-          executor,
-        };
-
-        // Run checks immediately after simulation
-        console.log(`  Running checks for proposal ${simProposal.id}...`);
-        const checkResults: AllCheckResults = Object.fromEntries(
-          await Promise.all(
-            Object.keys(ALL_CHECKS).map(async (checkId) => [
-              checkId,
-              {
-                name: ALL_CHECKS[checkId].name,
-                result: await ALL_CHECKS[checkId].checkProposal(proposal, sim, proposalData),
-              },
-            ]),
-          ),
-        );
-
-        // Fetch full block data for start and end blocks
-        const [startBlock, endBlock] = await Promise.all([
-          proposal.startBlock <= (latestBlock.number ?? 0n)
-            ? publicClient.getBlock({ blockNumber: proposal.startBlock })
-            : null,
-          proposal.endBlock <= (latestBlock.number ?? 0n)
-            ? publicClient.getBlock({ blockNumber: proposal.endBlock })
-            : null,
-        ]);
-
-        // Construct the blocks object
-        const blocks = {
-          current: latestBlock,
-          start: startBlock,
-          end: endBlock,
-        };
-
-        // Generate reports immediately
-        const dir = `./reports/${config.daoName}/${config.governorAddress}`;
-        await generateAndSaveReports({
           governorType,
-          blocks,
-          proposal,
-          checks: checkResults,
-          outputDir: dir,
-          governorAddress: config.governorAddress,
-          executor: simulationData.executor,
-          proposalCreatedBlock: simulationData.proposalCreatedBlock,
-          proposalExecutedBlock: simulationData.proposalExecutedBlock,
-        });
-
-        // Cache everything together
-        simulationData.checkResults = checkResults;
-        simOutputs.push(simulationData);
-
-        // Cache the simulation results with check results included
-        await cacheProposal(
-          config.daoName,
-          config.governorAddress,
-          proposal.id.toString(),
-          '1', // State 1 is "Active" for both Bravo and OZ governors
-          simulationData,
+          proposalData,
+          simulationResult,
+          simProposal.id.toString(),
+          simProposal.state,
         );
 
+        simOutputs.push(simulationData);
         console.log('    done');
       }
     } else {
