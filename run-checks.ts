@@ -16,7 +16,12 @@ import type {
 import { getChainConfig, getClientForChain, publicClient } from './utils/clients/client';
 import { handleCrossChainSimulations, simulate } from './utils/clients/tenderly';
 import { DAO_NAME, GOVERNOR_ADDRESS } from './utils/constants';
-import { getGovernor, getTimelock, inferGovernorType } from './utils/contracts/governor';
+import {
+  getGovernor,
+  getProposalIds,
+  getTimelock,
+  inferGovernorType,
+} from './utils/contracts/governor';
 import { PROPOSAL_STATES } from './utils/contracts/governor-bravo';
 
 /**
@@ -139,11 +144,30 @@ async function main() {
   if (!GOVERNOR_ADDRESS) throw new Error('Must provide a GOVERNOR_ADDRESS');
   if (!DAO_NAME) throw new Error('Must provide a DAO_NAME');
 
-  // Set the proposal ID to check
-  const proposalId = process.argv[2] ? BigInt(process.argv[2]) : BigInt(81); // Default to 81 if no argument provided
-
   // Get governor type and contract
   const governorType = await inferGovernorType(GOVERNOR_ADDRESS);
+
+  // Set the proposal ID to check - default to latest proposal if no argument provided
+  let proposalId: bigint;
+  if (process.argv[2]) {
+    // If a proposal ID is provided, use it
+    proposalId = BigInt(process.argv[2]);
+  } else {
+    // Get the latest proposal ID
+    const latestBlock = await publicClient.getBlock();
+    if (!latestBlock.number) throw new Error('Failed to get latest block number');
+
+    const proposalIds = await getProposalIds(governorType, GOVERNOR_ADDRESS, latestBlock.number);
+    if (proposalIds.length === 0) {
+      throw new Error('No proposals found for this governor');
+    }
+
+    // Get the latest proposal ID (highest number)
+    proposalId = proposalIds.reduce((latest: bigint, current: bigint) =>
+      current > latest ? current : latest,
+    );
+    console.log(`No proposal ID provided, defaulting to latest proposal: ${proposalId}`);
+  }
   const governor = getGovernor(governorType, GOVERNOR_ADDRESS);
 
   // Get proposal state to determine simulation type
