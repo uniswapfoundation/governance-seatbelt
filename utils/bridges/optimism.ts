@@ -6,6 +6,7 @@ import type { ExtractedCrossChainMessage } from '../../types.d';
 const OPTIMISM_MESSENGERS: Record<string, Address> = {
   '10': '0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1', // OP Mainnet
   '8453': '0x866E82a600A1414e583f7F13623F1aC5d58b0Afa', // Base
+  '130': '0x9A3D64E386C18Cb1d6d5179a9596A4B5736e98A6', // Unichain
 };
 
 // Constants for ABI decoding

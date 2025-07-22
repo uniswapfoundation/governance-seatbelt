@@ -1,7 +1,6 @@
 import { http, createPublicClient } from 'viem';
 import type { PublicClient } from 'viem';
-import { arbitrum, base, mainnet, optimism } from 'viem/chains';
-
+import { arbitrum, base, mainnet, optimism, unichain } from 'viem/chains';
 export interface ChainConfig {
   chainId: number;
   blockExplorer: {
@@ -30,12 +29,17 @@ const BASE_RPC_URL =
   (ALCHEMY_API_KEY
     ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
     : 'https://mainnet.base.org');
+const UNICHAIN_RPC_URL =
+  process.env.UNICHAIN_RPC_URL ||
+  (ALCHEMY_API_KEY
+    ? `https://unichain-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
+    : 'https://mainnet.unichain.org');
 
 export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   [mainnet.id]: {
     chainId: mainnet.id,
     blockExplorer: {
-      baseUrl: mainnet.blockExplorers?.default.url,
+      baseUrl: mainnet.blockExplorers?.default.url || 'https://etherscan.io',
       apiUrl: 'https://api.etherscan.io/v2/api', // Using v2 unified API
       apiKey: process.env.ETHERSCAN_API_KEY,
     },
@@ -44,7 +48,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   [arbitrum.id]: {
     chainId: arbitrum.id,
     blockExplorer: {
-      baseUrl: arbitrum.blockExplorers?.default.url,
+      baseUrl: arbitrum.blockExplorers?.default.url || 'https://arbiscan.io',
       apiUrl: 'https://api.etherscan.io/v2/api', // Using v2 unified API
       apiKey: process.env.ETHERSCAN_API_KEY, // Single API key for all chains
     },
@@ -53,7 +57,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   [optimism.id]: {
     chainId: optimism.id,
     blockExplorer: {
-      baseUrl: optimism.blockExplorers?.default.url,
+      baseUrl: optimism.blockExplorers?.default.url || 'https://optimistic.etherscan.io',
       apiUrl: 'https://api.etherscan.io/v2/api', // Using v2 unified API
       apiKey: process.env.ETHERSCAN_API_KEY, // Single API key for all chains
     },
@@ -62,11 +66,20 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   [base.id]: {
     chainId: base.id,
     blockExplorer: {
-      baseUrl: base.blockExplorers?.default.url,
+      baseUrl: base.blockExplorers?.default.url || 'https://basescan.org',
       apiUrl: 'https://api.etherscan.io/v2/api', // Using v2 unified API
       apiKey: process.env.ETHERSCAN_API_KEY, // Single API key for all chains
     },
     rpcUrl: BASE_RPC_URL,
+  },
+  [unichain.id]: {
+    chainId: unichain.id,
+    blockExplorer: {
+      baseUrl: unichain.blockExplorers?.default.url || 'https://uniscan.xyz',
+      apiUrl: 'https://api.etherscan.io/v2/api', // Using v2 unified API
+      apiKey: process.env.ETHERSCAN_API_KEY, // Single API key for all chains
+    },
+    rpcUrl: UNICHAIN_RPC_URL,
   },
 };
 
@@ -95,6 +108,10 @@ const clients: Record<number, PublicClient> = {
   [base.id]: createPublicClient({
     chain: base,
     transport: http(CHAIN_CONFIGS[base.id].rpcUrl),
+  }) as PublicClient,
+  [unichain.id]: createPublicClient({
+    chain: unichain,
+    transport: http(CHAIN_CONFIGS[unichain.id].rpcUrl),
   }) as PublicClient,
 };
 
