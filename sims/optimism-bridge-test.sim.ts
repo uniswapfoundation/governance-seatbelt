@@ -61,5 +61,5 @@ This proposal tests the Optimism bridge integration by sending messages to both 
 1. Send message to ${L2_RECIPIENT_OP} on OP Mainnet
 2. Send message to ${L2_RECIPIENT_BASE} on Base
 
-Both messages use a gas limit of 200,000.`,
+Both messages use a gas limit of 1,000,000.`,
 };

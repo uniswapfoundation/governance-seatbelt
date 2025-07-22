@@ -126,8 +126,8 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
   // Set `from` arbitrarily.
   const from = DEFAULT_FROM;
 
-  // Run simulation at a recent block to avoid OptimismPortal2 block number conflicts
-  // Use latest block instead of proposal.endBlock + 1 to prevent arithmetic underflow
+  // Run simulation at a recent block rather than using artificial proposal.endBlock
+  // This ensures we use current contract state and avoid potential cross-chain conflicts
   const simBlock = latestBlock.number;
 
   // For OZ governors we arbitrarily choose execution time. For Bravo governors, we
