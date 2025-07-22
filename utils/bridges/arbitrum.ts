@@ -57,6 +57,11 @@ export function parseArbitrumL1L2Messages(
   // Map to store messages by target address and calldata hash
   const messagesByTargetAndCalldata = new Map<string, ExtractedCrossChainMessage>();
 
+  // Handle null or undefined transaction info gracefully
+  if (!sourceSim?.transaction?.transaction_info?.call_trace) {
+    return [];
+  }
+
   // Find all calls to the Arbitrum Delayed Inbox
   const inboxCalls = findArbitrumInboxCalls(sourceSim.transaction.transaction_info.call_trace);
 
