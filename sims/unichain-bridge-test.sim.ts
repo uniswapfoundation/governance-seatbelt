@@ -37,25 +37,21 @@ const wethAmount = 100000000000000000n; // 0.1 WETH
 // multisend(bytes[] calldata transactions)
 const multisendCalldata = encodeAbiParameters(
   [{ type: 'bytes[]' }],
-  [[
-    // Transaction 1: transfer WETH to recipient1
-    encodeAbiParameters(
-      [{ type: 'address' }, { type: 'uint256' }],
-      [recipient1, wethAmount]
-    ),
-    // Transaction 2: transfer WETH to recipient2  
-    encodeAbiParameters(
-      [{ type: 'address' }, { type: 'uint256' }],
-      [recipient2, wethAmount]
-    )
-  ]]
+  [
+    [
+      // Transaction 1: transfer WETH to recipient1
+      encodeAbiParameters([{ type: 'address' }, { type: 'uint256' }], [recipient1, wethAmount]),
+      // Transaction 2: transfer WETH to recipient2
+      encodeAbiParameters([{ type: 'address' }, { type: 'uint256' }], [recipient2, wethAmount]),
+    ],
+  ],
 );
 
 // Encode WETH approval for Uniswap V2 Router
 // approve(address spender, uint256 amount)
 const wethApprovalCalldata = encodeAbiParameters(
   [{ type: 'address' }, { type: 'uint256' }],
-  [UNISWAP_V2_ROUTER_UNICHAIN, 1000000000000000000n] // Approve 1 WETH
+  [UNISWAP_V2_ROUTER_UNICHAIN, 1000000000000000000n], // Approve 1 WETH
 );
 
 // Encode swapExactTokensForTokens for WETH to USDC swap
@@ -66,15 +62,15 @@ const swapCalldata = encodeAbiParameters(
     { type: 'uint256' }, // amountOutMin
     { type: 'address[]' }, // path
     { type: 'address' }, // to
-    { type: 'uint256' } // deadline
+    { type: 'uint256' }, // deadline
   ],
   [
     50000000000000000n, // 0.05 WETH
     0n, // amountOutMin (0 for testing)
     [L2_RECIPIENT_UNICHAIN, USDC_UNICHAIN], // WETH -> USDC path
     '0x1a9C8182C09F50C8318d769245beA52c32BE35BC', // recipient (timelock)
-    1753298783n // deadline
-  ]
+    1753298783n, // deadline
+  ],
 );
 
 // Call 1: Send cross-chain message to Unichain (WETH deposit)

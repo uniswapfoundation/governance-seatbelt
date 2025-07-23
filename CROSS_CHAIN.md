@@ -9,6 +9,7 @@ The governance-seatbelt supports cross-chain proposal simulation for:
 - **Optimism Stack** (L1→L2 via L1CrossDomainMessenger `sendMessage`)
   - OP Mainnet (Chain ID: 10)
   - Base (Chain ID: 8453)
+  - Unichiain (Chain ID: 130)
 
 ## Architecture
 

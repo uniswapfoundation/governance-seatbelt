@@ -1,5 +1,5 @@
 import { http, createPublicClient } from 'viem';
-import type { Chain, PublicClient } from 'viem';
+import type { PublicClient } from 'viem';
 import { arbitrum, base, mainnet, optimism, unichain } from 'viem/chains';
 export interface ChainConfig {
   chainId: number;
