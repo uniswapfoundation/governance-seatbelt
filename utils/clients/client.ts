@@ -1,31 +1,6 @@
 import { http, createPublicClient } from 'viem';
 import type { Chain, PublicClient } from 'viem';
-import { arbitrum, base, mainnet, optimism } from 'viem/chains';
-
-// Define Unichain as it's not yet in viem/chains
-const unichain: Chain = {
-  id: 130,
-  name: 'Unichain',
-  nativeCurrency: {
-    decimals: 18,
-    name: 'Ether',
-    symbol: 'ETH',
-  },
-  rpcUrls: {
-    default: { http: ['https://mainnet.unichain.org'] },
-    public: { http: ['https://mainnet.unichain.org'] },
-  },
-  blockExplorers: {
-    default: { name: 'Uniscan', url: 'https://uniscan.xyz' },
-  },
-  contracts: {
-    multicall3: {
-      address: '0xcA11bde05977b3631167028862bE2a173976CA11',
-      blockCreated: 0,
-    },
-  },
-};
-
+import { arbitrum, base, mainnet, optimism, unichain } from 'viem/chains';
 export interface ChainConfig {
   chainId: number;
   blockExplorer: {
