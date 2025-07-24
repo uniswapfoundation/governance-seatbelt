@@ -11,6 +11,7 @@ import {
   zeroHash,
 } from 'viem';
 import type {
+  GovernorType,
   ProposalData,
   ProposalEvent,
   SimulationConfig,
@@ -63,6 +64,21 @@ type StateOverridesPayload = {
   networkID: string;
   stateOverrides: Record<string, { value: Record<string, string> }>;
 };
+
+interface GovernorOverrideParams {
+  governorType: GovernorType;
+  proposalId: bigint;
+  votingTokenSupply: bigint;
+  eta: bigint;
+  simBlock: bigint;
+  // For new proposals only
+  targets?: readonly `0x${string}`[];
+  values?: readonly bigint[];
+  signatures?: readonly `0x${string}`[];
+  calldatas?: readonly `0x${string}`[];
+  description?: string;
+  proposal?: ProposalEvent;
+}
 
 // --- Simulation methods ---
 
@@ -164,53 +180,19 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
   }
 
   // Use the Tenderly API to get the encoded state overrides for governor storage
-  let governorStateOverrides: Record<string, string> = {};
-  if (governorType === 'bravo') {
-    const proposalKey = `proposals[${proposalId.toString()}]`;
-    governorStateOverrides = {
-      proposalCount: proposalId.toString(),
-      [`${proposalKey}.id`]: proposalId.toString(),
-      [`${proposalKey}.proposer`]: DEFAULT_FROM,
-      [`${proposalKey}.eta`]: eta.toString(),
-      [`${proposalKey}.startBlock`]: proposal.startBlock.toString(),
-      [`${proposalKey}.endBlock`]: proposal.endBlock.toString(),
-      [`${proposalKey}.canceled`]: 'false',
-      [`${proposalKey}.executed`]: 'false',
-      [`${proposalKey}.forVotes`]: votingTokenSupply.toString(),
-      [`${proposalKey}.againstVotes`]: '0',
-      [`${proposalKey}.abstainVotes`]: '0',
-      [`${proposalKey}.targets.length`]: targets.length.toString(),
-      [`${proposalKey}.values.length`]: targets.length.toString(),
-      [`${proposalKey}.signatures.length`]: targets.length.toString(),
-      [`${proposalKey}.calldatas.length`]: targets.length.toString(),
-    };
-
-    targets.forEach((target, i) => {
-      const value = BigInt(values[i]).toString();
-      governorStateOverrides[`${proposalKey}.targets[${i}]`] = target;
-      governorStateOverrides[`${proposalKey}.values[${i}]`] = value;
-      governorStateOverrides[`${proposalKey}.signatures[${i}]`] = signatures[i];
-      governorStateOverrides[`${proposalKey}.calldatas[${i}]`] = calldatas[i];
-    });
-  } else if (governorType === 'oz') {
-    const proposalCoreKey = `_proposals[${proposalId.toString()}]`;
-    const proposalVotesKey = `_proposalVotes[${proposalId.toString()}]`;
-    governorStateOverrides = {
-      [`${proposalCoreKey}.voteEnd._deadline`]: (simBlock - 1n).toString(),
-      [`${proposalCoreKey}.canceled`]: 'false',
-      [`${proposalCoreKey}.executed`]: 'false',
-      [`${proposalVotesKey}.forVotes`]: votingTokenSupply.toString(),
-      [`${proposalVotesKey}.againstVotes`]: '0',
-      [`${proposalVotesKey}.abstainVotes`]: '0',
-    };
-
-    targets.forEach((target, i) => {
-      const id = hashOperationOz(target, values[i], calldatas[i], zeroHash, zeroHash);
-      governorStateOverrides[`_timestamps[${id}]`] = '2'; // must be > 1.
-    });
-  } else {
-    throw new Error(`Cannot generate overrides for unknown governor type: ${governorType}`);
-  }
+  const governorStateOverrides = buildGovernorStateOverrides({
+    governorType,
+    proposalId,
+    votingTokenSupply,
+    eta,
+    simBlock,
+    targets,
+    values,
+    signatures,
+    calldatas,
+    description,
+    proposal,
+  });
 
   const stateOverrides: StateOverridesPayload = {
     networkID: '1',
@@ -410,32 +392,14 @@ async function simulateProposed(config: SimulationConfigProposed): Promise<Simul
     timelockStorageObj[`_timestamps[${toHex(id)}]`] = simTimestamp.toString();
   }
 
-  let governorStateOverrides: Record<string, string> = {};
-  if (governorType === 'bravo') {
-    const proposalKey = `proposals[${proposalId.toString()}]`;
-    governorStateOverrides = {
-      proposalCount: proposalId.toString(),
-      [`${proposalKey}.eta`]: eta.toString(),
-      [`${proposalKey}.canceled`]: 'false',
-      [`${proposalKey}.executed`]: 'false',
-      [`${proposalKey}.forVotes`]: votingTokenSupply.toString(),
-      [`${proposalKey}.againstVotes`]: '0',
-      [`${proposalKey}.abstainVotes`]: '0',
-    };
-  } else if (governorType === 'oz') {
-    const proposalCoreKey = `_proposals[${proposalId.toString()}]`;
-    const proposalVotesKey = `_proposalVotes[${proposalId.toString()}]`;
-    governorStateOverrides = {
-      [`${proposalCoreKey}.voteEnd._deadline`]: (simBlock - 1n).toString(),
-      [`${proposalCoreKey}.canceled`]: 'false',
-      [`${proposalCoreKey}.executed`]: 'false',
-      [`${proposalVotesKey}.forVotes`]: votingTokenSupply.toString(),
-      [`${proposalVotesKey}.againstVotes`]: '0',
-      [`${proposalVotesKey}.abstainVotes`]: '0',
-    };
-  } else {
-    throw new Error(`Cannot generate overrides for unknown governor type: ${governorType}`);
-  }
+  const governorStateOverrides = buildGovernorStateOverrides({
+    governorType,
+    proposalId,
+    votingTokenSupply,
+    eta,
+    simBlock,
+    // No targets/values/signatures/calldatas for existing proposals
+  });
 
   const stateOverrides: StateOverridesPayload = {
     networkID: '1',
@@ -795,6 +759,86 @@ function handleETHValueRequirements(
       balance: totalValue.toString(),
     };
   }
+}
+
+/**
+ * @notice Builds governor state overrides for simulation
+ * @param params Configuration parameters for governor overrides
+ */
+function buildGovernorStateOverrides(params: GovernorOverrideParams): Record<string, string> {
+  const {
+    governorType,
+    proposalId,
+    votingTokenSupply,
+    eta,
+    simBlock,
+    targets,
+    values,
+    signatures,
+    calldatas,
+    description,
+    proposal,
+  } = params;
+
+  if (governorType === 'bravo') {
+    const proposalKey = `proposals[${proposalId.toString()}]`;
+    const overrides: Record<string, string> = {
+      proposalCount: proposalId.toString(),
+      [`${proposalKey}.eta`]: eta.toString(),
+      [`${proposalKey}.canceled`]: 'false',
+      [`${proposalKey}.executed`]: 'false',
+      [`${proposalKey}.forVotes`]: votingTokenSupply.toString(),
+      [`${proposalKey}.againstVotes`]: '0',
+      [`${proposalKey}.abstainVotes`]: '0',
+    };
+
+    // Add full proposal data for new proposals
+    if (targets && values && signatures && calldatas && proposal) {
+      overrides[`${proposalKey}.id`] = proposalId.toString();
+      overrides[`${proposalKey}.proposer`] = DEFAULT_FROM;
+      overrides[`${proposalKey}.startBlock`] = proposal.startBlock.toString();
+      overrides[`${proposalKey}.endBlock`] = proposal.endBlock.toString();
+      overrides[`${proposalKey}.targets.length`] = targets.length.toString();
+      overrides[`${proposalKey}.values.length`] = targets.length.toString();
+      overrides[`${proposalKey}.signatures.length`] = targets.length.toString();
+      overrides[`${proposalKey}.calldatas.length`] = targets.length.toString();
+
+      targets.forEach((target, i) => {
+        const value = BigInt(values[i]).toString();
+        overrides[`${proposalKey}.targets[${i}]`] = target;
+        overrides[`${proposalKey}.values[${i}]`] = value;
+        overrides[`${proposalKey}.signatures[${i}]`] = signatures[i];
+        overrides[`${proposalKey}.calldatas[${i}]`] = calldatas[i];
+      });
+    }
+
+    return overrides;
+  }
+
+  if (governorType === 'oz') {
+    const proposalCoreKey = `_proposals[${proposalId.toString()}]`;
+    const proposalVotesKey = `_proposalVotes[${proposalId.toString()}]`;
+    const overrides: Record<string, string> = {
+      [`${proposalCoreKey}.voteEnd._deadline`]: (simBlock - 1n).toString(),
+      [`${proposalCoreKey}.canceled`]: 'false',
+      [`${proposalCoreKey}.executed`]: 'false',
+      [`${proposalVotesKey}.forVotes`]: votingTokenSupply.toString(),
+      [`${proposalVotesKey}.againstVotes`]: '0',
+      [`${proposalVotesKey}.abstainVotes`]: '0',
+    };
+
+    // Add operation hashes for new proposals
+    if (targets && values && calldatas && description) {
+      targets.forEach((target, i) => {
+        const id = hashOperationOz(target, values[i], calldatas[i], zeroHash, zeroHash);
+        overrides[`_timestamps[${id}]`] = '2'; // must be > 1.
+      });
+    }
+
+    return overrides;
+  }
+
+  throw new Error(`Cannot generate overrides for unknown governor type: ${governorType}`);
 }
 
 // Sleep for the specified number of milliseconds
