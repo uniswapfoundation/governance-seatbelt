@@ -14,6 +14,7 @@ import type {
   GovernorType,
   ProposalData,
   ProposalEvent,
+  SimulationBlock,
   SimulationConfig,
   SimulationConfigExecuted,
   SimulationConfigNew,
@@ -78,6 +79,21 @@ interface GovernorOverrideParams {
   calldatas?: readonly `0x${string}`[];
   description?: string;
   proposal?: ProposalEvent;
+}
+
+interface SimulationPayloadParams {
+  governorType: GovernorType;
+  // biome-ignore lint/suspicious/noExplicitAny: Complex contract types that vary by governor type
+  governor: any; // Governor contract
+  // biome-ignore lint/suspicious/noExplicitAny: Complex contract types that vary by governor type
+  timelock: any; // Timelock contract
+  from: Address;
+  latestBlock: SimulationBlock;
+  simBlock: bigint;
+  simTimestamp: bigint;
+  storageObj: StorageEncodingResponse;
+  executeInputs: unknown[];
+  saveIfFails?: boolean;
 }
 
 // --- Simulation methods ---
@@ -222,47 +238,20 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
   //   - queuedTransactions[txHash] = true for each action in the proposal
   const descriptionHash = keccak256(toBytes(description));
   const executeInputs =
-    governorType === 'bravo'
-      ? ([proposalId] as const)
-      : ([targets, values, calldatas, descriptionHash] as const);
+    governorType === 'bravo' ? [proposalId] : [targets, values, calldatas, descriptionHash];
 
-  const input = encodeFunctionData({
-    abi: governor.abi,
-    functionName: 'execute',
-    args: executeInputs,
+  const simulationPayload = buildSimulationPayload({
+    governorType,
+    governor,
+    timelock,
+    from,
+    latestBlock,
+    simBlock,
+    simTimestamp,
+    storageObj,
+    executeInputs,
+    saveIfFails: false,
   });
-
-  const simulationPayload: TenderlyPayload = {
-    network_id: '1',
-    // this field represents the block state to simulate against, so we use the latest block number
-    block_number: Number(latestBlock.number),
-    from: DEFAULT_FROM,
-    to: governor.address,
-    input,
-    gas: BLOCK_GAS_LIMIT,
-    gas_price: '0',
-    value: '0', // We'll update this below if ETH transfers are needed
-    save_if_fails: false, // Set to true to save the simulation to your Tenderly dashboard if it fails.
-    save: false, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
-    generate_access_list: true, // not required, but useful as a sanity check to ensure consistency in the simulation response
-    block_header: {
-      // this data represents what block.number and block.timestamp should return in the EVM during the simulation
-      number: toHex(simBlock),
-      timestamp: toHex(simTimestamp),
-    },
-    state_objects: {
-      // Since gas price is zero, the sender needs no balance.
-      [from]: { balance: '0' },
-      // Ensure transactions are queued in the timelock
-      [timelock.address]: {
-        storage: storageObj.stateOverrides[timelock.address.toLowerCase()].value,
-      },
-      // Ensure governor storage is properly configured so `state(proposalId)` returns `Queued`
-      [governor.address]: {
-        storage: storageObj.stateOverrides[governor.address.toLowerCase()].value,
-      },
-    },
-  };
 
   // Handle ETH transfers if needed
   handleETHValueRequirements(simulationPayload, config.values, from, timelock.address);
@@ -420,46 +409,20 @@ async function simulateProposed(config: SimulationConfigProposed): Promise<Simul
   // ensure Tenderly properly parses the simulation payload
   const descriptionHash = keccak256(toBytes(description));
   const executeInputs =
-    governorType === 'bravo'
-      ? ([proposalId] as const)
-      : ([targets, values, calldatas, descriptionHash] as const);
+    governorType === 'bravo' ? [proposalId] : [targets, values, calldatas, descriptionHash];
 
-  const simulationPayload: TenderlyPayload = {
-    network_id: '1',
-    // this field represents the block state to simulate against, so we use the latest block number
-    block_number: Number(latestBlock.number),
+  const simulationPayload = buildSimulationPayload({
+    governorType,
+    governor,
+    timelock,
     from,
-    to: governor.address,
-    input: encodeFunctionData({
-      abi: governor.abi,
-      functionName: 'execute',
-      args: executeInputs,
-    }),
-    gas: BLOCK_GAS_LIMIT,
-    gas_price: '0',
-    value: '0',
-    save_if_fails: true, // Set to true to save the simulation to your Tenderly dashboard if it fails.
-    save: false, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
-    generate_access_list: true, // not required, but useful as a sanity check to ensure consistency in the simulation response
-    block_header: {
-      // this data represents what block.number and block.timestamp should return in the EVM during the simulation
-      number: toHex(simBlock),
-      timestamp: toHex(simTimestamp),
-    },
-    state_objects: {
-      // Since gas price is zero, the sender needs no balance. If the sender does need a balance to
-      // send ETH with the execution, this will be overridden later.
-      [from]: { balance: '0' },
-      // Ensure transactions are queued in the timelock
-      [timelock.address]: {
-        storage: storageObj.stateOverrides[timelock.address.toLowerCase()].value,
-      },
-      // Ensure governor storage is properly configured so `state(proposalId)` returns `Queued`
-      [governor.address]: {
-        storage: storageObj.stateOverrides[governor.address.toLowerCase()].value,
-      },
-    },
-  };
+    latestBlock,
+    simBlock,
+    simTimestamp,
+    storageObj,
+    executeInputs,
+    saveIfFails: true, // Different for proposed
+  });
 
   const formattedProposal: ProposalEvent = {
     id: proposalId,
@@ -759,6 +722,61 @@ function handleETHValueRequirements(
       balance: totalValue.toString(),
     };
   }
+}
+
+/**
+ * @notice Builds a Tenderly simulation payload with common configuration
+ * @param params Configuration parameters for the simulation payload
+ */
+function buildSimulationPayload(params: SimulationPayloadParams): TenderlyPayload {
+  const {
+    governor,
+    timelock,
+    from,
+    latestBlock,
+    simBlock,
+    simTimestamp,
+    storageObj,
+    executeInputs,
+    saveIfFails = false,
+  } = params;
+
+  return {
+    network_id: '1',
+    // this field represents the block state to simulate against, so we use the latest block number
+    block_number: Number(latestBlock.number),
+    from,
+    to: governor.address,
+    input: encodeFunctionData({
+      abi: governor.abi,
+      functionName: 'execute',
+      args: executeInputs,
+    }),
+    gas: BLOCK_GAS_LIMIT,
+    gas_price: '0',
+    value: '0', // Will be updated by handleETHValueRequirements if needed
+    save_if_fails: saveIfFails, // Set to true to save the simulation to your Tenderly dashboard if it fails.
+    save: false, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
+    generate_access_list: true, // not required, but useful as a sanity check to ensure consistency in the simulation response
+    block_header: {
+      // this data represents what block.number and block.timestamp should return in the EVM during the simulation
+      number: toHex(simBlock),
+      timestamp: toHex(simTimestamp),
+    },
+    state_objects: {
+      // Since gas price is zero, the sender needs no balance. If the sender does need a balance to
+      // send ETH with the execution, this will be overridden later.
+      [from]: { balance: '0' },
+      // Ensure transactions are queued in the timelock
+      [timelock.address]: {
+        storage: storageObj.stateOverrides[timelock.address.toLowerCase()].value,
+      },
+      // Ensure governor storage is properly configured so `state(proposalId)` returns `Queued`
+      [governor.address]: {
+        storage: storageObj.stateOverrides[governor.address.toLowerCase()].value,
+      },
+    },
+  };
 }
 
 /**
