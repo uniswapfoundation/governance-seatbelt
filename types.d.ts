@@ -98,16 +98,6 @@ export interface SimulationData extends SimulationResult {
   config: SimulationConfig;
 }
 
-// --- Proposal checks ---
-export type ProposalActions = [
-  // defined as an array instead of an object because the return data from governor.getActions()
-  // has no `values` key if all values are zero
-  string[],
-  BigNumber[],
-  string[],
-  string[],
-];
-
 // TODO If adding support for a third governor, instead of hardcoding optional governor-specific
 // fields, make this a union type of each governor's individual proposal type.
 export interface ProposalStruct {
