@@ -283,27 +283,7 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
   };
 
   // Handle ETH transfers if needed
-  const totalValue = config.values.reduce((sum, val) => sum + val, 0n);
-
-  if (totalValue > 0n) {
-    // If we need to send ETH, update the value and from address balance
-    simulationPayload.value = totalValue.toString();
-
-    // Make sure the from address has enough balance to cover the transfer
-    if (!simulationPayload.state_objects) {
-      simulationPayload.state_objects = {};
-    }
-    simulationPayload.state_objects[from] = {
-      ...simulationPayload.state_objects[from],
-      balance: totalValue.toString(),
-    };
-
-    // Also ensure the timelock has enough ETH to execute the proposal
-    simulationPayload.state_objects[timelock.address] = {
-      ...simulationPayload.state_objects[timelock.address],
-      balance: totalValue.toString(),
-    };
-  }
+  handleETHValueRequirements(simulationPayload, config.values, from, timelock.address);
 
   // Run the simulation
   const sim = await sendSimulation(simulationPayload);
@@ -531,27 +511,7 @@ async function simulateProposed(config: SimulationConfigProposed): Promise<Simul
   };
 
   // Handle ETH transfers if needed
-  const totalValue = values.reduce((sum, cur) => sum + cur, 0n);
-
-  if (totalValue > 0n) {
-    // If we need to send ETH, update the value and from address balance
-    simulationPayload.value = totalValue.toString();
-
-    // Make sure the from address has enough balance to cover the transfer
-    if (!simulationPayload.state_objects) {
-      simulationPayload.state_objects = {};
-    }
-    simulationPayload.state_objects[from] = {
-      ...simulationPayload.state_objects[from],
-      balance: totalValue.toString(),
-    };
-
-    // Also ensure the timelock has enough ETH to execute the proposal
-    simulationPayload.state_objects[timelock.address] = {
-      ...simulationPayload.state_objects[timelock.address],
-      balance: totalValue.toString(),
-    };
-  }
+  handleETHValueRequirements(simulationPayload, values, from, timelock.address);
 
   // Run the simulation
   const sim = await sendSimulation(simulationPayload);
@@ -800,6 +760,42 @@ export async function handleCrossChainSimulations(
 }
 
 // --- Helper methods ---
+
+/**
+ * @notice Handles ETH value requirements for simulation payloads
+ * @param simulationPayload The simulation payload to modify
+ * @param values Array of ETH values to send with each transaction
+ * @param from The sender address
+ * @param timelockAddress The timelock contract address
+ */
+function handleETHValueRequirements(
+  simulationPayload: TenderlyPayload,
+  values: readonly bigint[],
+  from: Address,
+  timelockAddress: Address,
+): void {
+  const totalValue = values.reduce((sum, val) => sum + val, 0n);
+
+  if (totalValue > 0n) {
+    // If we need to send ETH, update the value and from address balance
+    simulationPayload.value = totalValue.toString();
+
+    // Make sure the from address has enough balance to cover the transfer
+    if (!simulationPayload.state_objects) {
+      simulationPayload.state_objects = {};
+    }
+    simulationPayload.state_objects[from] = {
+      ...simulationPayload.state_objects[from],
+      balance: totalValue.toString(),
+    };
+
+    // Also ensure the timelock has enough ETH to execute the proposal
+    simulationPayload.state_objects[timelockAddress] = {
+      ...simulationPayload.state_objects[timelockAddress],
+      balance: totalValue.toString(),
+    };
+  }
+}
 
 // Sleep for the specified number of milliseconds
 const sleep = (delay: number) => new Promise((resolve) => setTimeout(resolve, delay)); // delay in milliseconds
