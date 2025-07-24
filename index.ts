@@ -29,6 +29,14 @@ import {
 import { PROPOSAL_STATES } from './utils/contracts/governor-bravo';
 
 /**
+ * @notice Run the complete simulation pipeline (source + cross-chain)
+ */
+async function runSimulationPipeline(config: SimulationConfig): Promise<SimulationResult> {
+  const sourceResult = await simulate(config);
+  return await handleCrossChainSimulations(sourceResult);
+}
+
+/**
  * @notice Fetch block data for proposal start and end blocks
  */
 async function fetchBlockData(
@@ -195,14 +203,9 @@ async function main() {
 
     governorType = await inferGovernorType(config.governorAddress);
 
-    // 1. Run source simulation
+    // Run simulation pipeline (source + cross-chain)
     console.log(`[Index] Simulating source chain for ${SIM_NAME}...`);
-    // Assume simulate returns the full SimulationResult including deps
-    const sourceResult = await simulate(config);
-
-    // 2. Handle potential cross-chain messages
-    console.log(`[Index] Handling cross-chain messages for ${SIM_NAME}...`);
-    const finalResult = await handleCrossChainSimulations(sourceResult);
+    const finalResult = await runSimulationPipeline(config);
     console.log(`[Index] Cross-chain handling complete for ${SIM_NAME}.`);
 
     const { sim, proposal, deps } = finalResult;
@@ -335,12 +338,9 @@ async function main() {
           proposalId: simProposal.id,
         };
 
-        // 1. Run source simulation
-        const sourceResult = await simulate(config);
-
-        // 2. Handle potential cross-chain messages
+        // Run simulation pipeline (source + cross-chain)
         console.log(`  Handling cross-chain messages for proposal ${simProposal.id}...`);
-        const finalResult = await handleCrossChainSimulations(sourceResult);
+        const finalResult = await runSimulationPipeline(config);
 
         // Check if simulations failed
         if (!finalResult.sim.transaction.status) {
