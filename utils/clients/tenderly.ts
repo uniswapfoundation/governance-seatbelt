@@ -1,6 +1,7 @@
 import mftch from 'micro-ftch';
 import type { FETCH_OPT } from 'micro-ftch';
 import {
+  type Address,
   encodeAbiParameters,
   encodeFunctionData,
   getAddress,
@@ -9,7 +10,6 @@ import {
   toHex,
   zeroHash,
 } from 'viem';
-import type { Address } from 'viem';
 import type {
   ProposalData,
   ProposalEvent,

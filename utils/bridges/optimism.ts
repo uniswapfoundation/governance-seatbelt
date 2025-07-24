@@ -1,5 +1,4 @@
-import type { Address, Hex } from 'viem';
-import { getAddress } from 'viem';
+import { type Address, type Hex, getAddress } from 'viem';
 import type { CallTrace, TenderlySimulation } from '../../types.d';
 import type { ExtractedCrossChainMessage } from '../../types.d';
 

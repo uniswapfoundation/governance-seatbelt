@@ -1,5 +1,4 @@
-import type { Address, Hex } from 'viem';
-import { decodeFunctionData, getAddress, hexToBigInt, toHex } from 'viem';
+import { type Address, type Hex, decodeFunctionData, getAddress, hexToBigInt, toHex } from 'viem';
 import type { CallTrace, TenderlySimulation } from '../../types.d';
 import type { ExtractedCrossChainMessage } from '../../types.d';
 // Assuming ABI is available, similar to sims/arb-grant.sim.ts

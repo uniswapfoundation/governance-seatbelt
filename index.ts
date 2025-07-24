@@ -18,7 +18,7 @@ import type {
 import { cacheProposal, getCachedProposal, needsSimulation } from './utils/cache/proposalCache';
 import { getChainConfig, publicClient } from './utils/clients/client';
 import { handleCrossChainSimulations, simulate } from './utils/clients/tenderly';
-import { DAO_NAME, GOVERNOR_ADDRESS, SIM_NAME, REPORTS_BRANCH } from './utils/constants';
+import { DAO_NAME, GOVERNOR_ADDRESS, REPORTS_BRANCH, SIM_NAME } from './utils/constants';
 import {
   formatProposalId,
   getGovernor,
