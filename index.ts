@@ -18,7 +18,7 @@ import type {
 import { cacheProposal, getCachedProposal, needsSimulation } from './utils/cache/proposalCache';
 import { getChainConfig, publicClient } from './utils/clients/client';
 import { handleCrossChainSimulations, simulate } from './utils/clients/tenderly';
-import { DAO_NAME, GOVERNOR_ADDRESS, SIM_NAME } from './utils/constants';
+import { DAO_NAME, GOVERNOR_ADDRESS, SIM_NAME, REPORTS_BRANCH } from './utils/constants';
 import {
   formatProposalId,
   getGovernor,
@@ -133,7 +133,7 @@ async function processSimulation(
   );
 
   // Generate reports
-  const dir = `./reports/${config.daoName}/${config.governorAddress}`;
+  const dir = `./${REPORTS_BRANCH}/${config.daoName}/${config.governorAddress}`;
   await generateAndSaveReports({
     governorType,
     blocks,
@@ -291,7 +291,7 @@ async function main() {
       );
 
       if (cachedData) {
-        const reportPath = `./reports/${DAO_NAME}/${GOVERNOR_ADDRESS}/${cachedProposal.id}.md`;
+        const reportPath = `./${REPORTS_BRANCH}/${DAO_NAME}/${GOVERNOR_ADDRESS}/${cachedProposal.id}.md`;
         if (existsSync(reportPath)) {
           console.log(`  Using cached report for proposal ${cachedProposal.id}`);
         } else {
