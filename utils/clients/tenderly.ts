@@ -144,21 +144,7 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
   const eta = simTimestamp; // set proposal eta to be equal to the timestamp we simulate at
 
   // Compute transaction hashes used by the Timelock
-  const txHashes = targets.map((target, i) => {
-    const [val, sig, calldata] = [values[i], signatures[i], calldatas[i]];
-    return keccak256(
-      encodeAbiParameters(
-        [
-          { type: 'address' },
-          { type: 'uint256' },
-          { type: 'string' },
-          { type: 'bytes' },
-          { type: 'uint256' },
-        ],
-        [target, val, sig, calldata, eta],
-      ),
-    );
-  });
+  const txHashes = computeTransactionHashes(targets, values, signatures, calldatas, eta);
 
   // Generate the state object needed to mark the transactions as queued in the Timelock's storage
   const timelockStorageObj: Record<string, string> = {};
@@ -419,21 +405,13 @@ async function simulateProposed(config: SimulationConfigProposed): Promise<Simul
   const eta = simTimestamp; // set proposal eta to be equal to the timestamp we simulate at
 
   // Compute transaction hashes used by the Timelock
-  const txHashes = targets.map((target, i) => {
-    const [val, sig, calldata] = [values[i], sigs[i], calldatas[i]];
-    return keccak256(
-      encodeAbiParameters(
-        [
-          { type: 'address' },
-          { type: 'uint256' },
-          { type: 'string' },
-          { type: 'bytes' },
-          { type: 'uint256' },
-        ],
-        [target, val, sig, calldata, eta],
-      ),
-    );
-  });
+  const txHashes = computeTransactionHashes(
+    targets as readonly `0x${string}`[],
+    values,
+    sigs as readonly `0x${string}`[],
+    calldatas as readonly `0x${string}`[],
+    eta,
+  );
 
   // Generate the state object needed to mark the transactions as queued in the Timelock's storage
   const timelockStorageObj: Record<string, string> = {};
@@ -975,4 +953,37 @@ async function sendSimulation(payload: TenderlyPayload, delay = 1000): Promise<T
     await sleep(delay + randomInt(0, 1000));
     return await sendSimulation(payload, delay * 2);
   }
+}
+
+/**
+ * @notice Computes transaction hashes used by the Timelock for queuing transactions
+ * @param targets Array of target contract addresses
+ * @param values Array of ETH values to send with each transaction
+ * @param signatures Array of function signatures
+ * @param calldatas Array of encoded calldata
+ * @param eta Execution timestamp
+ * @returns Array of transaction hashes
+ */
+function computeTransactionHashes(
+  targets: readonly `0x${string}`[],
+  values: readonly bigint[],
+  signatures: readonly `0x${string}`[],
+  calldatas: readonly `0x${string}`[],
+  eta: bigint,
+): string[] {
+  return targets.map((target, i) => {
+    const [val, sig, calldata] = [values[i], signatures[i], calldatas[i]];
+    return keccak256(
+      encodeAbiParameters(
+        [
+          { type: 'address' },
+          { type: 'uint256' },
+          { type: 'string' },
+          { type: 'bytes' },
+          { type: 'uint256' },
+        ],
+        [target, val, sig, calldata, eta],
+      ),
+    );
+  });
 }
