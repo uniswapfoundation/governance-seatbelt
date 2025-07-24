@@ -1,3 +1,4 @@
+import type { Address } from 'viem';
 import type { CallTrace, TenderlySimulation } from '../../types';
 
 /**
@@ -7,10 +8,10 @@ import type { CallTrace, TenderlySimulation } from '../../types';
 export function createMockSimulation(calls: CallTrace[]): TenderlySimulation {
   return {
     transaction: {
-      hash: '0x0000000000000000000000000000000000000000000000000000000000000000' as any,
+      hash: '0x0000000000000000000000000000000000000000000000000000000000000000' as Address,
       block_hash: '0x0000000000000000000000000000000000000000000000000000000000000000',
       block_number: 18000000,
-      from: '0x0000000000000000000000000000000000000000' as any,
+      from: '0x0000000000000000000000000000000000000000' as Address,
       gas: 21000,
       gas_price: 20000000000,
       gas_fee_cap: 20000000000,
@@ -20,7 +21,7 @@ export function createMockSimulation(calls: CallTrace[]): TenderlySimulation {
       effective_gas_price: 20000000000,
       input: '0x',
       nonce: 0,
-      to: '0x0000000000000000000000000000000000000000' as any,
+      to: '0x0000000000000000000000000000000000000000' as Address,
       index: 0,
       value: '0',
       access_list: null,
@@ -35,8 +36,9 @@ export function createMockSimulation(calls: CallTrace[]): TenderlySimulation {
       transaction_info: {
         contract_id: 'mock_contract_id',
         block_number: 18000000,
-        transaction_id: '0x0000000000000000000000000000000000000000000000000000000000000000' as any,
-        contract_address: '0x0000000000000000000000000000000000000000' as any,
+        transaction_id:
+          '0x0000000000000000000000000000000000000000000000000000000000000000' as Address,
+        contract_address: '0x0000000000000000000000000000000000000000' as Address,
         method: 'unknown',
         parameters: null,
         intrinsic_gas: 21000,
