@@ -291,7 +291,6 @@ interface TenderlyContract {
   balance: string;
   network_id: string;
   public: boolean;
-  boolean;
   verified_by: string;
   verification_date: null;
   address: string;
