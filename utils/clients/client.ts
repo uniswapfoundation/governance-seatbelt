@@ -1,6 +1,6 @@
 import { http, createPublicClient } from 'viem';
 import type { PublicClient } from 'viem';
-import { arbitrum, base, mainnet, optimism, unichain } from 'viem/chains';
+import { arbitrum, base, ink, mainnet, optimism, unichain } from 'viem/chains';
 export interface ChainConfig {
   chainId: number;
   blockExplorer: {
@@ -34,6 +34,11 @@ const UNICHAIN_RPC_URL =
   (ALCHEMY_API_KEY
     ? `https://unichain-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
     : 'https://mainnet.unichain.org');
+const INK_RPC_URL =
+  process.env.INK_RPC_URL ||
+  (ALCHEMY_API_KEY
+    ? `https://ink-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
+    : 'https://rpc-gel.inkonchain.com');
 
 export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   [mainnet.id]: {
@@ -81,6 +86,15 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
     },
     rpcUrl: UNICHAIN_RPC_URL,
   },
+  [ink.id]: {
+    chainId: ink.id,
+    blockExplorer: {
+      baseUrl: ink.blockExplorers?.default.url || 'https://explorer.inkonchain.com',
+      apiUrl: ink.blockExplorers?.default.apiUrl || 'https://explorer.inkonchain.com/api/v2',
+      apiKey: '', // No API key needed for Ink
+    },
+    rpcUrl: INK_RPC_URL,
+  },
 };
 
 export function getChainConfig(chainId: number): ChainConfig {
@@ -112,6 +126,10 @@ const clients: Record<number, PublicClient> = {
   [unichain.id]: createPublicClient({
     chain: unichain,
     transport: http(CHAIN_CONFIGS[unichain.id].rpcUrl),
+  }) as PublicClient,
+  [ink.id]: createPublicClient({
+    chain: ink,
+    transport: http(CHAIN_CONFIGS[ink.id].rpcUrl),
   }) as PublicClient,
 };
 
