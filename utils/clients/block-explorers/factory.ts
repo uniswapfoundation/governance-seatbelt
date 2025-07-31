@@ -4,6 +4,7 @@ import { BlockscoutExplorer } from './blockscout';
 import { EtherscanExplorer } from './etherscan';
 import type { BlockExplorer } from './index';
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Factory pattern with static methods
 export class BlockExplorerFactory {
   private static explorers: Record<number, BlockExplorer> = {};
 
