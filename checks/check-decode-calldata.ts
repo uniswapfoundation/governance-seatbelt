@@ -6,7 +6,7 @@ import {
   toFunctionSelector,
 } from 'viem';
 import type { DecodedCall, ProposalCheck, TenderlyContract, TenderlySimulation } from '../types';
-import { decodeFunctionWithAbi } from '../utils/clients/etherscan';
+import { BlockExplorerFactory } from '../utils/clients/block-explorers/factory';
 import { getContractNameFromTenderly } from '../utils/clients/tenderly';
 import { fetchTokenMetadata } from '../utils/contracts/erc20';
 
@@ -336,7 +336,11 @@ async function prettifyCalldata(
 
   // Try to decode using Etherscan ABI first
   try {
-    const decoded = await decodeFunctionWithAbi(target, call.input as `0x${string}`, chainId);
+    const decoded = await BlockExplorerFactory.decodeFunctionWithAbi(
+      target,
+      call.input as `0x${string}`,
+      chainId,
+    );
     if (decoded) {
       // Cache the decoded function
       decodedFunctionCache[cacheKey] = decoded;
