@@ -83,18 +83,18 @@ export async function runChecksForChain(
   };
 
   // Chain-specific checks
-  results.checkTargetsVerifiedEtherscan = {
-    name: ALL_CHECKS.checkTargetsVerifiedEtherscan.name,
-    result: await ALL_CHECKS.checkTargetsVerifiedEtherscan.checkProposal(
+  results.checkTargetsVerifiedOnBlockExplorer = {
+    name: ALL_CHECKS.checkTargetsVerifiedOnBlockExplorer.name,
+    result: await ALL_CHECKS.checkTargetsVerifiedOnBlockExplorer.checkProposal(
       proposal,
       sim,
       depsWithConfig,
       l2Simulations,
     ),
   };
-  results.checkTouchedContractsVerifiedEtherscan = {
-    name: ALL_CHECKS.checkTouchedContractsVerifiedEtherscan.name,
-    result: await ALL_CHECKS.checkTouchedContractsVerifiedEtherscan.checkProposal(
+  results.checkTouchedContractsVerifiedOnBlockExplorer = {
+    name: ALL_CHECKS.checkTouchedContractsVerifiedOnBlockExplorer.name,
+    result: await ALL_CHECKS.checkTouchedContractsVerifiedOnBlockExplorer.checkProposal(
       proposal,
       sim,
       depsWithConfig,
