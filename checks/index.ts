@@ -10,8 +10,8 @@ import {
   checkTouchedContractsNoSelfdestruct,
 } from './check-targets-no-selfdestruct';
 import {
-  checkTargetsVerifiedEtherscan,
-  checkTouchedContractsVerifiedEtherscan,
+  checkTargetsVerifiedOnBlockExplorer,
+  checkTouchedContractsVerifiedOnBlockExplorer,
 } from './check-targets-verified-etherscan';
 import { checkValueRequired } from './check-value-required';
 
@@ -21,8 +21,8 @@ const ALL_CHECKS: {
   checkStateChanges,
   checkDecodeCalldata,
   checkLogs,
-  checkTargetsVerifiedEtherscan,
-  checkTouchedContractsVerifiedEtherscan,
+  checkTargetsVerifiedOnBlockExplorer,
+  checkTouchedContractsVerifiedOnBlockExplorer,
   checkTargetsNoSelfdestruct,
   checkTouchedContractsNoSelfdestruct,
   checkValueRequired,
