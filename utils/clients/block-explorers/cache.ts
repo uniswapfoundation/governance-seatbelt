@@ -19,6 +19,7 @@ if (!existsSync(VERIFICATION_CACHE_DIR)) {
 const abiCache: Record<string, Abi> = {};
 const verificationCache: Record<string, boolean> = {};
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Cache manager with static methods
 export class CacheManager {
   static getAbiCacheKey(chainId: number, address: string): string {
     return `${chainId}:${getAddress(address)}`;
