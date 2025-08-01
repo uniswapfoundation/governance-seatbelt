@@ -1,5 +1,5 @@
 import type { Abi } from 'viem';
-import { getChainConfig } from '../client';
+import { BlockExplorerSource, getChainConfig } from '../client';
 import { BlockscoutExplorer } from './blockscout';
 import { EtherscanExplorer } from './etherscan';
 import type { BlockExplorer } from './index';
@@ -12,8 +12,7 @@ export class BlockExplorerFactory {
     if (!BlockExplorerFactory.explorers[chainId]) {
       const chainConfig = getChainConfig(chainId);
 
-      if (chainId === 57073) {
-        // Ink chain
+      if (chainConfig.blockExplorer.source === BlockExplorerSource.Blockscout) {
         BlockExplorerFactory.explorers[chainId] = new BlockscoutExplorer(
           chainConfig.blockExplorer.baseUrl,
           chainConfig.blockExplorer.apiUrl,
