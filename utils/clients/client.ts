@@ -1,11 +1,18 @@
 import { http, createPublicClient } from 'viem';
 import type { PublicClient } from 'viem';
-import { arbitrum, base, ink, mainnet, optimism, unichain } from 'viem/chains';
+import { arbitrum, base, ink, mainnet, optimism, soneium, unichain } from 'viem/chains';
+
+export enum BlockExplorerSource {
+  Blockscout = 'blockscout',
+  Etherscan = 'etherscan',
+}
+
 export interface ChainConfig {
   chainId: number;
   blockExplorer: {
     baseUrl: string;
     apiUrl: string;
+    source: BlockExplorerSource;
     apiKey?: string;
   };
   rpcUrl: string;
@@ -39,6 +46,11 @@ const INK_RPC_URL =
   (ALCHEMY_API_KEY
     ? `https://ink-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
     : 'https://rpc-gel.inkonchain.com');
+const SONEIUM_RPC_URL =
+  process.env.SONEIUM_RPC_URL ||
+  (ALCHEMY_API_KEY
+    ? `https://soneium-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
+    : 'https://rpc.soneium.org');
 
 export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   [mainnet.id]: {
@@ -47,6 +59,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       baseUrl: mainnet.blockExplorers?.default.url || 'https://etherscan.io',
       apiUrl: 'https://api.etherscan.io/v2/api', // Using v2 unified API
       apiKey: process.env.ETHERSCAN_API_KEY,
+      source: BlockExplorerSource.Etherscan,
     },
     rpcUrl: process.env.MAINNET_RPC_URL,
   },
@@ -56,6 +69,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       baseUrl: arbitrum.blockExplorers?.default.url || 'https://arbiscan.io',
       apiUrl: 'https://api.etherscan.io/v2/api', // Using v2 unified API
       apiKey: process.env.ETHERSCAN_API_KEY, // Single API key for all chains
+      source: BlockExplorerSource.Etherscan,
     },
     rpcUrl: process.env.ARBITRUM_RPC_URL,
   },
@@ -65,6 +79,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       baseUrl: optimism.blockExplorers?.default.url || 'https://optimistic.etherscan.io',
       apiUrl: 'https://api.etherscan.io/v2/api', // Using v2 unified API
       apiKey: process.env.ETHERSCAN_API_KEY, // Single API key for all chains
+      source: BlockExplorerSource.Etherscan,
     },
     rpcUrl: OPTIMISM_RPC_URL,
   },
@@ -74,6 +89,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       baseUrl: base.blockExplorers?.default.url || 'https://basescan.org',
       apiUrl: 'https://api.etherscan.io/v2/api', // Using v2 unified API
       apiKey: process.env.ETHERSCAN_API_KEY, // Single API key for all chains
+      source: BlockExplorerSource.Etherscan,
     },
     rpcUrl: BASE_RPC_URL,
   },
@@ -83,17 +99,27 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       baseUrl: unichain.blockExplorers?.default.url || 'https://uniscan.xyz',
       apiUrl: 'https://api.etherscan.io/v2/api', // Using v2 unified API
       apiKey: process.env.ETHERSCAN_API_KEY, // Single API key for all chains
+      source: BlockExplorerSource.Etherscan,
     },
     rpcUrl: UNICHAIN_RPC_URL,
   },
   [ink.id]: {
     chainId: ink.id,
     blockExplorer: {
-      baseUrl: ink.blockExplorers?.default.url || 'https://explorer.inkonchain.com',
-      apiUrl: ink.blockExplorers?.default.apiUrl || 'https://explorer.inkonchain.com/api/v2',
-      apiKey: '', // No API key needed for Ink
+      baseUrl: ink.blockExplorers?.default.url,
+      apiUrl: ink.blockExplorers?.default.apiUrl,
+      source: BlockExplorerSource.Blockscout,
     },
     rpcUrl: INK_RPC_URL,
+  },
+  [soneium.id]: {
+    chainId: soneium.id,
+    blockExplorer: {
+      baseUrl: soneium.blockExplorers?.default.url,
+      apiUrl: soneium.blockExplorers?.default.apiUrl,
+      source: BlockExplorerSource.Blockscout,
+    },
+    rpcUrl: SONEIUM_RPC_URL,
   },
 };
 
@@ -130,6 +156,10 @@ const clients: Record<number, PublicClient> = {
   [ink.id]: createPublicClient({
     chain: ink,
     transport: http(CHAIN_CONFIGS[ink.id].rpcUrl),
+  }) as PublicClient,
+  [soneium.id]: createPublicClient({
+    chain: soneium,
+    transport: http(CHAIN_CONFIGS[soneium.id].rpcUrl),
   }) as PublicClient,
 };
 
