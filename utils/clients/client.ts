@@ -1,6 +1,6 @@
 import { http, createPublicClient } from 'viem';
 import type { PublicClient } from 'viem';
-import { arbitrum, base, ink, mainnet, optimism, soneium, unichain } from 'viem/chains';
+import { arbitrum, base, bob, ink, mainnet, optimism, soneium, unichain } from 'viem/chains';
 
 export enum BlockExplorerSource {
   Blockscout = 'blockscout',
@@ -51,6 +51,7 @@ const SONEIUM_RPC_URL =
   (ALCHEMY_API_KEY
     ? `https://soneium-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
     : 'https://rpc.soneium.org');
+const BOB_RPC_URL = process.env.BOB_RPC_URL || 'https://bob.drpc.org';
 
 export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   [mainnet.id]: {
@@ -121,6 +122,15 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
     },
     rpcUrl: SONEIUM_RPC_URL,
   },
+  [bob.id]: {
+    chainId: bob.id,
+    blockExplorer: {
+      baseUrl: bob.blockExplorers?.default.url,
+      apiUrl: 'https://explorer.gobob.xyz/api/v2',
+      source: BlockExplorerSource.Blockscout,
+    },
+    rpcUrl: BOB_RPC_URL,
+  },
 };
 
 export function getChainConfig(chainId: number): ChainConfig {
@@ -160,6 +170,10 @@ const clients: Record<number, PublicClient> = {
   [soneium.id]: createPublicClient({
     chain: soneium,
     transport: http(CHAIN_CONFIGS[soneium.id].rpcUrl),
+  }) as PublicClient,
+  [bob.id]: createPublicClient({
+    chain: bob,
+    transport: http(CHAIN_CONFIGS[bob.id].rpcUrl),
   }) as PublicClient,
 };
 
