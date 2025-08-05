@@ -9,6 +9,7 @@ const OPTIMISM_MESSENGERS: Record<string, Address> = {
   '130': '0x9A3D64E386C18Cb1d6d5179a9596A4B5736e98A6', // Unichain
   '57073': '0x69d3cf86b2bf1a9e99875b7e2d9b6a84426c171f', // Ink
   '1868': '0x9cf951e3f74b644e621b36ca9cea147a78d4c39f', // Soneium
+  '60808': '0xE3d981643b806FB8030CDB677D6E60892E547EdA', // Bob
 };
 
 // Constants for ABI decoding
