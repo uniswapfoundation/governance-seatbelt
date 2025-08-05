@@ -1,6 +1,6 @@
 import { http, createPublicClient } from 'viem';
 import type { PublicClient } from 'viem';
-import { arbitrum, base, mainnet, optimism } from 'viem/chains';
+import { arbitrum, base, mainnet, optimism, polygonZkEvm } from 'viem/chains';
 
 export interface ChainConfig {
   chainId: number;
@@ -14,7 +14,7 @@ export interface ChainConfig {
 
 if (!process.env.MAINNET_RPC_URL || !process.env.ARBITRUM_RPC_URL) {
   throw new Error(
-    'MAINNET_RPC_URL and ARBITRUM_RPC_URL must be set. Optional: OPTIMISM_RPC_URL, BASE_RPC_URL, or ALCHEMY_API_KEY',
+    'MAINNET_RPC_URL and ARBITRUM_RPC_URL must be set. Optional: OPTIMISM_RPC_URL, BASE_RPC_URL, POLYGON_ZKEVM_RPC_URL, or ALCHEMY_API_KEY',
   );
 }
 
@@ -30,6 +30,11 @@ const BASE_RPC_URL =
   (ALCHEMY_API_KEY
     ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
     : 'https://mainnet.base.org');
+const POLYGON_ZKEVM_RPC_URL =
+  process.env.POLYGON_ZKEVM_RPC_URL ||
+  (ALCHEMY_API_KEY
+    ? `https://polygonzkevm-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
+    : 'https://polygon-rpc.com');
 
 export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   [mainnet.id]: {
@@ -68,6 +73,15 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
     },
     rpcUrl: BASE_RPC_URL,
   },
+  [polygonZkEvm.id]: {
+    chainId: polygonZkEvm.id,
+    blockExplorer: {
+      baseUrl: polygonZkEvm.blockExplorers?.default.url,
+      apiUrl: polygonZkEvm.blockExplorers?.default.apiUrl,
+      apiKey: process.env.POLYGONSCAN_API_KEY,
+    },
+    rpcUrl: POLYGON_ZKEVM_RPC_URL,
+  },
 };
 
 export function getChainConfig(chainId: number): ChainConfig {
@@ -95,6 +109,10 @@ const clients: Record<number, PublicClient> = {
   [base.id]: createPublicClient({
     chain: base,
     transport: http(CHAIN_CONFIGS[base.id].rpcUrl),
+  }) as PublicClient,
+  [polygonZkEvm.id]: createPublicClient({
+    chain: polygonZkEvm,
+    transport: http(CHAIN_CONFIGS[polygonZkEvm.id].rpcUrl),
   }) as PublicClient,
 };
 

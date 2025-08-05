@@ -26,6 +26,7 @@ import type {
 import { GOVERNOR_ABI } from '../abis/GovernorBravo';
 import { parseArbitrumL1L2Messages } from '../bridges/arbitrum';
 import { parseOptimismL1L2Messages } from '../bridges/optimism';
+import { parsePolygonZkEVML1L2Messages } from '../bridges/polygon-zkevm';
 import {
   BLOCK_GAS_LIMIT,
   TENDERLY_ACCESS_TOKEN,
@@ -736,10 +737,11 @@ export async function handleCrossChainSimulations(
   // 1. Parse source simulation for cross-chain messages
   console.log('[CrossChainHandler] Parsing source sim for messages...');
 
-  // Parse messages from both Arbitrum and Optimism bridges
+  // Parse messages from L1/L2 bridges
   const arbMessages = parseArbitrumL1L2Messages(result.sim);
   const opMessages = parseOptimismL1L2Messages(result.sim);
-  const extractedMessages = [...arbMessages, ...opMessages];
+  const polygonMessages = parsePolygonZkEVML1L2Messages(result.sim);
+  const extractedMessages = [...arbMessages, ...opMessages, ...polygonMessages];
 
   if (extractedMessages.length === 0) {
     console.log('[CrossChainHandler] No cross-chain messages detected.');

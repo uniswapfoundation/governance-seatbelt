@@ -121,6 +121,7 @@ Some integration tests require environment variables:
 export ETHERSCAN_API_KEY=your_key
 export MAINNET_RPC_URL=your_mainnet_rpc
 export ARBITRUM_RPC_URL=your_arbitrum_rpc
+export POLYGON_ZKEVM_RPC_URL=you_polygob_zkevm_rpc
 export OPTIMISM_RPC_URL=your_optimism_rpc
 export BASE_RPC_URL=your_base_rpc
 export TENDERLY_ACCESS_TOKEN=your_tenderly_token
