@@ -388,6 +388,7 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
     governorAddress,
     outputPath,
     destinationSimulations,
+    destinationChecks,
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
@@ -405,7 +406,7 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
       description: proposal.description,
     };
 
-    // Generate the structured report
+    // Generate the structured report for main chain
     const structuredReport = generateStructuredReport(
       governorType,
       blocks,
@@ -416,6 +417,27 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
       proposalCreatedBlock,
       proposalExecutedBlock,
     );
+
+    // Add cross-chain slither results to the structured report
+    if (destinationChecks) {
+      for (const [chainId, chainChecks] of Object.entries(destinationChecks)) {
+        const slitherCheck = chainChecks.checkSlither;
+        if (slitherCheck) {
+          // Add cross-chain slither results to the main report
+          structuredReport.checks.push({
+            title: `Cross-Chain Slither (Chain ${chainId})`,
+            status:
+              slitherCheck.result.errors.length > 0
+                ? 'failed'
+                : slitherCheck.result.warnings.length > 0
+                  ? 'warning'
+                  : 'passed',
+            details: slitherCheck.result.info.join('\n'),
+            info: slitherCheck.result.info,
+          });
+        }
+      }
+    }
 
     // Create a simplified report structure for the frontend
     const reportForFrontend = {
@@ -556,6 +578,7 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     governorAddress,
     outputPath: simulationResultsPath,
     destinationSimulations,
+    destinationChecks,
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
