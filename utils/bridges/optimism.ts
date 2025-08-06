@@ -11,6 +11,7 @@ const OPTIMISM_MESSENGERS: Record<string, Address> = {
   '57073': '0x69d3cf86b2bf1a9e99875b7e2d9b6a84426c171f', // Ink
   '1868': '0x9cf951e3f74b644e621b36ca9cea147a78d4c39f', // Soneium
   '60808': '0xE3d981643b806FB8030CDB677D6E60892E547EdA', // Bob
+  '204': '0x09525eB7eEd671582dDc6f02f8D9082cbd55A606', // OP BNB
 };
 
 // Constants for ABI decoding

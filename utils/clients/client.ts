@@ -1,6 +1,6 @@
 import { http, createPublicClient } from 'viem';
 import type { PublicClient } from 'viem';
-import { arbitrum, base, bob, ink, mainnet, optimism, soneium, unichain } from 'viem/chains';
+import { arbitrum, base, bob, ink, mainnet, opBNB, optimism, soneium, unichain } from 'viem/chains';
 
 export enum BlockExplorerSource {
   Blockscout = 'blockscout',
@@ -52,6 +52,11 @@ const SONEIUM_RPC_URL =
     ? `https://soneium-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
     : 'https://rpc.soneium.org');
 const BOB_RPC_URL = process.env.BOB_RPC_URL || 'https://bob.drpc.org';
+const OPBNB_RPC_URL =
+  process.env.OPBNB_RPC_URL ||
+  (ALCHEMY_API_KEY
+    ? `https://opbnb-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
+    : 'https://opbnb-mainnet-rpc.bnbchain.org');
 
 export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   [mainnet.id]: {
@@ -131,6 +136,16 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
     },
     rpcUrl: BOB_RPC_URL,
   },
+  [opBNB.id]: {
+    chainId: opBNB.id,
+    blockExplorer: {
+      baseUrl: opBNB.blockExplorers.default.url,
+      apiUrl: opBNB.blockExplorers.default.apiUrl,
+      apiKey: process.env.ETHERSCAN_API_KEY, // Single API key for all chains
+      source: BlockExplorerSource.Etherscan,
+    },
+    rpcUrl: OPBNB_RPC_URL,
+  },
 };
 
 export function getChainConfig(chainId: number): ChainConfig {
@@ -174,6 +189,10 @@ const clients: Record<number, PublicClient> = {
   [bob.id]: createPublicClient({
     chain: bob,
     transport: http(CHAIN_CONFIGS[bob.id].rpcUrl),
+  }) as PublicClient,
+  [opBNB.id]: createPublicClient({
+    chain: opBNB,
+    transport: http(CHAIN_CONFIGS[opBNB.id].rpcUrl),
   }) as PublicClient,
 };
 
