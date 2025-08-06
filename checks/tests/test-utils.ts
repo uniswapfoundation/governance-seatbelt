@@ -1,4 +1,4 @@
-import type { Address } from 'viem';
+import { zeroAddress, zeroHash } from 'viem';
 import type { CallTrace, TenderlySimulation } from '../../types';
 
 /**
@@ -8,10 +8,10 @@ import type { CallTrace, TenderlySimulation } from '../../types';
 export function createMockSimulation(calls: CallTrace[]): TenderlySimulation {
   return {
     transaction: {
-      hash: '0x0000000000000000000000000000000000000000000000000000000000000000' as Address,
-      block_hash: '0x0000000000000000000000000000000000000000000000000000000000000000',
+      hash: zeroHash,
+      block_hash: zeroHash,
       block_number: 18000000,
-      from: '0x0000000000000000000000000000000000000000' as Address,
+      from: zeroAddress,
       gas: 21000,
       gas_price: 20000000000,
       gas_fee_cap: 20000000000,
@@ -21,7 +21,7 @@ export function createMockSimulation(calls: CallTrace[]): TenderlySimulation {
       effective_gas_price: 20000000000,
       input: '0x',
       nonce: 0,
-      to: '0x0000000000000000000000000000000000000000' as Address,
+      to: zeroAddress,
       index: 0,
       value: '0',
       access_list: null,
@@ -36,16 +36,15 @@ export function createMockSimulation(calls: CallTrace[]): TenderlySimulation {
       transaction_info: {
         contract_id: 'mock_contract_id',
         block_number: 18000000,
-        transaction_id:
-          '0x0000000000000000000000000000000000000000000000000000000000000000' as Address,
-        contract_address: '0x0000000000000000000000000000000000000000' as Address,
+        transaction_id: zeroHash,
+        contract_address: zeroAddress,
         method: 'unknown',
         parameters: null,
         intrinsic_gas: 21000,
         refund_gas: 0,
         call_trace: {
-          from: '0x0000000000000000000000000000000000000000',
-          to: '0x0000000000000000000000000000000000000000',
+          from: zeroAddress,
+          to: zeroAddress,
           input: '0x',
           calls: calls || [],
         },
@@ -66,8 +65,8 @@ export function createMockSimulation(calls: CallTrace[]): TenderlySimulation {
       network_id: '1',
       block_number: 18000000,
       transaction_index: 0,
-      from: '0x0000000000000000000000000000000000000000',
-      to: '0x0000000000000000000000000000000000000000',
+      from: zeroAddress,
+      to: zeroAddress,
       input: '0x',
       gas: 21000,
       gas_price: '20000000000',

@@ -15,7 +15,7 @@ import type {
 } from './types.d';
 import { getChainConfig, getClientForChain, publicClient } from './utils/clients/client';
 import { handleCrossChainSimulations, simulate } from './utils/clients/tenderly';
-import { DAO_NAME, GOVERNOR_ADDRESS, REPORTS_BRANCH } from './utils/constants';
+import { DAO_NAME, GOVERNOR_ADDRESS, REPORTS_OUTPUT_DIRECTORY } from './utils/constants';
 import {
   getGovernor,
   getProposalIds,
@@ -253,7 +253,7 @@ async function main() {
   };
 
   // Generate reports
-  const dir = `./${REPORTS_BRANCH}/${config.daoName}/${config.governorAddress}`;
+  const dir = `./${REPORTS_OUTPUT_DIRECTORY}/${config.daoName}/${config.governorAddress}`;
   await generateAndSaveReports({
     governorType,
     blocks,
