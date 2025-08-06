@@ -1,7 +1,7 @@
-import { mkdirSync, unlinkSync, writeFileSync } from 'fs';
 import { exec as execCallback } from 'node:child_process';
+import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import util from 'node:util';
-import { join } from 'path';
 import { getAddress } from 'viem';
 import { codeBlock } from '../presentation/report';
 import type { ProposalCheck } from '../types';
@@ -167,7 +167,7 @@ async function runSlitherOnBlockscoutContract(
       return null;
     }
 
-    console.log(`[Slither] Source code fetched successfully, creating temporary file...`);
+    console.log('[Slither] Source code fetched successfully, creating temporary file...');
 
     // Create temporary directory and file
     const tempDir = join(process.cwd(), 'crytic-export', 'blockscout-contracts');
@@ -207,18 +207,18 @@ async function runSlitherOnBlockscoutContract(
     }
 
     // Run slither on the local file
-    console.log(`[Slither] Running slither on local file...`);
+    console.log('[Slither] Running slither on local file...');
     try {
       const result = await exec(`slither ${filePath}`);
-      console.log(`[Slither] Slither completed for local file`);
+      console.log('[Slither] Slither completed for local file');
       return result;
     } catch (e: unknown) {
       // Slither often returns non-zero exit codes due to warnings, but still produces output
       if (e && typeof e === 'object' && 'stderr' in e && 'stdout' in e) {
         const error = e as ExecOutput;
         // Check if there's actual output (indicating successful analysis)
-        if (error.stderr && error.stderr.includes('analyzed')) {
-          console.log(`[Slither] Slither completed with warnings for local file`);
+        if (error.stderr?.includes('analyzed')) {
+          console.log('[Slither] Slither completed with warnings for local file');
           return error;
         }
       }
