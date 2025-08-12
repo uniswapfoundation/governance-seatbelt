@@ -1,5 +1,5 @@
 import type { Address, Hex } from 'viem';
-import { getAddress, decodeFunctionData, parseAbi } from 'viem';
+import { decodeFunctionData, getAddress, parseAbi } from 'viem';
 import type { CallTrace, TenderlySimulation } from '../../types.d';
 import type { ExtractedCrossChainMessage } from '../../types.d';
 
@@ -15,7 +15,7 @@ const OPTIMISM_MESSENGERS: Record<string, Address> = {
 
 // ABI for L1CrossDomainMessenger sendMessage function
 const SEND_MESSAGE_ABI = parseAbi([
-  'function sendMessage(address _target, bytes _message, uint32 _minGasLimit)'
+  'function sendMessage(address _target, bytes _message, uint32 _minGasLimit)',
 ]);
 
 // Constants for validation
@@ -89,7 +89,10 @@ export function parseOptimismL1L2Messages(
     if (!call || !call.input || !call.from || !call.to) continue;
 
     // Skip empty or invalid calldata - must have at least minimum length for sendMessage
-    if (call.input === '0x' || call.input.length < VALIDATION_CONSTANTS.MIN_SEND_MESSAGE_INPUT_LENGTH) {
+    if (
+      call.input === '0x' ||
+      call.input.length < VALIDATION_CONSTANTS.MIN_SEND_MESSAGE_INPUT_LENGTH
+    ) {
       console.log(
         `[Optimism Parser] Skipping call with invalid input length: ${call.input?.length || 0} chars (min: ${VALIDATION_CONSTANTS.MIN_SEND_MESSAGE_INPUT_LENGTH})`,
       );
@@ -121,8 +124,11 @@ export function parseOptimismL1L2Messages(
 
       // Validate message data length for DoS prevention
       const messageLength = messageData.length;
-      if (messageLength > VALIDATION_CONSTANTS.MAX_MESSAGE_LENGTH * 2) { // *2 for hex encoding
-        console.log(`[Optimism Parser] Message too large: ${messageLength / 2} bytes (max: ${VALIDATION_CONSTANTS.MAX_MESSAGE_LENGTH})`);
+      if (messageLength > VALIDATION_CONSTANTS.MAX_MESSAGE_LENGTH * 2) {
+        // *2 for hex encoding
+        console.log(
+          `[Optimism Parser] Message too large: ${messageLength / 2} bytes (max: ${VALIDATION_CONSTANTS.MAX_MESSAGE_LENGTH})`,
+        );
         continue;
       }
 
@@ -131,10 +137,11 @@ export function parseOptimismL1L2Messages(
 
       // Create the message
       // TEMP: For Unichain testing, use an address that likely has ETH balance
-      const l2FromAddress = destinationChainId === '130' 
-        ? '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D' as Address // Use Uniswap V2 Router for Unichain
-        : getAddress(call.from); // Preserve original sender for other chains
-      
+      const l2FromAddress =
+        destinationChainId === '130'
+          ? ('0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D' as Address) // Use Uniswap V2 Router for Unichain
+          : getAddress(call.from); // Preserve original sender for other chains
+
       const message: ExtractedCrossChainMessage = {
         bridgeType: 'OptimismL1L2',
         destinationChainId,
@@ -153,7 +160,9 @@ export function parseOptimismL1L2Messages(
       );
     } catch (error) {
       // This will catch calls that don't match the sendMessage ABI or have invalid data
-      console.log(`[Optimism Parser] Skipping non-sendMessage call or decoding error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.log(
+        `[Optimism Parser] Skipping non-sendMessage call or decoding error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 

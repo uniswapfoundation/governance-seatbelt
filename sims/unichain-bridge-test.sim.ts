@@ -64,7 +64,9 @@ const wethApprovalCalldata = encodeFunctionData({
 
 // Encode swapExactTokensForTokens for WETH to USDC swap
 const swapCalldata = encodeFunctionData({
-  abi: parseAbi(['function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) returns (uint256[] memory amounts)']),
+  abi: parseAbi([
+    'function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) returns (uint256[] memory amounts)',
+  ]),
   functionName: 'swapExactTokensForTokens',
   args: [
     parseEther('0.05'), // 0.05 WETH
@@ -75,7 +77,7 @@ const swapCalldata = encodeFunctionData({
   ],
 });
 
-// Call 1: Send cross-chain message to Unichain (WETH deposit with 1 ETH)  
+// Call 1: Send cross-chain message to Unichain (WETH deposit with 1 ETH)
 // Use Uniswap Router as sender since it likely has ETH balance on L2
 const call1 = {
   target: L1_CROSS_DOMAIN_MESSENGER_UNICHAIN,
