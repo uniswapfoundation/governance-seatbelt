@@ -594,6 +594,7 @@ export interface StructuredSimulationReport {
     proposerIsPlaceholder?: boolean;
     governorAddress: string;
     executor?: string;
+    executorIsPlaceholder?: boolean;
     simulationBlockNumber: string;
     simulationTimestamp: string;
     proposalCreatedAtBlockNumber: string;

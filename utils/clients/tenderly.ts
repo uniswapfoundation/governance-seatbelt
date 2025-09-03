@@ -55,6 +55,9 @@ const TENDERLY_FETCH_OPTIONS = {
   headers: { 'X-Access-Key': TENDERLY_ACCESS_TOKEN },
 };
 
+// Placeholder sender for simulations.
+// IMPORTANT: This MUST remain an empty EOA on mainnet (no code, nonce = 0).
+// The test at tests/placeholder-constant.test.ts enforces this invariant.
 export const DEFAULT_SIMULATION_ADDRESS = '0x0000000000000000000000000000000000001234' as Address;
 
 type TenderlyError = {

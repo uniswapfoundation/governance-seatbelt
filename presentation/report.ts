@@ -367,6 +367,9 @@ function generateStructuredReport(
         getAddress(proposal.proposer) === getAddress(DEFAULT_SIMULATION_ADDRESS),
       governorAddress,
       executor,
+      executorIsPlaceholder: executor 
+        ? getAddress(executor) === getAddress(DEFAULT_SIMULATION_ADDRESS)
+        : undefined,
       simulationBlockNumber: blocks.current.number?.toString() ?? 'unknown',
       simulationTimestamp: blocks.current.timestamp.toString(),
       proposalCreatedAtBlockNumber: proposalCreatedBlock?.number?.toString() ?? 'unknown',
