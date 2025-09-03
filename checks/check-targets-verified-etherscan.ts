@@ -3,6 +3,7 @@ import { toAddressLink } from '../presentation/report';
 import type { CallTrace, ProposalCheck, TenderlySimulation } from '../types';
 import { BlockExplorerFactory } from '../utils/clients/block-explorers/factory';
 import type { ChainConfig } from '../utils/clients/client';
+import { DEFAULT_SIMULATION_ADDRESS } from '../utils/clients/tenderly';
 
 /**
  * Check all targets with code are verified on block explorer
@@ -75,11 +76,14 @@ async function checkVerificationStatuses(
     const status = await checkVerificationStatus(addr, publicClient, chainConfig.chainId);
     const address = toAddressLink(addr, chainConfig.blockExplorer.baseUrl);
 
-    if (status === 'eoa') info.push(`${address}: EOA (verification not applicable)`);
+    const isPlaceholder = getAddress(addr) === getAddress(DEFAULT_SIMULATION_ADDRESS);
+    const suffix = isPlaceholder ? ' (simulation placeholder)' : '';
+
+    if (status === 'eoa') info.push(`${address}${suffix}: EOA (verification not applicable)`);
     else if (status === 'empty')
-      info.push(`${address}: EOA (may have code later, verification not applicable)`);
-    else if (status === 'verified') info.push(`${address}: Contract (verified)`);
-    else info.push(`${address}: Contract (not verified)`);
+      info.push(`${address}${suffix}: EOA (may have code later, verification not applicable)`);
+    else if (status === 'verified') info.push(`${address}${suffix}: Contract (verified)`);
+    else info.push(`${address}${suffix}: Contract (not verified)`);
   }
   return info;
 }

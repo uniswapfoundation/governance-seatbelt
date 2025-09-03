@@ -33,7 +33,7 @@ describe('checkEthBalanceChanges', () => {
     expect(recipientRow).toBeDefined();
 
     // Check that the table contains the proposer address with negative change
-    const proposerAddress = '0xD73a92Be73EfbFcF3854433A5FcbAbF9c1316073';
+    const proposerAddress = '0x0000000000000000000000000000000000001234';
     const proposerRow = result.info.find(
       (msg) =>
         msg.includes(proposerAddress) && msg.includes('color:red') && msg.includes('-0.1000 ETH'),

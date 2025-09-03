@@ -29,7 +29,7 @@ import type {
   WriteSimulationResultsJsonParams,
 } from '../types';
 import { getChainConfig } from '../utils/clients/client';
-import { getContractName } from '../utils/clients/tenderly';
+import { DEFAULT_SIMULATION_ADDRESS, getContractName } from '../utils/clients/tenderly';
 import { formatProposalId } from '../utils/contracts/governor';
 
 // --- Markdown helpers ---
@@ -363,6 +363,8 @@ function generateStructuredReport(
     metadata: {
       proposalId: formatProposalId(governorType, proposal.id!),
       proposer: proposal.proposer,
+      proposerIsPlaceholder:
+        getAddress(proposal.proposer) === getAddress(DEFAULT_SIMULATION_ADDRESS),
       governorAddress,
       executor,
       simulationBlockNumber: blocks.current.number?.toString() ?? 'unknown',
@@ -582,6 +584,8 @@ async function toMarkdownProposalReport(
   if (!blocks.current.number) throw new Error('Current block number is null');
 
   // Generate the report. We insert an empty table of contents header which is populated later using remark-toc.
+  const isPlaceholderProposer = getAddress(proposer) === getAddress(DEFAULT_SIMULATION_ADDRESS);
+
   const report = `
 # ${getProposalTitle(description.trim())}
 
@@ -590,7 +594,7 @@ _Updated as of block [${blocks.current.number}](https://etherscan.io/block/${blo
   )}_
 
 - ID: ${formatProposalId(governorType, id!)}
-- Proposer: ${toAddressLink(proposer)}
+- Proposer: ${toAddressLink(proposer)}${isPlaceholderProposer ? ' (placeholder simulation address)' : ''}
 - Start Block: ${startBlock} (${
     blocks.start
       ? formatTime(blocks.start.timestamp)

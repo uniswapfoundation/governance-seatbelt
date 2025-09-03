@@ -591,6 +591,7 @@ export interface StructuredSimulationReport {
   metadata: {
     proposalId: string;
     proposer: string;
+    proposerIsPlaceholder?: boolean;
     governorAddress: string;
     executor?: string;
     simulationBlockNumber: string;

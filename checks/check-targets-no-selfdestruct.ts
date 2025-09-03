@@ -1,6 +1,7 @@
 import { type PublicClient, getAddress } from 'viem';
 import { toAddressLink } from '../presentation/report';
 import type { CallTrace, ProposalCheck, TenderlySimulation } from '../types';
+import { DEFAULT_SIMULATION_ADDRESS } from '../utils/clients/tenderly';
 
 /**
  * Check all targets with code if they contain selfdestruct.
@@ -70,15 +71,27 @@ async function checkNoSelfdestructs(
   const info: string[] = [];
   const warn: string[] = [];
   const error: string[] = [];
+  let placeholderWarningCount = 0;
   for (const addr of addresses) {
     const status = await checkNoSelfdestruct(trustedAddrs, addr, publicClient);
     const address = toAddressLink(addr, blockExplorerUrl);
-    if (status === 'eoa') info.push(`${address}: EOA`);
-    else if (status === 'empty') warn.push(`${address}: EOA (may have code later)`);
-    else if (status === 'safe') info.push(`${address}: Contract (looks safe)`);
-    else if (status === 'delegatecall') warn.push(`${address}: Contract (with DELEGATECALL)`);
-    else if (status === 'trusted') info.push(`${address}: Trusted contract (not checked)`);
-    else error.push(`${address}: Contract (with SELFDESTRUCT)`);
+    const isPlaceholder = getAddress(addr) === getAddress(DEFAULT_SIMULATION_ADDRESS);
+    const suffix = isPlaceholder ? ' (simulation placeholder)' : '';
+    if (status === 'eoa') info.push(`${address}${suffix}: EOA`);
+    else if (status === 'empty') {
+      warn.push(`${address}${suffix}: EOA (may have code later)`);
+      if (isPlaceholder) placeholderWarningCount++;
+    } else if (status === 'safe') info.push(`${address}${suffix}: Contract (looks safe)`);
+    else if (status === 'delegatecall') {
+      warn.push(`${address}${suffix}: Contract (with DELEGATECALL)`);
+      if (isPlaceholder) placeholderWarningCount++;
+    } else if (status === 'trusted')
+      info.push(`${address}${suffix}: Trusted contract (not checked)`);
+    else error.push(`${address}${suffix}: Contract (with SELFDESTRUCT)`);
+  }
+  // Suppress warnings if the only warnings are due to the simulation placeholder address
+  if (warn.length > 0 && placeholderWarningCount === warn.length) {
+    warn.length = 0;
   }
   return { info, warn, error };
 }
