@@ -42,7 +42,7 @@ describe('Selfdestruct checks - security against placeholder bypass', () => {
   test('prevents security bypass when malicious placeholder is used', async () => {
     // An attacker trying to use a dangerous address as "placeholder"
     const maliciousPlaceholder = getAddress('0xDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF');
-    
+
     // Configure PC to return malicious address as empty (would trigger warning)
     const deps = makeDeps({
       publicClient: {
@@ -71,7 +71,7 @@ describe('Selfdestruct checks - security against placeholder bypass', () => {
 
   test('only suppresses warnings from the legitimate hardcoded placeholder', async () => {
     const legitimatePlaceholder = DEFAULT_SIMULATION_ADDRESS;
-    
+
     const deps = makeDeps({
       publicClient: {
         getCode: async ({ address }: { address: string }) => {

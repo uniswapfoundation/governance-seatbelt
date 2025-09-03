@@ -72,13 +72,13 @@ async function checkNoSelfdestructs(
   const warn: string[] = [];
   const error: string[] = [];
   const placeholderWarnings: string[] = [];
-  
+
   for (const addr of addresses) {
     const status = await checkNoSelfdestruct(trustedAddrs, addr, publicClient);
     const address = toAddressLink(addr, blockExplorerUrl);
     const isOurPlaceholder = getAddress(addr) === getAddress(DEFAULT_SIMULATION_ADDRESS);
     const suffix = isOurPlaceholder ? ' (simulation placeholder)' : '';
-    
+
     if (status === 'eoa') {
       info.push(`${address}${suffix}: EOA`);
     } else if (status === 'empty') {
@@ -103,10 +103,10 @@ async function checkNoSelfdestructs(
       error.push(`${address}${suffix}: Contract (with SELFDESTRUCT)`);
     }
   }
-  
+
   // Only suppress warnings for the specific hardcoded DEFAULT_SIMULATION_ADDRESS
   // This prevents security bypass where someone sets placeholder to a dangerous address
-  const legitPlaceholderWarnings = placeholderWarnings.filter(warning => {
+  const legitPlaceholderWarnings = placeholderWarnings.filter((warning) => {
     // Extract the address from the warning message to verify it matches our hardcoded address
     const addressMatch = warning.match(/\[0x[a-fA-F0-9]{40}\]/);
     if (addressMatch) {
@@ -115,11 +115,13 @@ async function checkNoSelfdestructs(
     }
     return false;
   });
-  
+
   // Add any non-legitimate placeholder warnings as real warnings (security protection)
-  const suspiciousWarnings = placeholderWarnings.filter(warning => !legitPlaceholderWarnings.includes(warning));
+  const suspiciousWarnings = placeholderWarnings.filter(
+    (warning) => !legitPlaceholderWarnings.includes(warning),
+  );
   warn.push(...suspiciousWarnings);
-  
+
   // Only suppress legitimate placeholder warnings if there are no other warnings
   if (warn.length === 0 && legitPlaceholderWarnings.length > 0) {
     // No real warnings, so we can safely suppress legitimate placeholder warnings

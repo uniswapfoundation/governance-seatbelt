@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import { existsSync, unlinkSync } from 'node:fs';
 import { getAddress } from 'viem';
 import { writeSimulationResultsJson } from '../presentation/report';
-import { DEFAULT_SIMULATION_ADDRESS } from '../utils/clients/tenderly';
 import type { AllCheckResults, GovernorType, ProposalEvent, SimulationBlocks } from '../types';
-import { existsSync, unlinkSync } from 'node:fs';
+import { DEFAULT_SIMULATION_ADDRESS } from '../utils/clients/tenderly';
 
 function makeMockBlocks(): SimulationBlocks {
   return {
@@ -45,7 +45,7 @@ describe('Executor placeholder detection', () => {
     const checks = makeMockChecks();
     const governorAddress = '0x3333333333333333333333333333333333333333';
     const outputPath = '/tmp/test-executor-placeholder.json';
-    
+
     // Clean up any existing test file
     if (existsSync(outputPath)) {
       unlinkSync(outputPath);
@@ -64,7 +64,7 @@ describe('Executor placeholder detection', () => {
     });
 
     expect(existsSync(outputPath)).toBe(true);
-    
+
     const resultData = await Bun.file(outputPath).json();
     expect(resultData.report.structuredReport.metadata.executor).toBe(DEFAULT_SIMULATION_ADDRESS);
     expect(resultData.report.structuredReport.metadata.executorIsPlaceholder).toBe(true);
@@ -81,7 +81,7 @@ describe('Executor placeholder detection', () => {
     const governorAddress = '0x3333333333333333333333333333333333333333';
     const realExecutor = '0x4444444444444444444444444444444444444444';
     const outputPath = '/tmp/test-executor-real.json';
-    
+
     // Clean up any existing test file
     if (existsSync(outputPath)) {
       unlinkSync(outputPath);
@@ -100,7 +100,7 @@ describe('Executor placeholder detection', () => {
     });
 
     expect(existsSync(outputPath)).toBe(true);
-    
+
     const resultData = await Bun.file(outputPath).json();
     expect(resultData.report.structuredReport.metadata.executor).toBe(realExecutor);
     expect(resultData.report.structuredReport.metadata.executorIsPlaceholder).toBe(false);
@@ -116,7 +116,7 @@ describe('Executor placeholder detection', () => {
     const checks = makeMockChecks();
     const governorAddress = '0x3333333333333333333333333333333333333333';
     const outputPath = '/tmp/test-executor-undefined.json';
-    
+
     // Clean up any existing test file
     if (existsSync(outputPath)) {
       unlinkSync(outputPath);
@@ -135,7 +135,7 @@ describe('Executor placeholder detection', () => {
     });
 
     expect(existsSync(outputPath)).toBe(true);
-    
+
     const resultData = await Bun.file(outputPath).json();
     expect(resultData.report.structuredReport.metadata.executor).toBeUndefined();
     expect(resultData.report.structuredReport.metadata.executorIsPlaceholder).toBeUndefined();

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { createPublicClient, getAddress, http } from 'viem';
+import { http, createPublicClient, getAddress } from 'viem';
 import { mainnet } from 'viem/chains';
 import { DEFAULT_SIMULATION_ADDRESS } from '../utils/clients/tenderly';
 
@@ -20,7 +20,6 @@ describe('DEFAULT_SIMULATION_ADDRESS constant and on-chain state', () => {
 
     // Expect no bytecode and zero nonce
     expect(code === '0x' || code === undefined || code === null).toBe(true);
-    expect(nonce).toBe(0n);
+    expect(nonce).toBe(0);
   });
 });
-
