@@ -1,4 +1,4 @@
-name: Governance Checks
+name: governance-checks.yaml
 
 on:
   schedule:
