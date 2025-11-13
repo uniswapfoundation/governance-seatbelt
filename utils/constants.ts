@@ -29,4 +29,4 @@ export const DAO_NAME = process.env.DAO_NAME ?? null;
 export const GOVERNOR_ADDRESS = process.env.GOVERNOR_ADDRESS
   ? getAddress(process.env.GOVERNOR_ADDRESS)
   : null;
-export const REPORTS_BRANCH = 'reports';
+export const REPORTS_OUTPUT_DIRECTORY = 'reports';

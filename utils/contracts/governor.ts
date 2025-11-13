@@ -201,7 +201,8 @@ export async function generateProposalId(
   // Fetch proposal count from the contract and increment it by 1.
   if (governorType === 'bravo') {
     const count = await governorBravo(address).read.proposalCount();
-    return count + 1n;
+    const newProposalId = count + 1n;
+    return newProposalId;
   }
 
   return await publicClient.readContract({
@@ -302,5 +303,3 @@ export function formatProposalId(governorType: GovernorType, id: string | bigint
   if (governorType === 'oz') return `0x${bigIntId.toString(16)}`;
   return bigIntId.toString();
 }
-
-export type GetGovernorReturnType = ReturnType<typeof getGovernor>;

@@ -5,10 +5,9 @@ import {
   parseAbiItem,
   toFunctionSelector,
 } from 'viem';
-import { bullet } from '../presentation/report';
-import type { FluffyCall, ProposalCheck, TenderlyContract } from '../types';
-import { decodeFunctionWithAbi } from '../utils/clients/etherscan';
-import { getContractName } from '../utils/clients/tenderly';
+import type { DecodedCall, ProposalCheck, TenderlyContract, TenderlySimulation } from '../types';
+import { BlockExplorerFactory } from '../utils/clients/block-explorers/factory';
+import { getContractNameFromTenderly } from '../utils/clients/tenderly';
 import { fetchTokenMetadata } from '../utils/contracts/erc20';
 
 // Cache for decoded function data to avoid redundant decoding
@@ -19,8 +18,24 @@ const decodedFunctionCache: Record<string, { name: string; args: unknown[] }> = 
  */
 export const checkDecodeCalldata: ProposalCheck = {
   name: 'Decodes target calldata into a human-readable format',
-  async checkProposal(proposal, sim, deps) {
+  async checkProposal(proposal, sim, deps, l2Simulations) {
     const warnings: string[] = [];
+
+    // Check if we're running on L2 and have cross-chain message data available
+    const isL2Chain = deps.chainConfig?.chainId !== 1;
+    const hasL2Data = l2Simulations && l2Simulations.length > 0;
+
+    if (isL2Chain && hasL2Data) {
+      // Handle L2 cross-chain calldata decoding
+      return await handleL2CrossChainCalldata(
+        l2Simulations,
+        sim,
+        warnings,
+        deps.chainConfig.chainId,
+      );
+    }
+
+    // Handle regular L1 calldata decoding (existing logic)
     // Generate the raw calldata for each proposal action
     const calldatas = proposal.signatures.map((sig, i) => {
       return sig
@@ -33,7 +48,7 @@ export const checkDecodeCalldata: ProposalCheck = {
     const descriptions = await Promise.all(
       calldatas.map(async (calldata, i) => {
         // Find the first matching call
-        let call = findMatchingCall(getAddress(deps.timelock.address), calldata, calls);
+        let call = findMatchingCall(getAddress(deps.timelock.address), calldata, calls || []);
         if (!call) {
           // If we can't find the call in the trace, add a warning
           // Skip the warning for ETH transfers which might not appear in the trace
@@ -48,7 +63,7 @@ export const checkDecodeCalldata: ProposalCheck = {
             to: proposal.targets[i],
             input: calldata,
             value: proposal.values?.[i].toString() ?? '0',
-          } as FluffyCall;
+          } as DecodedCall;
         } else {
           // If we found the call, check for subcalls with the same input data
           call = returnCallOrMatchingSubcall(calldata, call);
@@ -60,14 +75,112 @@ export const checkDecodeCalldata: ProposalCheck = {
           (c) => getAddress(c.address) === getAddress(targetAddress),
         );
 
-        return prettifyCalldata(call, targetAddress, warnings, contract);
+        return prettifyCalldata(call, targetAddress, warnings, contract, deps.chainConfig.chainId);
       }),
     );
 
-    const info = descriptions.filter((d) => d !== null).map((d) => bullet(d));
+    const info = descriptions.filter((d) => d !== null).map((d) => d);
     return { info, warnings, errors: [] };
   },
 };
+
+/**
+ * Handle L2 cross-chain calldata decoding using the actual L2 execution data
+ */
+async function handleL2CrossChainCalldata(
+  l2Simulations: Array<{ chainId: number; sim: TenderlySimulation }>,
+  sim: TenderlySimulation,
+  warnings: string[],
+  chainId: number,
+) {
+  // We need to access the destination simulations to get l2Params
+  // Since l2Simulations doesn't include l2Params, we need to get it from the global result
+  // For now, let's extract L2 calldata from the simulation traces and decode what we can find
+
+  const allL2Calls: DecodedCall[] = [];
+
+  // Extract calls from all L2 simulations
+  for (const l2Sim of l2Simulations) {
+    if (l2Sim.sim?.transaction?.transaction_info?.call_trace?.calls) {
+      // Find calls that aren't just system calls
+      const meaningfulCalls = extractMeaningfulL2Calls(
+        l2Sim.sim.transaction.transaction_info.call_trace,
+      );
+      allL2Calls.push(...meaningfulCalls);
+    }
+  }
+
+  if (allL2Calls.length === 0) {
+    warnings.push('No meaningful L2 execution calls found in cross-chain simulation');
+    return { info: [], warnings, errors: [] };
+  }
+
+  // Process each meaningful L2 call
+  const descriptions = await Promise.all(
+    allL2Calls.map(async (call) => {
+      // Get contract information from the simulation
+      const contract = sim.contracts.find(
+        (c: TenderlyContract) => getAddress(c.address) === getAddress(call.to),
+      );
+
+      return prettifyCalldata(call, call.to, warnings, contract, chainId);
+    }),
+  );
+
+  const validDescriptions = descriptions.filter((d) => d !== null);
+  if (validDescriptions.length === 0) {
+    warnings.push('Could not decode any L2 cross-chain execution calls');
+    return { info: [], warnings, errors: [] };
+  }
+
+  return {
+    info: validDescriptions,
+    warnings,
+    errors: [],
+  };
+}
+
+/**
+ * Extract meaningful L2 calls from the call trace, filtering out system calls
+ */
+function extractMeaningfulL2Calls(
+  callTrace: TenderlySimulation['transaction']['transaction_info']['call_trace'],
+): DecodedCall[] {
+  const meaningfulCalls: DecodedCall[] = [];
+
+  // biome-ignore lint/suspicious/noExplicitAny: Complex nested Tenderly types make this difficult to type precisely
+  function traverseCalls(calls: any[]): void {
+    for (const call of calls || []) {
+      // Skip system addresses and empty calls
+      if (call.to && call.input && call.input !== '0x') {
+        // Skip Arbitrum system addresses
+        const isSystemAddress =
+          call.to.toLowerCase().includes('fffff') || call.to.toLowerCase().includes('00000');
+
+        if (!isSystemAddress) {
+          meaningfulCalls.push({
+            from: call.from,
+            to: call.to,
+            input: call.input,
+            value: call.value || '0',
+            function_name: call.function_name,
+            decoded_input: call.decoded_input,
+            decoded_output: call.decoded_output,
+            calls: call.calls,
+          } as DecodedCall);
+        }
+      }
+
+      // Recursively check subcalls
+      if (call.calls) {
+        traverseCalls(call.calls);
+      }
+    }
+  }
+
+  traverseCalls([callTrace]);
+  return meaningfulCalls;
+}
 
 // --- Helper methods ---
 
@@ -77,10 +190,10 @@ export const checkDecodeCalldata: ProposalCheck = {
  * for is not always at the same depth of the call stack. If all governor `execute` calls were made
  * from an EOA this would be true, but because calls to `execute` can also be made from contracts
  * we don't know the depth of the call containing `calldata`
- * @dev Using any[] due to incompatible call types (CallTraceCall, FluffyCall) that share common properties
+ * @dev Using any[] due to incompatible call types (CallTraceCall, DecodedCall) that share common properties
  */
 // biome-ignore lint/suspicious/noExplicitAny: <explanation>
-function findMatchingCall(from: string, calldata: string, calls: any[]): FluffyCall | null {
+function findMatchingCall(from: string, calldata: string, calls: any[]): DecodedCall | null {
   const callMatches = (f: string, c: string) =>
     getAddress(f) === getAddress(from) && c === calldata;
   for (const call of calls) {
@@ -98,27 +211,29 @@ function findMatchingCall(from: string, calldata: string, calls: any[]): FluffyC
  * this will be the decoded call (e.g. if there are proxies the top level call with matching
  * calldata will be the fallback function)
  */
-function returnCallOrMatchingSubcall(calldata: string, call: FluffyCall): FluffyCall {
+function returnCallOrMatchingSubcall(calldata: string, call: DecodedCall): DecodedCall {
   if (!call.calls || !call.calls?.length) return call;
   return call.calls[0].input === calldata
-    ? returnCallOrMatchingSubcall(calldata, call.calls[0] as FluffyCall)
+    ? returnCallOrMatchingSubcall(calldata, call.calls[0] as DecodedCall)
     : call;
 }
 
 /**
  * Given a call, generate a human-readable function signature
  */
-function getSignature(call: FluffyCall) {
+function getSignature(call: DecodedCall) {
   // Return selector if call is not decoded, otherwise generate the signature
   if (!call.function_name) return call.input.slice(0, 10);
   let sig = `${call.function_name}(`;
-  call.decoded_input?.forEach((arg, i) => {
+  // biome-ignore lint/suspicious/noExplicitAny: Dynamic decoded values from DecodedCall interface
+  call.decoded_input?.forEach((arg: any, i: number) => {
     if (i !== 0) sig += ', ';
     sig += arg.soltype.type;
     sig += arg.soltype.name ? ` ${arg.soltype.name}` : '';
   });
   sig += ')(';
-  call.decoded_output?.forEach((arg, i) => {
+  // biome-ignore lint/suspicious/noExplicitAny: Dynamic decoded values from DecodedCall interface
+  call.decoded_output?.forEach((arg: any, i: number) => {
     if (i !== 0) sig += ', ';
     sig += arg.soltype.type;
     sig += arg.soltype.name ? ` ${arg.soltype.name}` : '';
@@ -130,7 +245,7 @@ function getSignature(call: FluffyCall) {
 /**
  * Given a target, signature, and call, generate a human-readable description
  */
-function getDescription(contractIdentifier: string, sig: string, call: FluffyCall) {
+function getDescription(contractIdentifier: string, sig: string, call: DecodedCall) {
   let description = `On contract ${contractIdentifier}, call `;
 
   // If the call is not decoded, provide a generic description
@@ -139,7 +254,8 @@ function getDescription(contractIdentifier: string, sig: string, call: FluffyCal
   }
 
   description += `\`${sig}\` with arguments `;
-  call.decoded_input?.forEach((arg, i) => {
+  // biome-ignore lint/suspicious/noExplicitAny: Dynamic decoded values from DecodedCall interface
+  call.decoded_input?.forEach((arg: any, i: number) => {
     if (i !== 0) description += ', ';
     description += '`';
     description += arg.soltype.name ? `${arg.soltype.name}=` : '';
@@ -187,10 +303,11 @@ function formatArgs(args: unknown[]): string {
  * Given a call, return a human-readable description of the call
  */
 async function prettifyCalldata(
-  call: FluffyCall,
+  call: DecodedCall,
   target: string,
   warnings: string[],
   contract: TenderlyContract | undefined,
+  chainId: number,
 ) {
   // Handle ETH transfers (empty calldata with value)
   if (call.input === '0x' && call.value && BigInt(call.value) > 0n) {
@@ -202,7 +319,7 @@ async function prettifyCalldata(
   const selector = call.input.slice(0, 10);
 
   // Format the contract identifier using the contract information from the simulation
-  const contractIdentifier = contract ? getContractName(contract) : `\`${target}\``;
+  const contractIdentifier = contract ? getContractNameFromTenderly(contract) : `\`${target}\``;
 
   // Check if we have a cached decoded function
   const cacheKey = `${target}-${call.input}`;
@@ -219,7 +336,11 @@ async function prettifyCalldata(
 
   // Try to decode using Etherscan ABI first
   try {
-    const decoded = await decodeFunctionWithAbi(target, call.input as `0x${string}`);
+    const decoded = await BlockExplorerFactory.decodeFunctionWithAbi(
+      target,
+      call.input as `0x${string}`,
+      chainId,
+    );
     if (decoded) {
       // Cache the decoded function
       decodedFunctionCache[cacheKey] = decoded;
@@ -264,10 +385,10 @@ async function prettifyCalldata(
 // Handlers for token-related function calls
 const TOKEN_HANDLERS: Record<
   string,
-  (call: FluffyCall, decimals: number, symbol: string | null, contractIdentifier: string) => string
+  (call: DecodedCall, decimals: number, symbol: string | null, contractIdentifier: string) => string
 > = {
   [toFunctionSelector('approve(address,uint256)')]: (
-    call: FluffyCall,
+    call: DecodedCall,
     decimals: number,
     symbol: string | null,
     contractIdentifier: string,
@@ -280,7 +401,7 @@ const TOKEN_HANDLERS: Record<
     return `\`${call.from}\` approves \`${getAddress(spender)}\` to spend ${formatUnits(value, decimals)} ${symbol} on ${contractIdentifier} (formatted)`;
   },
   [toFunctionSelector('transfer(address,uint256)')]: (
-    call: FluffyCall,
+    call: DecodedCall,
     decimals: number,
     symbol: string | null,
     contractIdentifier: string,
@@ -293,7 +414,7 @@ const TOKEN_HANDLERS: Record<
     return `\`${call.from}\` transfers ${formatUnits(value, decimals)} ${symbol} to \`${getAddress(to)}\` on ${contractIdentifier} (formatted)`;
   },
   [toFunctionSelector('transferFrom(address,address,uint256)')]: (
-    call: FluffyCall,
+    call: DecodedCall,
     decimals: number,
     symbol: string | null,
     contractIdentifier: string,

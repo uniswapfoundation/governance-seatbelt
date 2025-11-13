@@ -1,4 +1,4 @@
-import type { SimulationData } from '../../types';
+import type { SimulationData } from '../../types.d';
 
 export interface CachedProposalEvent {
   startBlock: string;

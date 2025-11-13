@@ -5,17 +5,136 @@
 import { getAddress } from 'viem';
 import ALL_CHECKS from './checks';
 import { generateAndSaveReports } from './presentation/report';
-import type { AllCheckResults, ProposalData, SimulationConfig } from './types';
-import { publicClient } from './utils/clients/client';
-import { simulate } from './utils/clients/tenderly';
-import { DAO_NAME, GOVERNOR_ADDRESS } from './utils/constants';
+import type {
+  AllCheckResults,
+  ProposalData,
+  ProposalEvent,
+  SimulationConfig,
+  SimulationResult,
+  TenderlySimulation,
+} from './types.d';
+import { getChainConfig, getClientForChain, publicClient } from './utils/clients/client';
+import { handleCrossChainSimulations, simulate } from './utils/clients/tenderly';
+import { DAO_NAME, GOVERNOR_ADDRESS, REPORTS_OUTPUT_DIRECTORY } from './utils/constants';
 import {
-  formatProposalId,
   getGovernor,
+  getProposalIds,
   getTimelock,
   inferGovernorType,
 } from './utils/contracts/governor';
 import { PROPOSAL_STATES } from './utils/contracts/governor-bravo';
+
+/**
+ * Run checks for a specific chain simulation
+ */
+export async function runChecksForChain(
+  proposal: ProposalEvent,
+  sim: TenderlySimulation,
+  deps: ProposalData,
+  chainId: number,
+  allL2Simulations?: SimulationResult['destinationSimulations'],
+): Promise<AllCheckResults> {
+  const results: AllCheckResults = {};
+  const chainConfig = getChainConfig(chainId);
+
+  // Run all checks with chain-specific configuration
+  const depsWithConfig = {
+    ...deps,
+    chainConfig,
+  };
+
+  // For L2 checks, pass all L2 simulations
+  const l2Simulations =
+    chainId !== 1 && allL2Simulations
+      ? allL2Simulations.filter((s) => s.sim).map((s) => ({ chainId: s.chainId, sim: s.sim! }))
+      : undefined;
+
+  // Chain-agnostic checks
+  results.checkStateChanges = {
+    name: ALL_CHECKS.checkStateChanges.name,
+    result: await ALL_CHECKS.checkStateChanges.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
+  };
+  results.checkLogs = {
+    name: ALL_CHECKS.checkLogs.name,
+    result: await ALL_CHECKS.checkLogs.checkProposal(proposal, sim, depsWithConfig, l2Simulations),
+  };
+  results.checkEthBalanceChanges = {
+    name: ALL_CHECKS.checkEthBalanceChanges.name,
+    result: await ALL_CHECKS.checkEthBalanceChanges.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
+  };
+  results.checkDecodeCalldata = {
+    name: ALL_CHECKS.checkDecodeCalldata.name,
+    result: await ALL_CHECKS.checkDecodeCalldata.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
+  };
+
+  // Chain-specific checks
+  results.checkTargetsVerifiedOnBlockExplorer = {
+    name: ALL_CHECKS.checkTargetsVerifiedOnBlockExplorer.name,
+    result: await ALL_CHECKS.checkTargetsVerifiedOnBlockExplorer.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
+  };
+  results.checkTouchedContractsVerifiedOnBlockExplorer = {
+    name: ALL_CHECKS.checkTouchedContractsVerifiedOnBlockExplorer.name,
+    result: await ALL_CHECKS.checkTouchedContractsVerifiedOnBlockExplorer.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
+  };
+  results.checkTargetsNoSelfdestruct = {
+    name: ALL_CHECKS.checkTargetsNoSelfdestruct.name,
+    result: await ALL_CHECKS.checkTargetsNoSelfdestruct.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
+  };
+  results.checkTouchedContractsNoSelfdestruct = {
+    name: ALL_CHECKS.checkTouchedContractsNoSelfdestruct.name,
+    result: await ALL_CHECKS.checkTouchedContractsNoSelfdestruct.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
+  };
+  results.checkSolc = {
+    name: ALL_CHECKS.checkSolc.name,
+    result: await ALL_CHECKS.checkSolc.checkProposal(proposal, sim, depsWithConfig, l2Simulations),
+  };
+  results.checkSlither = {
+    name: ALL_CHECKS.checkSlither.name,
+    result: await ALL_CHECKS.checkSlither.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
+  };
+
+  return results;
+}
 
 /**
  * @notice Run checks for a specific proposal ID
@@ -25,11 +144,30 @@ async function main() {
   if (!GOVERNOR_ADDRESS) throw new Error('Must provide a GOVERNOR_ADDRESS');
   if (!DAO_NAME) throw new Error('Must provide a DAO_NAME');
 
-  // Set the proposal ID to check
-  const proposalId = process.argv[2] ? BigInt(process.argv[2]) : BigInt(81); // Default to 81 if no argument provided
-
   // Get governor type and contract
   const governorType = await inferGovernorType(GOVERNOR_ADDRESS);
+
+  // Set the proposal ID to check - default to latest proposal if no argument provided
+  let proposalId: bigint;
+  if (process.argv[2]) {
+    // If a proposal ID is provided, use it
+    proposalId = BigInt(process.argv[2]);
+  } else {
+    // Get the latest proposal ID
+    const latestBlock = await publicClient.getBlock();
+    if (!latestBlock.number) throw new Error('Failed to get latest block number');
+
+    const proposalIds = await getProposalIds(governorType, GOVERNOR_ADDRESS, latestBlock.number);
+    if (proposalIds.length === 0) {
+      throw new Error('No proposals found for this governor');
+    }
+
+    // Get the latest proposal ID (highest number)
+    proposalId = proposalIds.reduce((latest: bigint, current: bigint) =>
+      current > latest ? current : latest,
+    );
+    console.log(`No proposal ID provided, defaulting to latest proposal: ${proposalId}`);
+  }
   const governor = getGovernor(governorType, GOVERNOR_ADDRESS);
 
   // Get proposal state to determine simulation type
@@ -56,53 +194,87 @@ async function main() {
     governor,
     timelock: await getTimelock(governorType, governor.address),
     publicClient,
+    chainConfig: getChainConfig(1), // Mainnet chain config
+    targets: [], // Will be populated from simulation
+    touchedContracts: [], // Will be populated from simulation
   };
 
-  // Run simulation
-  console.log('Simulating proposal...');
-  const { sim, proposal, latestBlock } = await simulate(config);
-  console.log('Simulation complete.');
+  // Run source simulation
+  const sourceResult = await simulate(config);
 
-  // Run checks
-  console.log('Running checks...');
-  const checkResults: AllCheckResults = Object.fromEntries(
-    await Promise.all(
-      Object.keys(ALL_CHECKS).map(async (checkId) => [
-        checkId,
-        {
-          name: ALL_CHECKS[checkId].name,
-          result: await ALL_CHECKS[checkId].checkProposal(proposal, sim, proposalData),
-        },
-      ]),
-    ),
+  // Handle cross-chain messages
+  const finalResult = await handleCrossChainSimulations(sourceResult);
+
+  // Run checks for source chain
+  const sourceChecks = await runChecksForChain(
+    finalResult.proposal,
+    finalResult.sim,
+    proposalData,
+    1, // Mainnet chain ID
+    finalResult.destinationSimulations,
   );
 
-  // Generate markdown report
-  console.log('Generating report...');
+  // Run checks for destination chains if any
+  const destinationChecks: Record<number, AllCheckResults> = {};
+  if (finalResult.destinationSimulations) {
+    for (const destSim of finalResult.destinationSimulations) {
+      if (destSim.sim) {
+        const l2Deps: ProposalData = {
+          ...proposalData,
+          publicClient: getClientForChain(destSim.chainId),
+          chainConfig: getChainConfig(destSim.chainId),
+        };
+        destinationChecks[destSim.chainId] = await runChecksForChain(
+          finalResult.proposal,
+          destSim.sim,
+          l2Deps,
+          destSim.chainId,
+          finalResult.destinationSimulations,
+        );
+      }
+    }
+  }
+
+  // Fetch full block data for start and end blocks
   const [startBlock, endBlock] = await Promise.all([
-    proposal.startBlock <= (latestBlock.number ?? 0n)
-      ? publicClient.getBlock({ blockNumber: proposal.startBlock })
+    finalResult.proposal.startBlock <= (finalResult.latestBlock.number ?? 0n)
+      ? publicClient.getBlock({ blockNumber: finalResult.proposal.startBlock })
       : null,
-    proposal.endBlock <= (latestBlock.number ?? 0n)
-      ? publicClient.getBlock({ blockNumber: proposal.endBlock })
+    finalResult.proposal.endBlock <= (finalResult.latestBlock.number ?? 0n)
+      ? publicClient.getBlock({ blockNumber: finalResult.proposal.endBlock })
       : null,
   ]);
 
-  // Save markdown report to a file
-  const dir = `./reports/${config.daoName}/${config.governorAddress}`;
-  await generateAndSaveReports(
-    governorType,
-    { start: startBlock, end: endBlock, current: latestBlock },
-    proposal,
-    checkResults,
-    dir,
-  );
+  // Construct the blocks object
+  const blocks = {
+    current: finalResult.latestBlock,
+    start: startBlock,
+    end: endBlock,
+  };
 
-  console.log(`Done! Report saved to ${dir}/${formatProposalId(governorType, proposalId)}.md`);
+  // Generate reports
+  const dir = `./${REPORTS_OUTPUT_DIRECTORY}/${config.daoName}/${config.governorAddress}`;
+  await generateAndSaveReports({
+    governorType,
+    blocks,
+    proposal: finalResult.proposal,
+    checks: sourceChecks,
+    outputDir: dir,
+    governorAddress: config.governorAddress,
+    destinationSimulations: finalResult.destinationSimulations,
+    destinationChecks,
+    executor: finalResult.executor,
+    proposalCreatedBlock: finalResult.proposalCreatedBlock,
+    proposalExecutedBlock: finalResult.proposalExecutedBlock,
+  });
 }
 
-// Run the script
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+// Only run main if this file is executed directly, not when imported
+if (import.meta.main) {
+  main()
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error(error);
+      process.exit(1);
+    });
+}

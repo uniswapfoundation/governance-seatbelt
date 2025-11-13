@@ -1,16 +1,18 @@
 import { getAddress } from 'viem';
 import type { AssetChange, BalanceChange, ProposalCheck, TenderlyContract } from '../types';
-import { getContractName } from '../utils/clients/tenderly';
+import { DEFAULT_SIMULATION_ADDRESS, getContractNameFromTenderly } from '../utils/clients/tenderly';
 
 /**
  * Reports all ETH balance changes from the proposal
  */
 export const checkEthBalanceChanges: ProposalCheck = {
   name: 'Reports all ETH balance changes from the proposal',
-  async checkProposal(proposal, sim) {
+  async checkProposal(proposal, sim, deps) {
     const info: string[] = [];
     const warnings: string[] = [];
     const errors: string[] = [];
+
+    const blockExplorerUrl = deps.chainConfig.blockExplorer.baseUrl;
 
     if (!sim.transaction.transaction_info.asset_changes) {
       return { info: ['No ETH transfers detected'], warnings, errors };
@@ -18,7 +20,7 @@ export const checkEthBalanceChanges: ProposalCheck = {
 
     // Filter for ETH transfers
     const ethTransfers = sim.transaction.transaction_info.asset_changes.filter(
-      (change) => change.token_info.type === 'Native',
+      (change) => change.token_info.standard === 'NativeCurrency',
     );
 
     if (ethTransfers.length === 0) {
@@ -50,6 +52,7 @@ export const checkEthBalanceChanges: ProposalCheck = {
       proposalTargets,
       significantChanges,
       minorChanges,
+      blockExplorerUrl,
     );
 
     // Add a blank line after the transfer messages
@@ -96,6 +99,7 @@ function generateTransferMessages(
   proposalTargets: string[],
   significantChanges: string[],
   minorChanges: string[],
+  blockExplorerUrl: string,
 ) {
   for (const transfer of ethTransfers) {
     const from = getAddress(transfer.from);
@@ -107,14 +111,21 @@ function generateTransferMessages(
     const fromContract = findContractByAddress(from);
     const toContract = findContractByAddress(to);
 
-    // Format the from/to descriptions more clearly with Etherscan links
-    const fromName = fromContract
-      ? `[${getContractName(fromContract).split(' at ')[0]}](https://etherscan.io/address/${from})`
-      : `[EOA (${from})](https://etherscan.io/address/${from})`;
+    // Format the from/to descriptions more clearly with block explorer links
+    let fromName = fromContract
+      ? `[${getContractNameFromTenderly(fromContract).split(' at ')[0]}](${blockExplorerUrl}/address/${from})`
+      : `[EOA (${from})](${blockExplorerUrl}/address/${from})`;
+    let toName = toContract
+      ? `[${getContractNameFromTenderly(toContract).split(' at ')[0]}](${blockExplorerUrl}/address/${to})`
+      : `[EOA (${to})](${blockExplorerUrl}/address/${to})`;
 
-    const toName = toContract
-      ? `[${getContractName(toContract).split(' at ')[0]}](https://etherscan.io/address/${to})`
-      : `[EOA (${to})](https://etherscan.io/address/${to})`;
+    // Annotate simulation placeholder EOA clearly
+    if (getAddress(from) === getAddress(DEFAULT_SIMULATION_ADDRESS)) {
+      fromName += ' (simulation placeholder)';
+    }
+    if (getAddress(to) === getAddress(DEFAULT_SIMULATION_ADDRESS)) {
+      toName += ' (simulation placeholder)';
+    }
 
     // Create appropriate message based on the transfer context
     let message = '';
@@ -160,7 +171,7 @@ function addBalanceChangesTable(
   significantChanges: string[],
 ) {
   // Create table header
-  significantChanges.push('\n**ETH Balance Changes**');
+  significantChanges.push('ETH Balance Changes');
   significantChanges.push('| Address | Description | Net ETH Change |');
   significantChanges.push('| ------- | ----------- | ------------- |');
 
@@ -185,7 +196,10 @@ function addBalanceChangesTable(
       const contract = findContractByAddress(address);
 
       // Format description based on whether it's a contract or EOA
-      const description = contract ? getContractName(contract).split(' at ')[0] : 'EOA';
+      let description = contract ? getContractNameFromTenderly(contract).split(' at ')[0] : 'EOA';
+      if (getAddress(address) === getAddress(DEFAULT_SIMULATION_ADDRESS)) {
+        description += ' (simulation placeholder)';
+      }
 
       // Get the net ETH change for this address
       const netChange = netEthChanges.get(addressLower) || 0;

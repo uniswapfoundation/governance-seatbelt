@@ -1,5 +1,4 @@
-import { type Address, erc20Abi, erc20Abi_bytes32, getAddress } from 'viem';
-import { getContract } from 'viem';
+import { type Address, erc20Abi, erc20Abi_bytes32, getAddress, getContract } from 'viem';
 import { publicClient } from '../clients/client';
 
 const SAI = '0x89d24A6b4CcB1B6fAA2625fE562bDD9a23260359';

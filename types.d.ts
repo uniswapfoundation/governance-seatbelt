@@ -1,5 +1,36 @@
-import type { Address, Block } from 'viem';
-import type { getGovernor, getTimelock } from './utils/contracts/governor';
+import type { Address, Block, Hex } from 'viem';
+import type { ChainConfig } from './utils/clients/client';
+
+// --- Call Trace Types ---
+export interface CallTrace {
+  from: string;
+  to?: string;
+  input: string;
+  calls?: CallTrace[];
+  type?: string;
+  value?: string;
+  error_reason?: string;
+}
+
+// Specific call type for calldata decoding with additional properties
+export interface DecodedCall {
+  from: string;
+  to: string;
+  input: string;
+  value: string;
+  calls?: DecodedCall[];
+  function_name?: string;
+  decoded_input?: Array<{
+    soltype: { name: string; type: string };
+    // biome-ignore lint/suspicious/noExplicitAny: Dynamic decoded values can be any type
+    value: any;
+  }>;
+  decoded_output?: Array<{
+    soltype: { name: string; type: string };
+    // biome-ignore lint/suspicious/noExplicitAny: Dynamic decoded values can be any type
+    value: any;
+  }>;
+}
 
 // --- Simulation configurations ---
 // TODO Consider refactoring to an enum instead of string.
@@ -38,26 +69,34 @@ export type SimulationConfig =
 
 export type SimulationBlock = Pick<Block, 'number' | 'timestamp'>;
 
+export interface SimulationBlocks {
+  current: SimulationBlock;
+  start: SimulationBlock | null;
+  end: SimulationBlock | null;
+}
+
 export interface SimulationResult {
   sim: TenderlySimulation;
   proposal: ProposalEvent;
   deps: ProposalData;
   latestBlock: SimulationBlock;
+  executor?: string; // Who executed the proposal (for executed proposals)
+  proposalCreatedBlock?: SimulationBlock; // Block when proposal was created
+  proposalExecutedBlock?: SimulationBlock; // Block when proposal was executed (for executed proposals)
+  destinationSimulations?: Array<{
+    chainId: number;
+    bridgeType: string; // e.g., 'ArbitrumL1L2'
+    status: 'success' | 'failure';
+    error?: string; // Optional error message on failure
+    sim?: TenderlySimulation; // Tenderly result for the destination sim
+    l2Params?: ExtractedCrossChainMessage;
+  }>;
+  crossChainFailure?: boolean;
 }
 
 export interface SimulationData extends SimulationResult {
   config: SimulationConfig;
 }
-
-// --- Proposal checks ---
-export type ProposalActions = [
-  // defined as an array instead of an object because the return data from governor.getActions()
-  // has no `values` key if all values are zero
-  string[],
-  BigNumber[],
-  string[],
-  string[],
-];
 
 // TODO If adding support for a third governor, instead of hardcoding optional governor-specific
 // fields, make this a union type of each governor's individual proposal type.
@@ -97,11 +136,17 @@ export type CheckResult = {
   errors: Message[];
 };
 
-export type ProposalData = {
-  governor: ReturnType<typeof getGovernor>;
-  timelock: Awaited<ReturnType<typeof getTimelock>>;
-  publicClient: PublicClient;
-};
+export interface ProposalData {
+  // biome-ignore lint/suspicious/noExplicitAny: TODO: Properly type governor
+  governor: any;
+  // biome-ignore lint/suspicious/noExplicitAny: TODO: Properly type timelock
+  timelock: any;
+  // biome-ignore lint/suspicious/noExplicitAny: TODO: Properly type publicClient
+  publicClient: any;
+  chainConfig: ChainConfig;
+  targets: string[];
+  touchedContracts: string[];
+}
 
 export interface ProposalCheck {
   name: string;
@@ -109,11 +154,37 @@ export interface ProposalCheck {
     proposal: ProposalEvent,
     tx: TenderlySimulation,
     deps: ProposalData,
+    l2Simulations?: {
+      chainId: number;
+      sim: TenderlySimulation;
+    }[],
   ): Promise<CheckResult>;
 }
 
 export interface AllCheckResults {
   [checkId: string]: { name: string; result: CheckResult };
+}
+
+// --- Extracted Cross-Chain Message Type ---
+export type BridgeType = 'ArbitrumL1L2' | 'OptimismL1L2';
+
+/**
+ * @notice Holds the parameters extracted from a source chain simulation
+ * that are necessary to initiate a simulation on a destination chain via a bridge.
+ */
+export interface ExtractedCrossChainMessage {
+  /** @notice Identifier for the type of bridge/messaging protocol used (e.g., 'ArbitrumL1L2'). */
+  bridgeType: BridgeType;
+  /** @notice The chain ID of the destination network. */
+  destinationChainId: string;
+  /** @notice The target contract address to be called on the destination chain. */
+  l2TargetAddress: Address;
+  /** @notice The encoded calldata to be used in the transaction on the destination chain. */
+  l2InputData: Hex;
+  /** @notice The native token value (as a string) to be sent with the transaction on the destination chain. */
+  l2Value: string;
+  /** @notice The address initiating the transaction on the destination chain (often a bridge contract or alias). Optional. */
+  l2FromAddress?: Address;
 }
 
 // --- Tenderly types, Request ---
@@ -156,7 +227,7 @@ type ContractObject = {
 };
 
 export type TenderlyPayload = {
-  network_id: '1' | '3' | '4' | '5' | '42';
+  network_id: '1' | '3' | '4' | '5' | '42' | '42161';
   block_number?: number;
   transaction_index?: number;
   from: string;
@@ -220,7 +291,6 @@ interface TenderlyContract {
   balance: string;
   network_id: string;
   public: boolean;
-  boolean;
   verified_by: string;
   verification_date: null;
   address: string;
@@ -431,253 +501,9 @@ interface StackTrace {
   length: number;
 }
 
-interface CallTrace {
-  hash: From;
-  contract_name: string;
-  function_name: string;
-  function_pc: number;
-  function_op: string;
-  function_file_index: number;
-  function_code_start: number;
-  function_line_number: number;
-  function_code_length: number;
-  function_states: CallTraceFunctionState[];
-  caller_pc: number;
-  caller_op: string;
-  call_type: string;
-  error_reason: string;
-  from: From;
-  from_balance: string;
-  to: From;
-  to_balance: string;
-  value: string;
-  caller: Caller;
-  block_timestamp: Date;
-  gas: number;
-  gas_used: number;
-  intrinsic_gas: number;
-  input: string;
-  decoded_input: Input[];
-  state_diff: StateDiff[];
-  logs: Log[];
-  output: string;
-  decoded_output: FunctionVariableElement[];
-  network_id: string;
-  calls: CallTraceCall[];
-}
-
-interface Caller {
-  address: From;
-  balance: string;
-}
-
-interface CallTraceCall {
-  hash: string;
-  contract_name: string;
-  function_name: string;
-  function_pc: number;
-  function_op: string;
-  function_file_index: number;
-  function_code_start: number;
-  function_line_number: number;
-  function_code_length: number;
-  function_states: CallTraceFunctionState[];
-  function_variables: FunctionVariableElement[];
-  caller_pc: number;
-  caller_op: string;
-  caller_file_index: number;
-  caller_line_number: number;
-  caller_code_start: number;
-  caller_code_length: number;
-  call_type: string;
-  from: From;
-  from_balance: null;
-  to: From;
-  to_balance: null;
-  value: null;
-  caller: Caller;
-  block_timestamp: Date;
-  gas: number;
-  gas_used: number;
-  input: string;
-  decoded_input: Input[];
-  output: string;
-  decoded_output: FunctionVariableElement[];
-  network_id: string;
-  calls: PurpleCall[];
-}
-
-interface PurpleCall {
-  hash: string;
-  contract_name: string;
-  function_name: string;
-  function_pc: number;
-  function_op: string;
-  function_file_index: number;
-  function_code_start: number;
-  function_line_number: number;
-  function_code_length: number;
-  function_states?: FluffyFunctionState[];
-  function_variables?: FunctionVariable[];
-  caller_pc: number;
-  caller_op: string;
-  caller_file_index: number;
-  caller_line_number: number;
-  caller_code_start: number;
-  caller_code_length: number;
-  call_type: string;
-  from: From;
-  from_balance: null | string;
-  to: string;
-  to_balance: null | string;
-  value: null | string;
-  caller: Caller;
-  block_timestamp: Date;
-  gas: number;
-  gas_used: number;
-  refund_gas?: number;
-  input: string;
-  decoded_input: Input[];
-  output: string;
-  decoded_output: FunctionVariable[] | null;
-  network_id: string;
-  calls: FluffyCall[] | null;
-}
-
-interface FluffyCall {
-  hash: string;
-  contract_name: string;
-  function_name?: string;
-  function_pc: number;
-  function_op: string;
-  function_file_index?: number;
-  function_code_start?: number;
-  function_line_number?: number;
-  function_code_length?: number;
-  function_states?: FluffyFunctionState[];
-  function_variables?: FunctionVariable[];
-  caller_pc: number;
-  caller_op: string;
-  caller_file_index: number;
-  caller_line_number: number;
-  caller_code_start: number;
-  caller_code_length: number;
-  call_type: string;
-  from: string;
-  from_balance: null | string;
-  to: string;
-  to_balance: null | string;
-  value: null | string;
-  caller?: Caller;
-  block_timestamp: Date;
-  gas: number;
-  gas_used: number;
-  input: string;
-  decoded_input?: FunctionVariable[];
-  output: string;
-  decoded_output: PurpleDecodedOutput[] | null;
-  network_id: string;
-  calls: TentacledCall[] | null;
-  refund_gas?: number;
-}
-
-interface TentacledCall {
-  hash: string;
-  contract_name: string;
-  function_name: string;
-  function_pc: number;
-  function_op: string;
-  function_file_index: number;
-  function_code_start: number;
-  function_line_number: number;
-  function_code_length: number;
-  function_states: PurpleFunctionState[];
-  caller_pc: number;
-  caller_op: string;
-  caller_file_index: number;
-  caller_line_number: number;
-  caller_code_start: number;
-  caller_code_length: number;
-  call_type: string;
-  from: string;
-  from_balance: null;
-  to: string;
-  to_balance: null;
-  value: null;
-  caller: Caller;
-  block_timestamp: Date;
-  gas: number;
-  gas_used: number;
-  input: string;
-  decoded_input: FunctionVariableElement[];
-  output: string;
-  decoded_output: FunctionVariable[];
-  network_id: string;
-  calls: null;
-}
-
-interface FunctionVariableElement {
-  soltype: SoltypeElement;
-  value: string;
-}
-
-interface FunctionVariable {
-  soltype: SoltypeElement;
-  value: PurpleValue | string;
-}
-
-interface PurpleValue {
-  ballot: string;
-  basedOn: string;
-  configured: string;
-  currency: string;
-  cycleLimit: string;
-  discountRate: string;
-  duration: string;
-  fee: string;
-  id: string;
-  metadata: string;
-  number: string;
-  projectId: string;
-  start: string;
-  tapped: string;
-  target: string;
-  weight: string;
-}
-
-interface PurpleFunctionState {
-  soltype: SoltypeElement;
-  value: Record<string, string>;
-}
-
-interface PurpleDecodedOutput {
-  soltype: SoltypeElement;
-  value: boolean | PurpleValue | string;
-}
-
-interface FluffyFunctionState {
-  soltype: PurpleSoltype;
-  value: Record<string, string>;
-}
-
-interface PurpleSoltype {
-  name: string;
-  type: SoltypeType;
-  storage_location: StorageLocation;
-  components: null;
-  offset: number;
-  index: string;
-  indexed: boolean;
-}
-
 interface Input {
   soltype: SoltypeElement | null;
   value: boolean | string;
-}
-
-interface CallTraceFunctionState {
-  soltype: PurpleSoltype;
-  value: Record<string, string>;
 }
 
 interface Log {
@@ -714,6 +540,7 @@ export interface SimulationCheck {
   title: string;
   status: 'passed' | 'warning' | 'failed';
   details?: string;
+  info?: string[];
   infoItems?: Array<{
     label: string;
     value: string;
@@ -762,11 +589,47 @@ export interface StructuredSimulationReport {
   events: SimulationEvent[];
   calldata?: SimulationCalldata;
   metadata: {
-    blockNumber: string;
-    timestamp: string;
     proposalId: string;
     proposer: string;
+    proposerIsPlaceholder?: boolean;
+    governorAddress: string;
+    executor?: string;
+    executorIsPlaceholder?: boolean;
+    simulationBlockNumber: string;
+    simulationTimestamp: string;
+    proposalCreatedAtBlockNumber: string;
+    proposalCreatedAtTimestamp: string;
+    proposalExecutedAtBlockNumber?: string;
+    proposalExecutedAtTimestamp?: string;
   };
+}
+
+export interface GenerateReportsParams {
+  governorType: GovernorType;
+  blocks: SimulationBlocks;
+  proposal: ProposalEvent;
+  checks: AllCheckResults;
+  outputDir: string;
+  governorAddress: string;
+  destinationSimulations?: SimulationResult['destinationSimulations'];
+  destinationChecks?: Record<number, AllCheckResults>;
+  executor?: string;
+  proposalCreatedBlock?: SimulationBlock;
+  proposalExecutedBlock?: SimulationBlock;
+}
+
+export interface WriteSimulationResultsJsonParams {
+  governorType: GovernorType;
+  blocks: SimulationBlocks;
+  proposal: ProposalEvent;
+  checks: AllCheckResults;
+  markdownReport: string;
+  governorAddress: string;
+  outputPath: string;
+  destinationSimulations?: SimulationResult['destinationSimulations'];
+  executor?: string;
+  proposalCreatedBlock?: SimulationBlock;
+  proposalExecutedBlock?: SimulationBlock;
 }
 
 export interface FrontendData {

@@ -16,9 +16,9 @@ const gauntletAddress = '0xFd2892eFf2615C9F29AF83Fb528fAf3fE41c1426' as const;
 const openBlockAddress = '0x66cCbf509cD28c2fc0f40b4469D6b6AA1FC0FeD3' as const;
 const multisigAddress = '0xB3f1AdE4eF508fe8379f44fA6A25111977B9AEB6' as const;
 
-const gauntletAmount = parseUnits('150000', 18);
-const openBlockAmount = parseUnits('15000', 18);
-const multisigAmount = parseUnits('1835000', 18);
+const gauntletAmount = parseUnits('100000', 18);
+const openBlockAmount = parseUnits('100000', 18);
+const multisigAmount = parseUnits('100000', 18);
 
 const ethAmount = formatEther(380800000000000n);
 console.log({ ethAmount });

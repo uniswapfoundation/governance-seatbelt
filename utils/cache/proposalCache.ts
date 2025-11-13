@@ -205,9 +205,9 @@ export function needsSimulation({
       return true;
     }
 
-    // Check cache age (3 hours to match workflow schedule)
+    // Check cache age (4 hours to allow for workflow schedule + buffer)
     const cacheAge = Date.now() - parsedData.timestamp;
-    return cacheAge > 3 * 60 * 60 * 1000;
+    return cacheAge > 4 * 60 * 60 * 1000;
   } catch (error) {
     console.error(`[Cache] Error checking cache for proposal ${proposalId}:`, error);
     return true;
