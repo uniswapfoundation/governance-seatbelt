@@ -58,12 +58,10 @@ paths = [
   '''bun\.lockb''',
   '''\.git/''',
 ]
-
 # Allowlist specific patterns that are known safe
-[[allowlist.regexes]]
-description = "Example placeholder values"
-regex = '''(yourEtherscanApiKey|yourMainnetRpcUrl|yourTenderlyAccessToken|yourTenderlyOrgOrMeIfPersonal|yourTenderlyProjectSlug|yourArbitrumRpcUrl)'''
-
-[[allowlist.regexes]]
-description = "Governor and known contract addresses"
-regex = '''0x408ED6354d4973f66138C91495F2f2FCbd8724C3'''
+regexes = [
+  # Example placeholder values
+  '''(yourEtherscanApiKey|yourMainnetRpcUrl|yourTenderlyAccessToken|yourTenderlyOrgOrMeIfPersonal|yourTenderlyProjectSlug|yourArbitrumRpcUrl)''',
+  # Governor and known contract addresses
+  '''0x408ED6354d4973f66138C91495F2f2FCbd8724C3''',
+]
