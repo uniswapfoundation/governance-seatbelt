@@ -106,7 +106,11 @@ export const checkSlither: ProposalCheck = {
       if (verificationResult.sourcifyOnly) {
         if (!allowUnverified) {
           const matchType =
-            verificationResult.status === 'perfect' ? 'perfect match' : 'partial match';
+            verificationResult.status === 'perfect'
+              ? 'perfect match'
+              : verificationResult.status === 'partial'
+                ? 'partial match'
+                : verificationResult.status || 'verified';
           info.push(
             `Skipped Slither analysis for ${contractName} at \`${addr}\`: Verified on Sourcify [${matchType}] but not on ${blockExplorerName}; Slither cannot fetch sources from Sourcify yet`,
           );
