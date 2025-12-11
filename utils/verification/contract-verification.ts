@@ -21,48 +21,58 @@ export interface ContractVerificationResult {
   status?: string;
   /** Human-readable reason when not verified */
   reason?: string;
+  /** True if verified on Sourcify but NOT on block explorer (Slither can't fetch from Sourcify) */
+  sourcifyOnly?: boolean;
 }
 
 /**
- * Check contract verification status using Sourcify first, then block explorer fallback.
+ * Check contract verification status on both Sourcify and block explorer.
  *
- * Order of checks:
- * 1. Sourcify - Check for verification on Sourcify (returns 'perfect' or 'partial' if verified)
- * 2. Block Explorer - If not on Sourcify or Sourcify errors, check configured block explorer
+ * IMPORTANT: Slither can only fetch sources from block explorers (Etherscan/Blockscout),
+ * not from Sourcify. We check both sources and flag "Sourcify-only" contracts so callers
+ * can handle them appropriately (e.g., skip Slither with a clear message).
  *
  * @param address - Contract address to check
  * @param chainId - Chain ID where the contract is deployed
- * @returns Verification result with source information
+ * @returns Verification result with source information and sourcifyOnly flag
  */
 export async function checkContractVerification(
   address: string,
   chainId: number,
 ): Promise<ContractVerificationResult> {
-  // Step 1: Check Sourcify first
-  const sourcifyResult = await checkSourcify(address, chainId);
+  // Check both sources in parallel for efficiency
+  const [sourcifyResult, blockExplorerResult] = await Promise.all([
+    checkSourcify(address, chainId),
+    checkBlockExplorer(address, chainId),
+  ]);
+
+  // Block explorer verified - Slither can use this
+  if (blockExplorerResult) {
+    return {
+      verified: true,
+      // Prefer Sourcify as the reported source if both are verified
+      source: sourcifyResult.verified ? 'sourcify' : 'block_explorer',
+      status: sourcifyResult.verified ? sourcifyResult.status : 'verified',
+      sourcifyOnly: false,
+    };
+  }
+
+  // Sourcify-only - verified but Slither can't fetch sources
   if (sourcifyResult.verified) {
     return {
       verified: true,
       source: 'sourcify',
       status: sourcifyResult.status,
+      sourcifyOnly: true,
     };
   }
 
-  // Step 2: Sourcify returned not verified or error - try block explorer
-  const blockExplorerResult = await checkBlockExplorer(address, chainId);
-  if (blockExplorerResult) {
-    return {
-      verified: true,
-      source: 'block_explorer',
-      status: 'verified',
-    };
-  }
-
-  // Step 3: Not verified on any source
+  // Not verified on any source
   return {
     verified: false,
     source: 'none',
     reason: 'Contract not verified on Sourcify or block explorer',
+    sourcifyOnly: false,
   };
 }
 
