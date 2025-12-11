@@ -51,9 +51,10 @@ export const checkSolc: ProposalCheck = {
     );
     if (contracts.length === 0) {
       return {
-        info: ['No contracts to analyze: only the timelock and governor are touched'],
+        info: [],
         warnings,
         errors: [],
+        skipped: { reason: 'No contracts to analyze: only the timelock and governor are touched' },
       };
     }
 

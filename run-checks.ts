@@ -2,11 +2,16 @@
  * @notice Script to run checks for a specific proposal ID
  */
 
+import { execFileSync } from 'node:child_process';
 import { getAddress } from 'viem';
 import ALL_CHECKS from './checks';
 import { generateAndSaveReports } from './presentation/report';
 import type {
   AllCheckResults,
+  CheckCoverage,
+  CoverageData,
+  CoverageMetadata,
+  Message,
   ProposalData,
   ProposalEvent,
   SimulationConfig,
@@ -23,6 +28,147 @@ import {
   inferGovernorType,
 } from './utils/contracts/governor';
 import { PROPOSAL_STATES } from './utils/contracts/governor-bravo';
+
+/**
+ * Patterns that indicate a check skipped execution (for heuristic fallback)
+ */
+const SKIP_PATTERNS = [
+  /^skipped/i,
+  /^No .+ detected$/i,
+  /^No .+ found$/i,
+  /^No .+ to analyze/i,
+  /not applicable/i,
+  /skipped for L2/i,
+  /verification skipped/i,
+  /No L2 targets found/i,
+  /only the timelock and governor/i,
+];
+
+/**
+ * Infer if a check was skipped based on info messages (heuristic fallback)
+ */
+function inferSkipFromInfo(info: Message[]): string | null {
+  for (const msg of info) {
+    for (const pattern of SKIP_PATTERNS) {
+      if (pattern.test(msg)) {
+        return msg;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Get git metadata for coverage tracking
+ */
+function getGitMetadata(): { commitHash: string; branch: string } {
+  try {
+    const commitHash = execFileSync('git', ['rev-parse', 'HEAD']).toString().trim();
+    const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD']).toString().trim();
+    return { commitHash, branch };
+  } catch {
+    return { commitHash: 'unknown', branch: 'unknown' };
+  }
+}
+
+/**
+ * Get tool versions for coverage tracking
+ */
+function getToolVersions(): { solcVersion?: string; slitherVersion?: string } {
+  try {
+    const solcOutput = execFileSync('solc', ['--version']).toString();
+    const solcVersion = solcOutput.match(/Version: ([\d.]+)/)?.[1];
+    let slitherVersion: string | undefined;
+    try {
+      slitherVersion = execFileSync('slither', ['--version']).toString().trim();
+    } catch {
+      // slither not available
+    }
+    return { solcVersion, slitherVersion };
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Build coverage metadata
+ */
+export function buildCoverageMetadata(): CoverageMetadata {
+  const git = getGitMetadata();
+  const tools = getToolVersions();
+  return {
+    gitCommitHash: git.commitHash,
+    gitBranch: git.branch,
+    timestamp: new Date().toISOString(),
+    solcVersion: tools.solcVersion,
+    slitherVersion: tools.slitherVersion,
+  };
+}
+
+/**
+ * Build coverage data from check results
+ */
+export function buildCoverageFromResults(
+  results: AllCheckResults,
+  metadata: CoverageMetadata,
+): CoverageData {
+  const checks: CheckCoverage[] = [];
+  let ran = 0;
+  let skipped = 0;
+  let failed = 0;
+  let inferredSkips = 0;
+
+  for (const [checkId, check] of Object.entries(results)) {
+    const { name, result } = check;
+    let status: 'ran' | 'skipped' | 'failed' = 'ran';
+    let skipReason: string | undefined;
+    let wasInferred = false;
+
+    if (result.skipped) {
+      // Explicit skip
+      status = 'skipped';
+      skipReason = result.skipped.reason;
+      skipped++;
+    } else if (result.errors.length > 0) {
+      // Check failed
+      status = 'failed';
+      failed++;
+    } else {
+      // Apply heuristic fallback for non-updated checks
+      const inferredSkip = inferSkipFromInfo(result.info);
+      if (inferredSkip) {
+        status = 'skipped';
+        skipReason = inferredSkip;
+        wasInferred = true;
+        skipped++;
+        inferredSkips++;
+        console.log(`[Coverage] Inferred skip for ${checkId}: ${inferredSkip}`);
+      } else {
+        ran++;
+      }
+    }
+
+    checks.push({
+      checkId,
+      checkName: name,
+      status,
+      skipReason,
+      wasInferred,
+    });
+  }
+
+  return {
+    metadata,
+    checks,
+    summary: {
+      total: checks.length,
+      ran,
+      skipped,
+      failed,
+      inferredSkips,
+    },
+  };
+}
 
 /**
  * Run checks for a specific chain simulation
@@ -252,6 +398,20 @@ async function main() {
     end: endBlock,
   };
 
+  // Build coverage data
+  const coverageMetadata = buildCoverageMetadata();
+  const coverage = buildCoverageFromResults(sourceChecks, coverageMetadata);
+
+  // Log coverage summary
+  console.log(
+    `[Coverage] Total: ${coverage.summary.total}, Ran: ${coverage.summary.ran}, Skipped: ${coverage.summary.skipped}, Failed: ${coverage.summary.failed}`,
+  );
+  if (coverage.summary.inferredSkips > 0) {
+    console.log(
+      `[Coverage] Warning: ${coverage.summary.inferredSkips} skips were inferred via heuristic`,
+    );
+  }
+
   // Generate reports
   const dir = `./${REPORTS_OUTPUT_DIRECTORY}/${config.daoName}/${config.governorAddress}`;
   await generateAndSaveReports({
@@ -266,6 +426,7 @@ async function main() {
     executor: finalResult.executor,
     proposalCreatedBlock: finalResult.proposalCreatedBlock,
     proposalExecutedBlock: finalResult.proposalExecutedBlock,
+    coverage,
   });
 }
 

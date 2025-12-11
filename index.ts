@@ -5,7 +5,7 @@
 import { existsSync } from 'node:fs';
 import { getAddress } from 'viem';
 import { generateAndSaveReports } from './presentation/report';
-import { runChecksForChain } from './run-checks';
+import { buildCoverageFromResults, buildCoverageMetadata, runChecksForChain } from './run-checks';
 import type {
   AllCheckResults,
   GovernorType,
@@ -140,6 +140,15 @@ async function processSimulation(
     destinationSimulations,
   );
 
+  // Build coverage data
+  const coverageMetadata = buildCoverageMetadata();
+  const coverage = buildCoverageFromResults(mainnetResults, coverageMetadata);
+
+  // Log coverage summary
+  console.log(
+    `  [Coverage] Total: ${coverage.summary.total}, Ran: ${coverage.summary.ran}, Skipped: ${coverage.summary.skipped}, Failed: ${coverage.summary.failed}`,
+  );
+
   // Generate reports
   const dir = `./${REPORTS_OUTPUT_DIRECTORY}/${config.daoName}/${config.governorAddress}`;
   await generateAndSaveReports({
@@ -154,6 +163,7 @@ async function processSimulation(
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
+    coverage,
   });
 
   // Prepare simulation data

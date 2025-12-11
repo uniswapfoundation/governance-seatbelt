@@ -21,9 +21,10 @@ export const checkTargetsVerifiedOnBlockExplorer: ProposalCheck = {
       targets = extractL2Targets(l2Simulations);
       if (targets.length === 0) {
         return {
-          info: ['No L2 targets found in cross-chain simulation'],
+          info: [],
           warnings: [],
           errors: [],
+          skipped: { reason: 'No L2 targets found in cross-chain simulation' },
         };
       }
     } else {
@@ -47,9 +48,10 @@ export const checkTouchedContractsVerifiedOnBlockExplorer: ProposalCheck = {
     // Only check touched contracts on the main chain (chain 1), not on L2 simulations
     if (deps.chainConfig.chainId !== 1) {
       return {
-        info: ['Touched contracts verification skipped for L2 simulations'],
+        info: [],
         warnings: [],
         errors: [],
+        skipped: { reason: 'Touched contracts verification skipped for L2 simulations' },
       };
     }
 

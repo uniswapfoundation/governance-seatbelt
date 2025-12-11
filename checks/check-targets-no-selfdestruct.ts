@@ -19,9 +19,10 @@ export const checkTargetsNoSelfdestruct: ProposalCheck = {
       targets = extractL2Targets(l2Simulations);
       if (targets.length === 0) {
         return {
-          info: ['No L2 targets found in cross-chain simulation'],
+          info: [],
           warnings: [],
           errors: [],
+          skipped: { reason: 'No L2 targets found in cross-chain simulation' },
         };
       }
     } else {

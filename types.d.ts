@@ -134,6 +134,7 @@ export type CheckResult = {
   info: Message[];
   warnings: Message[];
   errors: Message[];
+  skipped?: { reason: string };
 };
 
 export interface ProposalData {
@@ -534,11 +535,44 @@ interface RawElement {
 }
 
 /**
+ * Coverage tracking types for check execution status
+ */
+export interface CheckCoverage {
+  checkId: string;
+  checkName: string;
+  status: 'ran' | 'skipped' | 'failed';
+  skipReason?: string;
+  executionTimeMs?: number;
+  wasInferred?: boolean;
+}
+
+export interface CoverageMetadata {
+  gitCommitHash: string;
+  gitBranch: string;
+  timestamp: string;
+  solcVersion?: string;
+  slitherVersion?: string;
+}
+
+export interface CoverageData {
+  metadata: CoverageMetadata;
+  checks: CheckCoverage[];
+  summary: {
+    total: number;
+    ran: number;
+    skipped: number;
+    failed: number;
+    inferredSkips: number;
+  };
+}
+
+/**
  * Structured simulation report types
  */
 export interface SimulationCheck {
   title: string;
-  status: 'passed' | 'warning' | 'failed';
+  status: 'passed' | 'warning' | 'failed' | 'skipped';
+  skipReason?: string;
   details?: string;
   info?: string[];
   infoItems?: Array<{
@@ -588,6 +622,7 @@ export interface StructuredSimulationReport {
   stateChanges: SimulationStateChange[];
   events: SimulationEvent[];
   calldata?: SimulationCalldata;
+  coverage?: CoverageData;
   metadata: {
     proposalId: string;
     proposer: string;
@@ -616,6 +651,7 @@ export interface GenerateReportsParams {
   executor?: string;
   proposalCreatedBlock?: SimulationBlock;
   proposalExecutedBlock?: SimulationBlock;
+  coverage?: CoverageData;
 }
 
 export interface WriteSimulationResultsJsonParams {
