@@ -544,6 +544,7 @@ export interface CheckCoverage {
   skipReason?: string;
   executionTimeMs?: number;
   wasInferred?: boolean;
+  chainId?: number;
 }
 
 export interface CoverageMetadata {

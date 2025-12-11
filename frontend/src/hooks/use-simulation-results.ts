@@ -12,8 +12,9 @@ export interface Proposal {
 
 export interface SimulationCheck {
   title: string;
-  status: 'passed' | 'warning' | 'failed';
+  status: 'passed' | 'warning' | 'failed' | 'skipped';
   details?: string;
+  skipReason?: string;
 }
 
 export interface SimulationStateChange {

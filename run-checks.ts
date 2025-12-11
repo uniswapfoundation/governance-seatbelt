@@ -75,19 +75,23 @@ function getGitMetadata(): { commitHash: string; branch: string } {
  * Get tool versions for coverage tracking
  */
 function getToolVersions(): { solcVersion?: string; slitherVersion?: string } {
+  let solcVersion: string | undefined;
+  let slitherVersion: string | undefined;
+
   try {
     const solcOutput = execFileSync('solc', ['--version']).toString();
-    const solcVersion = solcOutput.match(/Version: ([\d.]+)/)?.[1];
-    let slitherVersion: string | undefined;
-    try {
-      slitherVersion = execFileSync('slither', ['--version']).toString().trim();
-    } catch {
-      // slither not available
-    }
-    return { solcVersion, slitherVersion };
+    solcVersion = solcOutput.match(/Version: ([\d.]+)/)?.[1];
   } catch {
-    return {};
+    // solc not available
   }
+
+  try {
+    slitherVersion = execFileSync('slither', ['--version']).toString().trim();
+  } catch {
+    // slither not available
+  }
+
+  return { solcVersion, slitherVersion };
 }
 
 /**
@@ -111,6 +115,7 @@ export function buildCoverageMetadata(): CoverageMetadata {
 export function buildCoverageFromResults(
   results: AllCheckResults,
   metadata: CoverageMetadata,
+  chainId?: number,
 ): CoverageData {
   const checks: CheckCoverage[] = [];
   let ran = 0;
@@ -154,6 +159,7 @@ export function buildCoverageFromResults(
       status,
       skipReason,
       wasInferred,
+      chainId,
     });
   }
 

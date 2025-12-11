@@ -12,6 +12,7 @@ import {
   ChevronUpIcon,
   ExternalLinkIcon,
   InfoIcon,
+  SkipForwardIcon,
 } from 'lucide-react';
 import type React from 'react';
 import { useMemo, useState } from 'react';
@@ -249,6 +250,9 @@ function ExpandableCheckItem({
     if (check.status === 'failed') {
       return <AlertTriangleIcon className="h-5 w-5 text-red-500" />;
     }
+    if (check.status === 'skipped') {
+      return <SkipForwardIcon className="h-5 w-5 text-gray-400" />;
+    }
     return <CheckCircleIcon className="h-5 w-5 text-green-500" />;
   };
 
@@ -262,6 +266,13 @@ function ExpandableCheckItem({
     }
     if (check.status === 'failed') {
       return <Badge variant="destructive">Failed</Badge>;
+    }
+    if (check.status === 'skipped') {
+      return (
+        <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-300">
+          Skipped
+        </Badge>
+      );
     }
     return (
       <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
@@ -576,7 +587,7 @@ function ExpandableCheckItem({
         </div>
         <div className="flex items-center gap-2">
           {getStatusBadge()}
-          {check.details &&
+          {(check.details || check.skipReason) &&
             (isExpanded ? (
               <ChevronUpIcon className="h-4 w-4 text-muted-foreground" />
             ) : (
@@ -584,9 +595,13 @@ function ExpandableCheckItem({
             ))}
         </div>
       </button>
-      {isExpanded && check.details && (
+      {isExpanded && (check.details || check.skipReason) && (
         <div className="p-5 pt-0 pl-11 text-sm border-t border-muted bg-muted/10">
-          {isStateChangesCheck ? (
+          {check.status === 'skipped' && check.skipReason ? (
+            <div className="mt-4">
+              <p className="text-muted-foreground italic">{check.skipReason}</p>
+            </div>
+          ) : isStateChangesCheck ? (
             <div className="mt-4">
               {stateChanges && stateChanges.length > 0 ? (
                 <StateChanges stateChanges={stateChanges} />
