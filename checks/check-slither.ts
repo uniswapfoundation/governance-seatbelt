@@ -4,8 +4,13 @@ import { getAddress } from 'viem';
 import { codeBlock } from '../presentation/report';
 import type { ProposalCheck } from '../types';
 import { getContractName } from '../utils/clients/tenderly';
-import { ETHERSCAN_API_KEY } from '../utils/constants';
+import { ETHERSCAN_API_KEY, SLITHER_ALLOW_UNVERIFIED } from '../utils/constants';
 import { getImplementation } from '../utils/contracts/governor';
+import {
+  checkContractVerification,
+  formatSourcesChecked,
+  formatVerificationSource,
+} from '../utils/verification/contract-verification';
 
 // Convert exec method from a callback to a promise.
 const exec = util.promisify(execCallback);
@@ -15,6 +20,19 @@ type ExecOutput = {
   stdout: string;
   stderr: string;
 };
+
+/**
+ * Check if Slither should be allowed to run on unverified contracts.
+ * Supports both environment variable and CLI argument override.
+ */
+function shouldAllowUnverified(): boolean {
+  // Check environment variable first
+  if (SLITHER_ALLOW_UNVERIFIED) {
+    return true;
+  }
+  // Check CLI argument
+  return process.argv.includes('--allow-unverified-slither');
+}
 
 /**
  * Runs slither against the verified contracts and reports the outputs. Assumes slither is already installed.
@@ -56,11 +74,41 @@ export const checkSlither: ProposalCheck = {
       };
     }
 
+    // Get block explorer name for detailed messages
+    const blockExplorerSource = deps.chainConfig?.blockExplorer?.source || 'block explorer';
+    const blockExplorerName =
+      blockExplorerSource === 'etherscan'
+        ? 'Etherscan'
+        : blockExplorerSource === 'blockscout'
+          ? 'Blockscout'
+          : 'block explorer';
+    const allowUnverified = shouldAllowUnverified();
+
     // For each unique verified contract we run slither. Slither has a mode to run it directly against a mainnet
     // contract, which saves us from having to write files to a local temporary directory.
     for (const contract of Array.from(new Set(contracts))) {
       const addr = getAddress(contract.address);
       if (addressesToSkip.has(addr)) continue;
+
+      const contractName = await getContractName(contract);
+
+      // Check contract verification status before running Slither
+      const verificationResult = await checkContractVerification(addr, deps.chainConfig.chainId);
+
+      if (!verificationResult.verified) {
+        if (!allowUnverified) {
+          // Skip unverified contracts with detailed message
+          info.push(
+            `Skipped Slither analysis for ${contractName} at \`${addr}\`: ` +
+              `Contract not verified (checked: ${formatSourcesChecked(blockExplorerName)})`,
+          );
+          continue;
+        }
+        // Override flag is set - run Slither but warn about unverified contract
+        warnings.push(
+          `Running Slither on UNVERIFIED contract ${contractName} at \`${addr}\` (override flag set)`,
+        );
+      }
 
       // Run slither.
       const slitherOutput = await runSlither(contract.address);
@@ -72,8 +120,12 @@ export const checkSlither: ProposalCheck = {
       // Append results to report info.
       // Note that slither supports a `--json` flag  we could use, but directly printing the formatted
       // results in a code block is simpler and sufficient for now.
-      const contractName = await getContractName(contract);
-      info.push(`Slither report for ${contractName}${codeBlock(slitherOutput.stderr.trim())}`);
+      const verificationInfo = verificationResult.verified
+        ? ` (verified via ${formatVerificationSource(verificationResult)})`
+        : ' (UNVERIFIED - override flag set)';
+      info.push(
+        `Slither report for ${contractName}${verificationInfo}${codeBlock(slitherOutput.stderr.trim())}`,
+      );
     }
 
     return { info, warnings, errors: [] };
