@@ -102,6 +102,23 @@ export const checkSlither: ProposalCheck = {
       // Check contract verification status before running Slither
       const verificationResult = await checkContractVerification(addr, deps.chainConfig.chainId);
 
+      // Handle Sourcify-only verification (Slither can't fetch from Sourcify)
+      if (verificationResult.sourcifyOnly) {
+        if (!allowUnverified) {
+          const matchType =
+            verificationResult.status === 'perfect' ? 'perfect match' : 'partial match';
+          info.push(
+            `Skipped Slither analysis for ${contractName} at \`${addr}\`: Verified on Sourcify [${matchType}] but not on ${blockExplorerName}; Slither cannot fetch sources from Sourcify yet`,
+          );
+          continue;
+        }
+        // Override flag is set - warn but try anyway (will likely fail)
+        warnings.push(
+          `Running Slither on Sourcify-only contract ${contractName} at \`${addr}\` (override flag set; may fail)`,
+        );
+      }
+
+      // Handle completely unverified contracts
       if (!verificationResult.verified) {
         if (!allowUnverified) {
           // Skip unverified contracts with detailed message
