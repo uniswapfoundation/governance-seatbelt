@@ -404,9 +404,25 @@ async function main() {
     end: endBlock,
   };
 
-  // Build coverage data
+  // Build coverage data - include mainnet (chainId 1) and all L2 chains
   const coverageMetadata = buildCoverageMetadata();
-  const coverage = buildCoverageFromResults(sourceChecks, coverageMetadata);
+  const coverage = buildCoverageFromResults(sourceChecks, coverageMetadata, 1);
+
+  // Merge L2 check coverage into the main coverage
+  for (const [chainIdStr, destResults] of Object.entries(destinationChecks)) {
+    const chainId = Number(chainIdStr);
+    const l2Coverage = buildCoverageFromResults(destResults, coverageMetadata, chainId);
+
+    // Append L2 checks to the main coverage
+    coverage.checks.push(...l2Coverage.checks);
+
+    // Aggregate summary totals
+    coverage.summary.total += l2Coverage.summary.total;
+    coverage.summary.ran += l2Coverage.summary.ran;
+    coverage.summary.skipped += l2Coverage.summary.skipped;
+    coverage.summary.failed += l2Coverage.summary.failed;
+    coverage.summary.inferredSkips += l2Coverage.summary.inferredSkips;
+  }
 
   // Log coverage summary
   console.log(
