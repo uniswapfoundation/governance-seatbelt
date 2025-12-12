@@ -704,7 +704,10 @@ function ExpandableCheckItem({
             const address = match[1];
             const isPlaceholder = isPlaceholderAddress(address, effectiveMetadata);
             parts.push(
-              <span key={`address-wrapper-${address}-${match.index}`} className="inline-flex items-center gap-1">
+              <span
+                key={`address-wrapper-${address}-${match.index}`}
+                className="inline-flex items-center gap-1"
+              >
                 <a
                   href={buildAddressLink(address, effectiveMetadata)}
                   target="_blank"
