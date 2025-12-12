@@ -154,6 +154,8 @@ async function processSimulation(
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
+    chainId: finalDeps.chainConfig.chainId,
+    simulationType: config.type,
   });
 
   // Prepare simulation data
