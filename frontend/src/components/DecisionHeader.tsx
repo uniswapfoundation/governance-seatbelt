@@ -54,7 +54,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
   
   return (
     <Card className="mb-6 overflow-hidden border-border/60 shadow-none">
-      <div className="border-b bg-gradient-to-b from-muted/50 to-muted/10 px-6 py-4">
+      <div className="border-b bg-muted/50 px-6 py-4">
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -86,7 +86,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
 
       <CardContent className="grid grid-cols-1 divide-y md:grid-cols-4 md:divide-x md:divide-y-0 p-0">
         {/* Checks Column */}
-        <div className="p-3 flex flex-col gap-1.5">
+        <div className="p-3 flex flex-col gap-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
             <ShieldCheckIcon className="h-3 w-3" />
             Checks
@@ -115,7 +115,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
         </div>
 
         {/* Time Column */}
-        <div className="p-3 flex flex-col gap-1.5">
+        <div className="p-3 flex flex-col gap-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
             <ClockIcon className="h-3 w-3" />
             Time
@@ -124,7 +124,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
         </div>
 
         {/* Network Column */}
-        <div className="p-3 flex flex-col gap-1.5">
+        <div className="p-3 flex flex-col gap-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
             <GlobeIcon className="h-3 w-3" />
             Network
@@ -132,7 +132,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
           <div className="flex flex-col items-start gap-0.5">
             <span className="text-sm font-medium">{report.metadata.chainName || 'Ethereum'}</span>
             {blockNumber && blockNumber !== 'unknown' && (
-              <Button variant="link" size="sm" className="h-auto p-0 text-xs text-muted-foreground hover:text-primary" asChild>
+              <Button variant="link" size="sm" className="h-auto p-0 !px-0 text-xs text-muted-foreground hover:text-primary justify-start text-left" asChild>
                 <a 
                   href={buildBlockLink(blockNumber, report.metadata)} 
                   target="_blank"
@@ -148,7 +148,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
         </div>
 
         {/* Simulation Column */}
-        <div className="p-3 flex flex-col gap-1.5">
+        <div className="p-3 flex flex-col gap-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
             <ActivityIcon className="h-3 w-3" />
             Simulation
