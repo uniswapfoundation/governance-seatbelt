@@ -268,6 +268,7 @@ async function main() {
     proposalExecutedBlock: finalResult.proposalExecutedBlock,
     chainId: proposalData.chainConfig.chainId,
     simulationType: simType,
+    simulation: finalResult.sim,
   });
 }
 

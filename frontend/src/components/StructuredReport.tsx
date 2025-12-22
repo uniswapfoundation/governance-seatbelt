@@ -1,6 +1,7 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DecisionHeader } from './DecisionHeader';
 import type {
   SimulationCheck,
   SimulationStateChange,
@@ -31,7 +32,7 @@ function buildAddressLink(
   return `${baseUrl}/address/${address}`;
 }
 
-function buildBlockLink(
+export function buildBlockLink(
   blockNumber: string,
   metadata: StructuredSimulationReport['metadata'],
 ): string {
@@ -206,6 +207,20 @@ interface StructuredReportProps {
   report: StructuredSimulationReport;
 }
 
+// Helper function for contextual executor labels
+function getExecutorLabel(simulationType?: string): string {
+  switch (simulationType) {
+    case 'new':
+      return 'Intended Executor';
+    case 'proposed':
+      return 'Will Execute';
+    case 'executed':
+      return 'Executed By';
+    default:
+      return 'Executor';
+  }
+}
+
 export function StructuredReport({ report }: StructuredReportProps) {
   // Get block number with fallback for backwards compatibility
   const blockNumber =
@@ -213,39 +228,15 @@ export function StructuredReport({ report }: StructuredReportProps) {
   const timestamp = report.metadata.simulationTimestamp || report.metadata.timestamp || '0';
 
   return (
-    <div className="w-full border border-muted rounded-md p-6">
-      {/* Simulation warning banner */}
-      <SimulationWarningBanner metadata={report.metadata} />
-
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold">{report.title}</h2>
-        <div className="flex items-center mt-2">
-          <span className="text-muted-foreground mr-2">Status:</span>
-          <Badge
-            variant={
-              report.status === 'success'
-                ? 'outline'
-                : report.status === 'warning'
-                  ? 'outline'
-                  : 'destructive'
-            }
-            className={
-              report.status === 'success'
-                ? 'bg-green-100 text-green-800 border-green-300'
-                : report.status === 'warning'
-                  ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
-                  : ''
-            }
-          >
-            {report.status === 'success'
-              ? 'Passed'
-              : report.status === 'warning'
-                ? 'Passed with warnings'
-                : 'Failed'}
-          </Badge>
-        </div>
-        <p className="text-muted-foreground mt-2">{report.summary}</p>
-      </div>
+    <div className="w-full">
+      {/* NEW: Decision Header with key metrics */}
+      <DecisionHeader report={report} />
+      
+      <div className="border border-muted rounded-md p-6">
+        {/* KEPT: Simulation warning banner */}
+        <SimulationWarningBanner metadata={report.metadata} />
+        
+        {/* REMOVED: Old header section - now in DecisionHeader */}
 
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="grid w-full grid-cols-3 mb-4">
@@ -333,7 +324,9 @@ export function StructuredReport({ report }: StructuredReportProps) {
                 {/* Executor with placeholder badge (only show if available) */}
                 {report.metadata.executor && (
                   <div className="bg-muted p-3 rounded-md col-span-2">
-                    <div className="text-sm text-muted-foreground">Executor</div>
+                    <div className="text-sm text-muted-foreground">
+                      {getExecutorLabel(report.metadata.simulationType)}
+                    </div>
                     <div className="font-medium flex items-center gap-2 flex-wrap">
                       <a
                         href={buildAddressLink(report.metadata.executor, report.metadata)}
@@ -398,7 +391,8 @@ export function StructuredReport({ report }: StructuredReportProps) {
             </div>
           </TabsContent>
         </div>
-      </Tabs>
+        </Tabs>
+      </div>
     </div>
   );
 }
