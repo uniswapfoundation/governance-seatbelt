@@ -81,10 +81,6 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
             </Button>
           )}
         </div>
-        
-        {report.summary && (
-          <p className="mt-4 text-sm text-muted-foreground leading-relaxed max-w-4xl">{report.summary}</p>
-        )}
       </div>
 
       <CardContent className="grid grid-cols-1 divide-y md:grid-cols-4 md:divide-x md:divide-y-0 p-0">
@@ -132,20 +128,23 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
             <GlobeIcon className="h-3 w-3" />
             Network
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium">{report.metadata.chainName || 'Ethereum'}</span>
+          <div className="flex items-center gap-2 flex-wrap text-sm font-medium">
+            <span>{report.metadata.chainName || 'Ethereum'}</span>
             {blockNumber && blockNumber !== 'unknown' && (
-              <Button variant="link" size="sm" className="h-auto p-0 text-xs text-muted-foreground hover:text-primary" asChild>
-                <a 
-                  href={buildBlockLink(blockNumber, report.metadata)} 
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1"
-                >
-                  Block {blockNumber}
-                  <ExternalLinkIcon className="h-3 w-3" />
-                </a>
-              </Button>
+              <>
+                <span className="text-muted-foreground/40">•</span>
+                <Button variant="link" size="sm" className="h-auto p-0 text-xs text-muted-foreground hover:text-primary" asChild>
+                  <a 
+                    href={buildBlockLink(blockNumber, report.metadata)} 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1"
+                  >
+                    Block {blockNumber}
+                    <ExternalLinkIcon className="h-3 w-3" />
+                  </a>
+                </Button>
+              </>
             )}
           </div>
         </div>
