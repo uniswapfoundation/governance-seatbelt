@@ -9,7 +9,8 @@ import {
   ClockIcon,
   GlobeIcon,
   ActivityIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  GithubIcon
 } from 'lucide-react';
 import { buildBlockLink } from './StructuredReport';
 import { Card, CardContent } from '@/components/ui/card';
@@ -48,6 +49,9 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
   const repoUrl = report.metadata.repoUrl;
   const tenderlyUrl = report.metadata.tenderlyUrl;
   
+  // Extract repo name if available
+  const repoName = repoUrl ? repoUrl.split('/').slice(-2).join('/') : 'Repository';
+  
   return (
     <Card className="mb-6 overflow-hidden border-border/60 shadow-sm">
       <div className="border-b bg-muted/40 px-6 py-4">
@@ -71,8 +75,8 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                <GitCommitIcon className="h-4 w-4 text-muted-foreground" />
-                <span className="font-mono text-xs">repo@{repoCommit.slice(0, 8)}</span>
+                <GithubIcon className="h-4 w-4" />
+                <span className="font-medium text-xs">{repoName}</span>
               </a>
             </Button>
           )}
@@ -85,9 +89,9 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
 
       <CardContent className="grid grid-cols-1 divide-y md:grid-cols-4 md:divide-x md:divide-y-0 p-0">
         {/* Checks Column */}
-        <div className="p-4 flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            <ShieldCheckIcon className="h-3.5 w-3.5" />
+        <div className="p-3 flex flex-col gap-1.5">
+          <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+            <ShieldCheckIcon className="h-3 w-3" />
             Checks
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -114,18 +118,18 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
         </div>
 
         {/* Time Column */}
-        <div className="p-4 flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            <ClockIcon className="h-3.5 w-3.5" />
+        <div className="p-3 flex flex-col gap-1.5">
+          <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+            <ClockIcon className="h-3 w-3" />
             Time
           </div>
           <div className="text-sm font-medium">{age}</div>
         </div>
 
         {/* Network Column */}
-        <div className="p-4 flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            <GlobeIcon className="h-3.5 w-3.5" />
+        <div className="p-3 flex flex-col gap-1.5">
+          <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+            <GlobeIcon className="h-3 w-3" />
             Network
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -147,14 +151,19 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
         </div>
 
         {/* Simulation Column */}
-        <div className="p-4 flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            <ActivityIcon className="h-3.5 w-3.5" />
+        <div className="p-3 flex flex-col gap-1.5">
+          <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+            <ActivityIcon className="h-3 w-3" />
             Simulation
           </div>
           <div>
             {tenderlyUrl ? (
-              <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" asChild>
+              <Button 
+                variant="default" 
+                size="sm" 
+                className="h-7 text-xs gap-1.5 bg-[#646cff] hover:bg-[#646cff]/90 text-white border-transparent" 
+                asChild
+              >
                 <a
                   href={tenderlyUrl}
                   target="_blank"
