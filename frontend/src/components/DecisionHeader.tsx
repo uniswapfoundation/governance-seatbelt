@@ -53,8 +53,8 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
   const repoName = repoUrl ? repoUrl.split('/').slice(-2).join('/') : 'Repository';
   
   return (
-    <Card className="mb-6 overflow-hidden border-border/60 shadow-sm">
-      <div className="border-b bg-muted/40 px-6 py-4">
+    <Card className="mb-6 overflow-hidden border-border/60 shadow-none">
+      <div className="border-b bg-gradient-to-b from-muted/50 to-muted/10 px-6 py-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-3">
             <div className="flex items-center gap-3">
