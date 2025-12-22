@@ -139,10 +139,13 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
                     href={buildBlockLink(blockNumber, report.metadata)} 
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1"
+                    className="group flex items-center gap-1"
                   >
                     Block {blockNumber}
-                    <ExternalLinkIcon className="h-4 w-4" />
+                    <span className="hidden group-hover:inline-flex items-center gap-1 underline">
+                      View
+                      <ExternalLinkIcon className="h-4 w-4" />
+                    </span>
                   </a>
                 </Button>
               </>
