@@ -88,7 +88,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
         {/* Checks Column */}
         <div className="p-3 flex flex-col gap-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-            <ShieldCheckIcon className="h-3 w-3" />
+            <ShieldCheckIcon className="h-4 w-4" />
             Checks
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -117,7 +117,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
         {/* Time Column */}
         <div className="p-3 flex flex-col gap-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-            <ClockIcon className="h-3 w-3" />
+            <ClockIcon className="h-4 w-4" />
             Time
           </div>
           <div className="text-sm font-medium">{age}</div>
@@ -126,23 +126,26 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
         {/* Network Column */}
         <div className="p-3 flex flex-col gap-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-            <GlobeIcon className="h-3 w-3" />
+            <GlobeIcon className="h-4 w-4" />
             Network
           </div>
-          <div className="flex flex-col items-start gap-0.5">
-            <span className="text-sm font-medium">{report.metadata.chainName || 'Ethereum'}</span>
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <span>{report.metadata.chainName || 'Ethereum'}</span>
             {blockNumber && blockNumber !== 'unknown' && (
-              <Button variant="link" size="sm" className="h-auto p-0 !px-0 text-xs text-muted-foreground hover:text-primary justify-start text-left" asChild>
-                <a 
-                  href={buildBlockLink(blockNumber, report.metadata)} 
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1"
-                >
-                  Block {blockNumber}
-                  <ExternalLinkIcon className="h-3 w-3" />
-                </a>
-              </Button>
+              <>
+                <span className="text-muted-foreground/40">•</span>
+                <Button variant="link" size="sm" className="h-auto p-0 !px-0 text-xs text-muted-foreground hover:text-primary justify-start text-left" asChild>
+                  <a 
+                    href={buildBlockLink(blockNumber, report.metadata)} 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1"
+                  >
+                    Block {blockNumber}
+                    <ExternalLinkIcon className="h-4 w-4" />
+                  </a>
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -150,7 +153,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
         {/* Simulation Column */}
         <div className="p-3 flex flex-col gap-3">
           <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-            <ActivityIcon className="h-3 w-3" />
+            <ActivityIcon className="h-4 w-4" />
             Simulation
           </div>
           <div>
@@ -167,7 +170,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
                   rel="noopener noreferrer"
                 >
                   View on Tenderly
-                  <ExternalLinkIcon className="h-3 w-3" />
+                  <ExternalLinkIcon className="h-4 w-4" />
                 </a>
               </Button>
             ) : (
