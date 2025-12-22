@@ -91,7 +91,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
             <ShieldCheckIcon className="h-4 w-4" />
             Checks
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-col items-start gap-1">
             <span className="text-sm font-medium">{ranChecks} executed</span>
             {(warningCount > 0 || failureCount > 0) ? (
               <div className="flex gap-1.5">
@@ -129,26 +129,23 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
             <GlobeIcon className="h-4 w-4" />
             Network
           </div>
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <span>{report.metadata.chainName || 'Ethereum'}</span>
+          <div className="flex flex-col items-start gap-1">
+            <span className="text-sm font-medium">{report.metadata.chainName || 'Ethereum'}</span>
             {blockNumber && blockNumber !== 'unknown' && (
-              <>
-                <span className="text-muted-foreground/40">•</span>
-                <Button variant="link" size="sm" className="h-auto p-0 !px-0 text-xs text-muted-foreground hover:text-primary justify-start text-left" asChild>
-                  <a 
-                    href={buildBlockLink(blockNumber, report.metadata)} 
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group flex items-center gap-1"
-                  >
-                    Block {blockNumber}
-                    <span className="hidden group-hover:inline-flex items-center gap-1 underline">
-                      View
-                      <ExternalLinkIcon className="h-4 w-4" />
-                    </span>
-                  </a>
-                </Button>
-              </>
+              <Button variant="link" size="sm" className="h-auto p-0 !px-0 text-xs text-muted-foreground hover:text-primary justify-start text-left" asChild>
+                <a 
+                  href={buildBlockLink(blockNumber, report.metadata)} 
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-center gap-1"
+                >
+                  Block {blockNumber}
+                  <span className="hidden group-hover:inline-flex items-center gap-1 underline">
+                    View
+                    <ExternalLinkIcon className="h-4 w-4" />
+                  </span>
+                </a>
+              </Button>
             )}
           </div>
         </div>
