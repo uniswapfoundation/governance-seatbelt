@@ -55,8 +55,8 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
   return (
     <Card className="mb-6 overflow-hidden border-border/60 shadow-none">
       <div className="border-b bg-gradient-to-b from-muted/50 to-muted/10 px-6 py-4">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-3">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <StatusBadge status={report.status} />
               {showProposalId && (
@@ -65,21 +65,22 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
                 </Badge>
               )}
             </div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">{report.title}</h1>
+            
+            {repoCommit && repoUrl && (
+              <Button variant="outline" size="sm" className="h-8 gap-2" asChild>
+                <a
+                  href={`${repoUrl}/commit/${repoCommit}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <GithubIcon className="h-4 w-4" />
+                  <span className="font-medium text-xs">{repoName}</span>
+                </a>
+              </Button>
+            )}
           </div>
           
-          {repoCommit && repoUrl && (
-            <Button variant="outline" size="sm" className="h-8 gap-2" asChild>
-              <a
-                href={`${repoUrl}/commit/${repoCommit}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <GithubIcon className="h-4 w-4" />
-                <span className="font-medium text-xs">{repoName}</span>
-              </a>
-            </Button>
-          )}
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">{report.title}</h1>
         </div>
       </div>
 
@@ -128,23 +129,20 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
             <GlobeIcon className="h-3 w-3" />
             Network
           </div>
-          <div className="flex items-center gap-2 flex-wrap text-sm font-medium">
-            <span>{report.metadata.chainName || 'Ethereum'}</span>
+          <div className="flex flex-col items-start gap-0.5">
+            <span className="text-sm font-medium">{report.metadata.chainName || 'Ethereum'}</span>
             {blockNumber && blockNumber !== 'unknown' && (
-              <>
-                <span className="text-muted-foreground/40">•</span>
-                <Button variant="link" size="sm" className="h-auto p-0 text-xs text-muted-foreground hover:text-primary" asChild>
-                  <a 
-                    href={buildBlockLink(blockNumber, report.metadata)} 
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1"
-                  >
-                    Block {blockNumber}
-                    <ExternalLinkIcon className="h-3 w-3" />
-                  </a>
-                </Button>
-              </>
+              <Button variant="link" size="sm" className="h-auto p-0 text-xs text-muted-foreground hover:text-primary" asChild>
+                <a 
+                  href={buildBlockLink(blockNumber, report.metadata)} 
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1"
+                >
+                  Block {blockNumber}
+                  <ExternalLinkIcon className="h-3 w-3" />
+                </a>
+              </Button>
             )}
           </div>
         </div>
