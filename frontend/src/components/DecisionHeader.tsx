@@ -5,9 +5,17 @@ import {
   XCircleIcon, 
   ExternalLinkIcon,
   GitCommitIcon,
-  HelpCircleIcon
+  HelpCircleIcon,
+  ClockIcon,
+  GlobeIcon,
+  ActivityIcon,
+  ShieldCheckIcon
 } from 'lucide-react';
 import { buildBlockLink } from './StructuredReport';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface DecisionHeaderProps {
   report: StructuredSimulationReport;
@@ -41,84 +49,128 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
   const tenderlyUrl = report.metadata.tenderlyUrl;
   
   return (
-    <div className="border border-muted rounded-md p-4 mb-4">
-      {/* Main header line */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-3">
-          <StatusChip status={report.status} />
-          <h1 className="text-xl font-bold">{report.title}</h1>
+    <Card className="mb-6 overflow-hidden border-border/60 shadow-sm">
+      <div className="border-b bg-muted/40 px-6 py-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <StatusBadge status={report.status} />
+              {showProposalId && (
+                <Badge variant="outline" className="font-mono text-xs text-muted-foreground">
+                  #{proposalId}
+                </Badge>
+              )}
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">{report.title}</h1>
+          </div>
+          
+          {repoCommit && repoUrl && (
+            <Button variant="outline" size="sm" className="h-8 gap-2" asChild>
+              <a
+                href={`${repoUrl}/commit/${repoCommit}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <GitCommitIcon className="h-4 w-4 text-muted-foreground" />
+                <span className="font-mono text-xs">repo@{repoCommit.slice(0, 8)}</span>
+              </a>
+            </Button>
+          )}
         </div>
         
-        <div className="flex items-center gap-3 text-sm">
-          {showProposalId && (
-            <span className="text-muted-foreground">#{proposalId}</span>
-          )}
-          {repoCommit && repoUrl && (
-            <a
-              href={`${repoUrl}/commit/${repoCommit}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted-foreground hover:underline inline-flex items-center gap-1"
-            >
-              <GitCommitIcon className="h-3 w-3" />
-              <span className="font-mono text-xs">repo@{repoCommit.slice(0, 8)}</span>
-            </a>
-          )}
-        </div>
-      </div>
-      
-      {/* Info line */}
-      <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-        <span>Ran {ranChecks}/{ranChecks} checks</span>
-        {(warningCount > 0 || failureCount > 0) && (
-          <>
-            <span>•</span>
-            <div className="flex items-center gap-2">
-              {warningCount > 0 && <span>Warnings: {warningCount}</span>}
-              {warningCount > 0 && failureCount > 0 && <span>•</span>}
-              {failureCount > 0 && <span>Failures: {failureCount}</span>}
-            </div>
-          </>
-        )}
-        <span>•</span>
-        <span>{age}</span>
-        {blockNumber && blockNumber !== 'unknown' && (
-          <>
-            <span>•</span>
-            <a 
-              href={buildBlockLink(blockNumber, report.metadata)} 
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:underline inline-flex items-center"
-            >
-              Block {blockNumber}
-              <ExternalLinkIcon className="h-3 w-3 ml-1" />
-            </a>
-          </>
-        )}
-        <span>•</span>
-        <span>{report.metadata.chainName || 'Ethereum'}</span>
-        {tenderlyUrl && (
-          <>
-            <span>•</span>
-            <a
-              href={tenderlyUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:underline inline-flex items-center"
-            >
-              Tenderly
-              <ExternalLinkIcon className="h-3 w-3 ml-1" />
-            </a>
-          </>
+        {report.summary && (
+          <p className="mt-4 text-sm text-muted-foreground leading-relaxed max-w-4xl">{report.summary}</p>
         )}
       </div>
 
-      {/* Summary line - preserved from original layout */}
-      {report.summary && (
-        <p className="text-muted-foreground text-sm mt-2">{report.summary}</p>
-      )}
-    </div>
+      <CardContent className="grid grid-cols-1 divide-y md:grid-cols-4 md:divide-x md:divide-y-0 p-0">
+        {/* Checks Column */}
+        <div className="p-4 flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <ShieldCheckIcon className="h-3.5 w-3.5" />
+            Checks
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">{ranChecks} executed</span>
+            {(warningCount > 0 || failureCount > 0) ? (
+              <div className="flex gap-1.5">
+                {warningCount > 0 && (
+                  <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-yellow-200 h-5 px-1.5 text-[10px]">
+                    {warningCount} warn
+                  </Badge>
+                )}
+                {failureCount > 0 && (
+                  <Badge variant="secondary" className="bg-red-100 text-red-800 hover:bg-red-100 border-red-200 h-5 px-1.5 text-[10px]">
+                    {failureCount} fail
+                  </Badge>
+                )}
+              </div>
+            ) : (
+              <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 h-5 px-1.5 text-[10px]">
+                All Passed
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {/* Time Column */}
+        <div className="p-4 flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <ClockIcon className="h-3.5 w-3.5" />
+            Time
+          </div>
+          <div className="text-sm font-medium">{age}</div>
+        </div>
+
+        {/* Network Column */}
+        <div className="p-4 flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <GlobeIcon className="h-3.5 w-3.5" />
+            Network
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium">{report.metadata.chainName || 'Ethereum'}</span>
+            {blockNumber && blockNumber !== 'unknown' && (
+              <Button variant="link" size="sm" className="h-auto p-0 text-xs text-muted-foreground hover:text-primary" asChild>
+                <a 
+                  href={buildBlockLink(blockNumber, report.metadata)} 
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1"
+                >
+                  Block {blockNumber}
+                  <ExternalLinkIcon className="h-3 w-3" />
+                </a>
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Simulation Column */}
+        <div className="p-4 flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <ActivityIcon className="h-3.5 w-3.5" />
+            Simulation
+          </div>
+          <div>
+            {tenderlyUrl ? (
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" asChild>
+                <a
+                  href={tenderlyUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  View on Tenderly
+                  <ExternalLinkIcon className="h-3 w-3" />
+                </a>
+              </Button>
+            ) : (
+              <span className="text-sm text-muted-foreground">Not available</span>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -142,8 +194,8 @@ function formatRelativeTime(timestamp: string): string {
   return 'just now';
 }
 
-// Helper: Status chip component
-function StatusChip({
+// Helper: Status badge component
+function StatusBadge({
   status,
 }: {
   status: 'success' | 'warning' | 'error' | 'inconclusive';
@@ -151,31 +203,31 @@ function StatusChip({
   switch (status) {
     case 'success':
       return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-800 border border-green-300 px-3 py-1 text-sm font-semibold">
-          <CheckCircleIcon className="h-4 w-4" />
+        <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100 gap-1.5 pl-1.5 pr-2.5 py-1">
+          <CheckCircleIcon className="h-4 w-4 text-green-600" />
           PASS
-        </span>
+        </Badge>
       );
     case 'warning':
       return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 text-yellow-800 border border-yellow-300 px-3 py-1 text-sm font-semibold">
-          <AlertTriangleIcon className="h-4 w-4" />
+        <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100 gap-1.5 pl-1.5 pr-2.5 py-1">
+          <AlertTriangleIcon className="h-4 w-4 text-yellow-600" />
           WARN
-        </span>
+        </Badge>
       );
     case 'inconclusive':
       return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-800 border border-gray-300 px-3 py-1 text-sm font-semibold">
-          <HelpCircleIcon className="h-4 w-4" />
+        <Badge className="bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-100 gap-1.5 pl-1.5 pr-2.5 py-1">
+          <HelpCircleIcon className="h-4 w-4 text-gray-600" />
           INCONCLUSIVE
-        </span>
+        </Badge>
       );
     case 'error':
       return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 text-red-800 border border-red-300 px-3 py-1 text-sm font-semibold">
-          <XCircleIcon className="h-4 w-4" />
+        <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 gap-1.5 pl-1.5 pr-2.5 py-1">
+          <XCircleIcon className="h-4 w-4 text-red-600" />
           FAIL
-        </span>
+        </Badge>
       );
   }
 }
