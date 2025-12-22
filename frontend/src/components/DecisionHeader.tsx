@@ -87,7 +87,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
       <CardContent className="grid grid-cols-1 divide-y md:grid-cols-4 md:divide-x md:divide-y-0 p-0">
         {/* Checks Column */}
         <div className="p-3 flex flex-col gap-3">
-          <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             <ShieldCheckIcon className="h-4 w-4" />
             Checks
           </div>
@@ -116,7 +116,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
 
         {/* Time Column */}
         <div className="p-3 flex flex-col gap-3">
-          <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             <ClockIcon className="h-4 w-4" />
             Time
           </div>
@@ -125,7 +125,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
 
         {/* Network Column */}
         <div className="p-3 flex flex-col gap-3">
-          <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             <GlobeIcon className="h-4 w-4" />
             Network
           </div>
@@ -152,7 +152,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
 
         {/* Simulation Column */}
         <div className="p-3 flex flex-col gap-3">
-          <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             <ActivityIcon className="h-4 w-4" />
             Simulation
           </div>
