@@ -2,6 +2,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type {
+  AddressLabel as AddressLabelType,
   SimulationCheck,
   SimulationStateChange,
   StructuredSimulationReport,
@@ -49,6 +50,41 @@ function isPlaceholderAddress(
   return metadata.placeholderAddresses.some(
     (placeholder) => placeholder.toLowerCase() === address.toLowerCase(),
   );
+}
+
+// --- Address label helpers ---
+
+function getAddressLabel(
+  address: string,
+  metadata: StructuredSimulationReport['metadata'],
+): AddressLabelType | undefined {
+  if (!metadata.addressLabels) return undefined;
+
+  // Try exact match first
+  const label = metadata.addressLabels[address];
+  if (label) return label;
+
+  // Try case-insensitive match
+  const lowerAddress = address.toLowerCase();
+  for (const [key, value] of Object.entries(metadata.addressLabels)) {
+    if (key.toLowerCase() === lowerAddress) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function formatAddressWithLabel(
+  address: string,
+  metadata: StructuredSimulationReport['metadata'],
+): string {
+  const label = getAddressLabel(address, metadata);
+  if (label) {
+    const abbreviated = `${address.slice(0, 6)}...${address.slice(-4)}`;
+    return `${label.label} (${abbreviated})`;
+  }
+  return address;
 }
 
 // --- Simulation warning components ---
@@ -319,8 +355,9 @@ export function StructuredReport({ report }: StructuredReportProps) {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                        title={report.metadata.proposer}
                       >
-                        {report.metadata.proposer}
+                        {formatAddressWithLabel(report.metadata.proposer, report.metadata)}
                         <ExternalLinkIcon className="h-3 w-3 ml-1" />
                       </a>
                       {report.metadata.proposerIsPlaceholder && <SimulationPlaceholderBadge />}
@@ -338,8 +375,9 @@ export function StructuredReport({ report }: StructuredReportProps) {
                           target="_blank"
                           rel="noopener noreferrer"
                           className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                          title={report.metadata.executor}
                         >
-                          {report.metadata.executor}
+                          {formatAddressWithLabel(report.metadata.executor, report.metadata)}
                           <ExternalLinkIcon className="h-3 w-3 ml-1" />
                         </a>
                         {report.metadata.executorIsPlaceholder && <SimulationPlaceholderBadge />}
@@ -356,8 +394,9 @@ export function StructuredReport({ report }: StructuredReportProps) {
                           target="_blank"
                           rel="noopener noreferrer"
                           className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                          title={report.metadata.governorAddress}
                         >
-                          {report.metadata.governorAddress}
+                          {formatAddressWithLabel(report.metadata.governorAddress, report.metadata)}
                           <ExternalLinkIcon className="h-3 w-3 ml-1" />
                         </a>
                       </div>

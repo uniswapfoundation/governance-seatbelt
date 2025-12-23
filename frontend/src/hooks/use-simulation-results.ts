@@ -46,6 +46,15 @@ export interface SimulationCalldata {
   }>;
 }
 
+/**
+ * Address label with metadata about the source and type
+ */
+export interface AddressLabel {
+  label: string;
+  type?: 'governance' | 'token' | 'bridge' | 'contract' | 'user';
+  source?: 'custom' | 'ens' | 'tenderly';
+}
+
 export interface StructuredSimulationReport {
   title: string;
   proposalText: string;
@@ -83,6 +92,8 @@ export interface StructuredSimulationReport {
     repoCommit?: string;
     repoUrl?: string;
     tenderlyUrl?: string;
+    // Address labels for entity identification (Issue #94)
+    addressLabels?: Record<string, AddressLabel>;
   };
 }
 

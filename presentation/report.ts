@@ -31,9 +31,10 @@ import type {
   TenderlySimulation,
   WriteSimulationResultsJsonParams,
 } from '../types';
-import { getChainConfig } from '../utils/clients/client';
+import { getChainConfig, publicClient } from '../utils/clients/client';
 import { DEFAULT_SIMULATION_ADDRESS, getContractName } from '../utils/clients/tenderly';
 import { formatProposalId } from '../utils/contracts/governor';
+import { extractAddressesFromReport, resolveLabelsForAddresses } from '../utils/labels';
 import { generateProposalSummary } from '../utils/proposal-summary';
 
 // --- Chain name utility ---
@@ -658,6 +659,8 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     simulationType,
     simulation,
     coverage,
+    daoName,
+    contracts,
   } = params;
   console.log(`[Report] Generating report for proposal ${proposal.id} (${proposal.proposalId})`);
   console.log(`[Report] Output directory: ${outputDir}`);
@@ -713,6 +716,36 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
   // Add coverage data to the structured report if available
   if (coverage) {
     structuredReport.coverage = coverage;
+  }
+
+  // Resolve address labels if daoName is provided (Issue #94)
+  if (daoName) {
+    try {
+      // Extract all addresses from the report
+      const addresses = extractAddressesFromReport(
+        Object.values(checks).map((c) => c.result),
+        structuredReport.stateChanges,
+        structuredReport.events,
+        structuredReport.metadata,
+      );
+
+      // Resolve labels for all unique addresses
+      const addressLabels = await resolveLabelsForAddresses(
+        addresses,
+        daoName,
+        publicClient,
+        contracts || [],
+      );
+
+      // Add labels to the report metadata
+      if (Object.keys(addressLabels).length > 0) {
+        structuredReport.metadata.addressLabels = addressLabels;
+        console.log(`[Report] Resolved ${Object.keys(addressLabels).length} address labels`);
+      }
+    } catch (error) {
+      console.warn('[Report] Failed to resolve address labels:', error);
+      // Continue without labels - they're optional
+    }
   }
 
   // Save off all reports. The Markdown and PDF reports use the `markdownReport`.
