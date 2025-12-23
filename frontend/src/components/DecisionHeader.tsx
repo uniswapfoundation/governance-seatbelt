@@ -14,6 +14,7 @@ import {
   ShieldCheckIcon,
   XCircleIcon,
 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { buildBlockLink } from './StructuredReport';
 
 interface DecisionHeaderProps {
@@ -233,40 +234,62 @@ function formatLocalTime(timestamp: string): string {
   });
 }
 
-// Helper: Status badge component
+// Status badge tooltip descriptions
+const STATUS_TOOLTIPS = {
+  success: 'All checks passed successfully',
+  warning: 'Some checks produced warnings that may need review',
+  error: 'One or more checks failed - review required before proceeding',
+  inconclusive:
+    'Some checks were skipped or could not complete. This may occur when contract verification is unavailable or simulation data is incomplete.',
+};
+
+// Helper: Status badge component with tooltip
 function StatusBadge({
   status,
 }: {
   status: 'success' | 'warning' | 'error' | 'inconclusive';
 }) {
-  switch (status) {
-    case 'success':
-      return (
-        <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100 gap-1.5 px-3 h-8 text-sm">
-          <CheckCircleIcon className="h-4 w-4 text-green-600" />
-          PASS
-        </Badge>
-      );
-    case 'warning':
-      return (
-        <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100 gap-1.5 px-3 h-8 text-sm">
-          <AlertTriangleIcon className="h-4 w-4 text-yellow-600" />
-          WARN
-        </Badge>
-      );
-    case 'inconclusive':
-      return (
-        <Badge className="bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-100 gap-1.5 px-3 h-8 text-sm">
-          <HelpCircleIcon className="h-4 w-4 text-gray-600" />
-          INCONCLUSIVE
-        </Badge>
-      );
-    case 'error':
-      return (
-        <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 gap-1.5 px-3 h-8 text-sm">
-          <XCircleIcon className="h-4 w-4 text-red-600" />
-          FAIL
-        </Badge>
-      );
-  }
+  const badge = (() => {
+    switch (status) {
+      case 'success':
+        return (
+          <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100 gap-1.5 px-3 h-8 text-sm cursor-help">
+            <CheckCircleIcon className="h-4 w-4 text-green-600" />
+            PASS
+          </Badge>
+        );
+      case 'warning':
+        return (
+          <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100 gap-1.5 px-3 h-8 text-sm cursor-help">
+            <AlertTriangleIcon className="h-4 w-4 text-yellow-600" />
+            WARN
+          </Badge>
+        );
+      case 'inconclusive':
+        return (
+          <Badge className="bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-100 gap-1.5 px-3 h-8 text-sm cursor-help">
+            <HelpCircleIcon className="h-4 w-4 text-gray-600" />
+            INCONCLUSIVE
+          </Badge>
+        );
+      case 'error':
+        return (
+          <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 gap-1.5 px-3 h-8 text-sm cursor-help">
+            <XCircleIcon className="h-4 w-4 text-red-600" />
+            FAIL
+          </Badge>
+        );
+    }
+  })();
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>{badge}</TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          <p>{STATUS_TOOLTIPS[status]}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
