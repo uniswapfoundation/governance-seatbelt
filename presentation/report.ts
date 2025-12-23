@@ -28,11 +28,13 @@ import type {
   SimulationResult,
   SimulationStateChange,
   StructuredSimulationReport,
+  TenderlySimulation,
   WriteSimulationResultsJsonParams,
 } from '../types';
 import { getChainConfig } from '../utils/clients/client';
 import { DEFAULT_SIMULATION_ADDRESS, getContractName } from '../utils/clients/tenderly';
 import { formatProposalId } from '../utils/contracts/governor';
+import { generateProposalSummary } from '../utils/proposal-summary';
 
 // --- Chain name utility ---
 
@@ -380,6 +382,7 @@ function generateStructuredReport(
   chainId?: number,
   simulationType?: 'executed' | 'proposed' | 'new',
   simulationId?: string,
+  simulation?: TenderlySimulation,
 ): StructuredSimulationReport {
   // Validate required fields
   if (!proposal.proposer) {
@@ -487,19 +490,23 @@ function generateStructuredReport(
   const tenderlyUrl = getTenderlyUrl(simulationId);
 
   // Create the structured report
+  // Generate plain-language summary using the new summary generator
+  const plainLanguageSummary = generateProposalSummary(proposal, checks, simulation);
+  
+  // Combine with simulation status for complete summary
+  const statusText = status === 'success'
+    ? 'completed successfully'
+    : status === 'warning'
+      ? 'completed with warnings'
+      : status === 'inconclusive'
+        ? 'completed with inconclusive results'
+        : 'completed with errors';
+  
   return {
     title,
     proposalText,
     status,
-    summary: `Simulation ${
-      status === 'success'
-        ? 'completed successfully'
-        : status === 'warning'
-          ? 'completed with warnings'
-          : status === 'inconclusive'
-            ? 'completed with inconclusive results'
-            : 'completed with errors'
-    } for proposal: "${title}".`,
+    summary: `${plainLanguageSummary}. Simulation ${statusText}.`,
     checks: formattedChecks,
     stateChanges: extractStateChanges(checks),
     events: extractEvents(checks),
@@ -688,6 +695,7 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     chainId,
     simulationType,
     simulation?.simulation?.id,
+    simulation,
   );
 
   // Add coverage data to the structured report if available

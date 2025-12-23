@@ -79,7 +79,15 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
             )}
           </div>
 
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">{report.title}</h1>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">{report.title}</h1>
+            {report.summary && (
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {report.summary.split('. ')[0]}
+                {/* Show only the action summary, not the simulation status */}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
