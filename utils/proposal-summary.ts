@@ -92,34 +92,56 @@ function detectOperations(
  */
 function detectCrossChainOperations(checks: AllCheckResults): DetectedOperation[] {
   const operations: DetectedOperation[] = [];
-  
-  // Look for cross-chain message checks
-  for (const checkId in checks) {
-    const { result } = checks[checkId];
-    
-    // Check for cross-chain indicators in info messages
-    for (const info of result.info) {
-      if (info.toLowerCase().includes('arbitrum') || 
-          info.toLowerCase().includes('optimism') ||
-          info.toLowerCase().includes('base') ||
-          info.toLowerCase().includes('l2')) {
-        
-        // Extract chain name
-        let chainName = 'Layer 2';
-        if (info.toLowerCase().includes('arbitrum')) chainName = 'Arbitrum';
-        else if (info.toLowerCase().includes('optimism')) chainName = 'Optimism';
-        else if (info.toLowerCase().includes('base')) chainName = 'Base';
-        
-        operations.push({
-          type: 'crossChain',
-          description: `Executes cross-chain operations on ${chainName}`,
-          priority: 1,
-        });
-        break; // Only add once per chain
+  const detectedChains = new Set<string>();
+
+  // Look for cross-chain message checks in decoded calldata
+  const calldataCheck = checks['checkDecodeCalldata'];
+  if (calldataCheck?.result.info) {
+    for (const info of calldataCheck.result.info) {
+      // Detect Arbitrum bridge calls
+      if (info.includes('createRetryableTicket') ||
+          info.includes('sendL2Message') ||
+          info.includes('outboundTransfer')) {
+        if (!detectedChains.has('Arbitrum')) {
+          detectedChains.add('Arbitrum');
+          operations.push({
+            type: 'crossChain',
+            description: 'Sends via Arbitrum bridge',
+            priority: 1,
+          });
+        }
+      }
+
+      // Detect Optimism/OP Stack bridge calls
+      if (info.includes('sendMessage') &&
+          (info.toLowerCase().includes('crossdomainmessenger') ||
+           info.toLowerCase().includes('l1crossdomain'))) {
+        if (!detectedChains.has('Optimism')) {
+          detectedChains.add('Optimism');
+          operations.push({
+            type: 'crossChain',
+            description: 'Sends via Optimism bridge',
+            priority: 1,
+          });
+        }
+      }
+
+      // Detect generic bridge patterns (be more specific to avoid false positives)
+      if (info.includes('bridgeTo') ||
+          info.includes('depositFor') ||
+          info.includes('xDomainMessageSender')) {
+        if (!detectedChains.has('generic')) {
+          detectedChains.add('generic');
+          operations.push({
+            type: 'crossChain',
+            description: 'Executes cross-chain bridge operation',
+            priority: 1,
+          });
+        }
       }
     }
   }
-  
+
   return operations;
 }
 
@@ -133,7 +155,7 @@ function detectUpgradeOperations(
   const operations: DetectedOperation[] = [];
   
   // Look for upgrade-related function calls in decoded calldata
-  const calldataCheck = checks['decode-calldata'];
+  const calldataCheck = checks['checkDecodeCalldata'];
   if (calldataCheck?.result.info) {
     for (const info of calldataCheck.result.info) {
       // Common upgrade function patterns
@@ -175,7 +197,7 @@ function detectPermissionOperations(
 ): DetectedOperation[] {
   const operations: DetectedOperation[] = [];
   
-  const calldataCheck = checks['decode-calldata'];
+  const calldataCheck = checks['checkDecodeCalldata'];
   if (calldataCheck?.result.info) {
     for (const info of calldataCheck.result.info) {
       // Common permission function patterns
@@ -226,7 +248,7 @@ function detectTransferOperations(
   const processedTransfers = new Set<string>();
   
   // Check decoded calldata for transfer operations
-  const calldataCheck = checks['decode-calldata'];
+  const calldataCheck = checks['checkDecodeCalldata'];
   if (calldataCheck?.result.info) {
     for (const info of calldataCheck.result.info) {
       // Check for transfer function calls (from decoded ABI)
@@ -328,7 +350,7 @@ function detectParameterChanges(
 ): DetectedOperation[] {
   const operations: DetectedOperation[] = [];
   
-  const calldataCheck = checks['decode-calldata'];
+  const calldataCheck = checks['checkDecodeCalldata'];
   if (calldataCheck?.result.info) {
     for (const info of calldataCheck.result.info) {
       // Common parameter change patterns

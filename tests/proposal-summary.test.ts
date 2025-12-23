@@ -23,7 +23,7 @@ describe('Proposal Summary Generation', () => {
   // Helper function to create check results with info messages
   function createChecks(calldataInfo: string[]): AllCheckResults {
     return {
-      'decode-calldata': {
+      'checkDecodeCalldata': {
         name: 'Decode Calldata',
         result: {
           info: calldataInfo,
@@ -126,26 +126,37 @@ describe('Proposal Summary Generation', () => {
   });
 
   describe('Cross-Chain Operations', () => {
-    it('should detect Arbitrum cross-chain operations', () => {
+    it('should detect Arbitrum createRetryableTicket calls', () => {
       const proposal = createProposal();
       const checks = createChecks([
-        'Sending message to Arbitrum via bridge',
-        'Cross-chain execution on Arbitrum L2',
+        '`0x123...` calls `createRetryableTicket(...)` on Inbox at 0x456... (decoded from ABI)',
       ]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
-      expect(summary).toContain('Executes cross-chain operations on Arbitrum');
+      expect(summary).toContain('Sends via Arbitrum bridge');
     });
 
-    it('should detect Optimism cross-chain operations', () => {
+    it('should detect Optimism sendMessage calls', () => {
       const proposal = createProposal();
       const checks = createChecks([
-        'Bridging to Optimism L2',
-        'Message will be executed on Optimism',
+        '`0x123...` calls `sendMessage(...)` on L1CrossDomainMessenger at 0x456... (decoded from ABI)',
       ]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
-      expect(summary).toContain('Executes cross-chain operations on Optimism');
+      expect(summary).toContain('Sends via Optimism bridge');
+    });
+
+    it('should NOT falsely detect base/l2 in parameter names', () => {
+      const proposal = createProposal();
+      const checks = createChecks([
+        'MessageDelivered(baseFeeL1: 45422782, l2CallValue: 0)',
+      ]);
+
+      const summary = generateProposalSummary(proposal, checks);
+      // Should NOT contain cross-chain since baseFeeL1 and l2CallValue are just parameter names
+      expect(summary).not.toContain('cross-chain');
+      expect(summary).not.toContain('Base');
+      expect(summary).not.toContain('Layer 2');
     });
   });
 
@@ -185,14 +196,14 @@ describe('Proposal Summary Generation', () => {
     it('should handle proposals with multiple operation types', () => {
       const proposal = createProposal();
       const checks = createChecks([
-        'Cross-chain message to Arbitrum',
+        '`0x123...` calls `createRetryableTicket(...)` on Inbox (decoded from ABI)',
         '`0x123...` calls `upgradeTo(0x456...)` on Proxy (decoded from ABI)',
         '`0x123...` transfers 1000 USDC to `0x789...` on USDC Token (formatted)',
       ]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
       // Cross-chain should be first (highest priority)
-      expect(summary.startsWith('Executes cross-chain operations on Arbitrum')).toBe(true);
+      expect(summary.startsWith('Sends via Arbitrum bridge')).toBe(true);
       // Should include upgrade and transfer
       expect(summary.toLowerCase()).toContain('upgrades proxy');
       expect(summary.toLowerCase()).toContain('transfers 1000 usdc');
