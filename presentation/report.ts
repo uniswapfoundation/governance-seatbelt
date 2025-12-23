@@ -582,23 +582,25 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
       description: proposal.description,
     };
 
-    // Generate the structured report with simulation ID and L2 checks for cross-chain summaries
+    // Use pre-generated structured report if provided, otherwise generate one
     const simulationId = simulation?.simulation?.id;
-    const structuredReport = generateStructuredReport(
-      governorType,
-      blocks,
-      proposal,
-      checks,
-      governorAddress,
-      executor,
-      proposalCreatedBlock,
-      proposalExecutedBlock,
-      chainId,
-      simulationType,
-      simulationId,
-      simulation,
-      destinationChecks,
-    );
+    const structuredReport =
+      params.structuredReport ??
+      generateStructuredReport(
+        governorType,
+        blocks,
+        proposal,
+        checks,
+        governorAddress,
+        executor,
+        proposalCreatedBlock,
+        proposalExecutedBlock,
+        chainId,
+        simulationType,
+        simulationId,
+        simulation,
+        destinationChecks,
+      );
 
     // Create a simplified report structure for the frontend
     const reportForFrontend = {
@@ -797,6 +799,7 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     chainId,
     simulationType,
     simulation,
+    structuredReport, // Pass the report with labels already resolved
   });
 }
 

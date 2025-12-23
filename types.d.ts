@@ -702,6 +702,8 @@ export interface WriteSimulationResultsJsonParams {
   chainId?: number;
   simulationType?: 'executed' | 'proposed' | 'new';
   simulation?: TenderlySimulation;
+  // Pre-generated structured report (with labels) to avoid regenerating
+  structuredReport?: StructuredSimulationReport;
 }
 
 export interface FrontendData {
