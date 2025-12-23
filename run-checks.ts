@@ -452,6 +452,8 @@ async function main() {
     simulationType: simType,
     simulation: finalResult.sim,
     coverage,
+    daoName: config.daoName,
+    contracts: finalResult.sim?.contracts,
   });
 }
 
