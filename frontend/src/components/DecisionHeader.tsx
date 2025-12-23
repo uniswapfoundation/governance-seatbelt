@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { StructuredSimulationReport } from '@/hooks/use-simulation-results';
 import {
   ActivityIcon,
@@ -14,7 +15,6 @@ import {
   ShieldCheckIcon,
   XCircleIcon,
 } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { buildBlockLink } from './StructuredReport';
 
 interface DecisionHeaderProps {

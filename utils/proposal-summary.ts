@@ -33,25 +33,25 @@ export function generateProposalSummary(
   simulation?: TenderlySimulation,
 ): string {
   const operations = detectOperations(proposal, checks, simulation);
-  
+
   if (operations.length === 0) {
     return generateFallbackSummary(proposal);
   }
 
   // Sort by priority and combine descriptions
   const sortedOps = operations.sort((a, b) => a.priority - b.priority);
-  
+
   // If we have multiple operations, combine them
   if (sortedOps.length === 1) {
     return sortedOps[0].description;
-  } else if (sortedOps.length === 2) {
-    return `${sortedOps[0].description} and ${lowercaseFirst(sortedOps[1].description)}`;
-  } else {
-    // For 3+ operations, use comma separation
-    const lastOp = sortedOps[sortedOps.length - 1];
-    const otherOps = sortedOps.slice(0, -1);
-    return `${otherOps.map(op => op.description).join(', ')}, and ${lowercaseFirst(lastOp.description)}`;
   }
+  if (sortedOps.length === 2) {
+    return `${sortedOps[0].description} and ${lowercaseFirst(sortedOps[1].description)}`;
+  }
+  // For 3+ operations, use comma separation
+  const lastOp = sortedOps[sortedOps.length - 1];
+  const otherOps = sortedOps.slice(0, -1);
+  return `${otherOps.map((op) => op.description).join(', ')}, and ${lowercaseFirst(lastOp.description)}`;
 }
 
 /**
@@ -95,13 +95,15 @@ function detectCrossChainOperations(checks: AllCheckResults): DetectedOperation[
   const detectedChains = new Set<string>();
 
   // Look for cross-chain message checks in decoded calldata
-  const calldataCheck = checks['checkDecodeCalldata'];
+  const calldataCheck = checks.checkDecodeCalldata;
   if (calldataCheck?.result.info) {
     for (const info of calldataCheck.result.info) {
       // Detect Arbitrum bridge calls
-      if (info.includes('createRetryableTicket') ||
-          info.includes('sendL2Message') ||
-          info.includes('outboundTransfer')) {
+      if (
+        info.includes('createRetryableTicket') ||
+        info.includes('sendL2Message') ||
+        info.includes('outboundTransfer')
+      ) {
         if (!detectedChains.has('Arbitrum')) {
           detectedChains.add('Arbitrum');
           operations.push({
@@ -113,9 +115,11 @@ function detectCrossChainOperations(checks: AllCheckResults): DetectedOperation[
       }
 
       // Detect Optimism/OP Stack bridge calls
-      if (info.includes('sendMessage') &&
-          (info.toLowerCase().includes('crossdomainmessenger') ||
-           info.toLowerCase().includes('l1crossdomain'))) {
+      if (
+        info.includes('sendMessage') &&
+        (info.toLowerCase().includes('crossdomainmessenger') ||
+          info.toLowerCase().includes('l1crossdomain'))
+      ) {
         if (!detectedChains.has('Optimism')) {
           detectedChains.add('Optimism');
           operations.push({
@@ -127,9 +131,11 @@ function detectCrossChainOperations(checks: AllCheckResults): DetectedOperation[
       }
 
       // Detect generic bridge patterns (be more specific to avoid false positives)
-      if (info.includes('bridgeTo') ||
-          info.includes('depositFor') ||
-          info.includes('xDomainMessageSender')) {
+      if (
+        info.includes('bridgeTo') ||
+        info.includes('depositFor') ||
+        info.includes('xDomainMessageSender')
+      ) {
         if (!detectedChains.has('generic')) {
           detectedChains.add('generic');
           operations.push({
@@ -150,28 +156,29 @@ function detectCrossChainOperations(checks: AllCheckResults): DetectedOperation[
  */
 function detectUpgradeOperations(
   checks: AllCheckResults,
-  simulation?: TenderlySimulation,
+  _simulation?: TenderlySimulation,
 ): DetectedOperation[] {
   const operations: DetectedOperation[] = [];
-  
+
   // Look for upgrade-related function calls in decoded calldata
-  const calldataCheck = checks['checkDecodeCalldata'];
+  const calldataCheck = checks.checkDecodeCalldata;
   if (calldataCheck?.result.info) {
     for (const info of calldataCheck.result.info) {
       // Common upgrade function patterns
-      if (info.includes('upgradeTo') || 
-          info.includes('upgradeToAndCall') ||
-          info.includes('setImplementation') ||
-          info.includes('_setImplementation')) {
-        
+      if (
+        info.includes('upgradeTo') ||
+        info.includes('upgradeToAndCall') ||
+        info.includes('setImplementation') ||
+        info.includes('_setImplementation')
+      ) {
         // Try to extract addresses from the info string
         const addressPattern = /0x[a-fA-F0-9]{40}/g;
         const addresses = info.match(addressPattern) || [];
-        
+
         if (addresses.length >= 2) {
           operations.push({
             type: 'upgrade',
-            description: `Upgrades proxy at ${formatAddress(addresses[0])} to implementation ${formatAddress(addresses[1])}`,
+            description: `Upgrades proxy at ${formatAddress(addresses[0] as string)} to implementation ${formatAddress(addresses[1] as string)}`,
             priority: 2,
           });
         } else {
@@ -184,7 +191,7 @@ function detectUpgradeOperations(
       }
     }
   }
-  
+
   return operations;
 }
 
@@ -193,38 +200,39 @@ function detectUpgradeOperations(
  */
 function detectPermissionOperations(
   checks: AllCheckResults,
-  simulation?: TenderlySimulation,
+  _simulation?: TenderlySimulation,
 ): DetectedOperation[] {
   const operations: DetectedOperation[] = [];
-  
-  const calldataCheck = checks['checkDecodeCalldata'];
+
+  const calldataCheck = checks.checkDecodeCalldata;
   if (calldataCheck?.result.info) {
     for (const info of calldataCheck.result.info) {
       // Common permission function patterns
-      if (info.includes('grantRole') || 
-          info.includes('revokeRole') ||
-          info.includes('setRole') ||
-          info.includes('addMinter') ||
-          info.includes('removeMinter') ||
-          info.includes('transferOwnership') ||
-          info.includes('setAdmin') ||
-          info.includes('setOperator')) {
-        
+      if (
+        info.includes('grantRole') ||
+        info.includes('revokeRole') ||
+        info.includes('setRole') ||
+        info.includes('addMinter') ||
+        info.includes('removeMinter') ||
+        info.includes('transferOwnership') ||
+        info.includes('setAdmin') ||
+        info.includes('setOperator')
+      ) {
         // Determine action type
         let action = 'Updates';
         if (info.includes('grant') || info.includes('add')) action = 'Grants';
         else if (info.includes('revoke') || info.includes('remove')) action = 'Revokes';
         else if (info.includes('transfer')) action = 'Transfers';
-        
+
         // Try to extract role name and address
         const addressPattern = /0x[a-fA-F0-9]{40}/g;
         const addresses = info.match(addressPattern) || [];
-        
+
         let description = `${action} permissions`;
         if (addresses.length > 0) {
-          description = `${action} permissions for ${formatAddress(addresses[0])}`;
+          description = `${action} permissions for ${formatAddress(addresses[0] as string)}`;
         }
-        
+
         operations.push({
           type: 'permission',
           description,
@@ -233,7 +241,7 @@ function detectPermissionOperations(
       }
     }
   }
-  
+
   return operations;
 }
 
@@ -246,9 +254,9 @@ function detectTransferOperations(
 ): DetectedOperation[] {
   const operations: DetectedOperation[] = [];
   const processedTransfers = new Set<string>();
-  
+
   // Check decoded calldata for transfer operations
-  const calldataCheck = checks['checkDecodeCalldata'];
+  const calldataCheck = checks.checkDecodeCalldata;
   if (calldataCheck?.result.info) {
     for (const info of calldataCheck.result.info) {
       // Check for transfer function calls (from decoded ABI)
@@ -257,12 +265,12 @@ function detectTransferOperations(
         const transferMatch = info.match(/transfer\(([^,]+),\s*([^)]+)\)/);
         if (transferMatch) {
           const recipient = transferMatch[1];
-          const amount = transferMatch[2];
-          
+          const _amount = transferMatch[2];
+
           // Try to extract token name
           const tokenMatch = info.match(/on\s+([^(]+)\s*\(/);
           const token = tokenMatch ? tokenMatch[1].trim() : 'tokens';
-          
+
           operations.push({
             type: 'transfer',
             description: `Transfers ${token} to ${formatAddress(recipient)}`,
@@ -278,16 +286,16 @@ function detectTransferOperations(
           const amount = tokenMatch[1];
           const token = tokenMatch[2];
           const transferKey = `${amount}-${token}`;
-          
+
           if (!processedTransfers.has(transferKey)) {
             processedTransfers.add(transferKey);
-            
+
             // Extract recipient address
             // Extract recipient address - handle both full and abbreviated addresses
             const addressPattern = /to\s+`?(0x[a-fA-F0-9]+(?:\.{3}[a-fA-F0-9]+)?)`?/i;
             const addressMatch = info.match(addressPattern);
             const recipient = addressMatch ? formatAddress(addressMatch[1]) : 'recipients';
-            
+
             operations.push({
               type: 'transfer',
               description: `Transfers ${amount} ${token} to ${recipient}`,
@@ -296,22 +304,22 @@ function detectTransferOperations(
           }
         }
       }
-      
+
       // ETH transfers
       if (info.includes('ETH')) {
         const ethMatch = info.match(/transfers?\s+([\d,\.]+)\s+ETH/i);
         if (ethMatch) {
           const amount = ethMatch[1];
           const transferKey = `${amount}-ETH`;
-          
+
           if (!processedTransfers.has(transferKey)) {
             processedTransfers.add(transferKey);
-            
+
             // Extract recipient address - handle both full and abbreviated addresses
             const addressPattern = /to\s+`?(0x[a-fA-F0-9]+(?:\.{3}[a-fA-F0-9]+)?)`?/i;
             const addressMatch = info.match(addressPattern);
             const recipient = addressMatch ? formatAddress(addressMatch[1]) : 'recipient';
-            
+
             operations.push({
               type: 'ethTransfer',
               description: `Sends ${amount} ETH to ${recipient}`,
@@ -322,10 +330,10 @@ function detectTransferOperations(
       }
     }
   }
-  
+
   // Check for ETH transfers from proposal values
-  const hasEthValue = proposal.values?.some(v => BigInt(v.toString()) > 0n);
-  if (hasEthValue && operations.filter(op => op.type === 'ethTransfer').length === 0) {
+  const hasEthValue = proposal.values?.some((v) => BigInt(v.toString()) > 0n);
+  if (hasEthValue && operations.filter((op) => op.type === 'ethTransfer').length === 0) {
     // Sum up all ETH values
     const totalEth = proposal.values.reduce((sum, v) => sum + BigInt(v.toString()), 0n);
     if (totalEth > 0n) {
@@ -337,7 +345,7 @@ function detectTransferOperations(
       });
     }
   }
-  
+
   return operations;
 }
 
@@ -346,31 +354,33 @@ function detectTransferOperations(
  */
 function detectParameterChanges(
   checks: AllCheckResults,
-  simulation?: TenderlySimulation,
+  _simulation?: TenderlySimulation,
 ): DetectedOperation[] {
   const operations: DetectedOperation[] = [];
-  
-  const calldataCheck = checks['checkDecodeCalldata'];
+
+  const calldataCheck = checks.checkDecodeCalldata;
   if (calldataCheck?.result.info) {
     for (const info of calldataCheck.result.info) {
       // Common parameter change patterns
-      if (info.includes('setParameter') ||
-          info.includes('updateParameter') ||
-          info.includes('setFee') ||
-          info.includes('setRate') ||
-          info.includes('setThreshold') ||
-          info.includes('setLimit') ||
-          info.includes('setDelay') ||
-          info.includes('setTimeout')) {
-        
+      if (
+        info.includes('setParameter') ||
+        info.includes('updateParameter') ||
+        info.includes('setFee') ||
+        info.includes('setRate') ||
+        info.includes('setThreshold') ||
+        info.includes('setLimit') ||
+        info.includes('setDelay') ||
+        info.includes('setTimeout')
+      ) {
         // Extract what's being set
         let paramType = 'parameters';
         if (info.includes('Fee')) paramType = 'fee parameters';
         else if (info.includes('Rate')) paramType = 'rate parameters';
         else if (info.includes('Threshold')) paramType = 'threshold values';
         else if (info.includes('Limit')) paramType = 'limit values';
-        else if (info.includes('Delay') || info.includes('Timeout')) paramType = 'timing parameters';
-        
+        else if (info.includes('Delay') || info.includes('Timeout'))
+          paramType = 'timing parameters';
+
         operations.push({
           type: 'parameterChange',
           description: `Updates ${paramType}`,
@@ -380,7 +390,7 @@ function detectParameterChanges(
       }
     }
   }
-  
+
   return operations;
 }
 
@@ -390,21 +400,23 @@ function detectParameterChanges(
 function generateFallbackSummary(proposal: ProposalEvent): string {
   const targetCount = proposal.targets.length;
   // Try to get valid addresses, fallback to original if invalid
-  const uniqueTargets = new Set(proposal.targets.map(t => {
-    try {
-      return getAddress(t);
-    } catch {
-      return t; // Use original if not a valid address
-    }
-  })).size;
-  
+  const uniqueTargets = new Set(
+    proposal.targets.map((t) => {
+      try {
+        return getAddress(t);
+      } catch {
+        return t; // Use original if not a valid address
+      }
+    }),
+  ).size;
+
   if (targetCount === 1) {
     return `Executes transaction on ${formatAddress(proposal.targets[0])}`;
-  } else if (uniqueTargets === 1) {
-    return `Executes ${targetCount} transactions on ${formatAddress(proposal.targets[0])}`;
-  } else {
-    return `Executes ${targetCount} transactions across ${uniqueTargets} contracts`;
   }
+  if (uniqueTargets === 1) {
+    return `Executes ${targetCount} transactions on ${formatAddress(proposal.targets[0])}`;
+  }
+  return `Executes ${targetCount} transactions across ${uniqueTargets} contracts`;
 }
 
 /**
@@ -415,7 +427,7 @@ function formatAddress(address: string): string {
   if (address.includes('...')) {
     return address;
   }
-  
+
   try {
     const checksummed = getAddress(address);
     return `${checksummed.slice(0, 6)}...${checksummed.slice(-4)}`;

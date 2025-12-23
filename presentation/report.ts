@@ -492,16 +492,17 @@ function generateStructuredReport(
   // Create the structured report
   // Generate plain-language summary using the new summary generator
   const plainLanguageSummary = generateProposalSummary(proposal, checks, simulation);
-  
+
   // Combine with simulation status for complete summary
-  const statusText = status === 'success'
-    ? 'completed successfully'
-    : status === 'warning'
-      ? 'completed with warnings'
-      : status === 'inconclusive'
-        ? 'completed with inconclusive results'
-        : 'completed with errors';
-  
+  const statusText =
+    status === 'success'
+      ? 'completed successfully'
+      : status === 'warning'
+        ? 'completed with warnings'
+        : status === 'inconclusive'
+          ? 'completed with inconclusive results'
+          : 'completed with errors';
+
   return {
     title,
     proposalText,

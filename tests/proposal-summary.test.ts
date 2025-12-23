@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { AllCheckResults, ProposalEvent, TenderlySimulation } from '../types';
+import type { AllCheckResults, ProposalEvent } from '../types';
 import { generateProposalSummary } from '../utils/proposal-summary';
 
 describe('Proposal Summary Generation', () => {
@@ -23,7 +23,7 @@ describe('Proposal Summary Generation', () => {
   // Helper function to create check results with info messages
   function createChecks(calldataInfo: string[]): AllCheckResults {
     return {
-      'checkDecodeCalldata': {
+      checkDecodeCalldata: {
         name: 'Decode Calldata',
         result: {
           info: calldataInfo,
@@ -40,7 +40,7 @@ describe('Proposal Summary Generation', () => {
       const checks = createChecks([
         '`0x123...` transfers 1000000 USDC to `0x456...` on USDC Token (formatted)',
       ]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain('Transfers 1000000 USDC to 0x456');
     });
@@ -49,10 +49,8 @@ describe('Proposal Summary Generation', () => {
       const proposal = createProposal({
         values: [1000000000000000000n], // 1 ETH
       });
-      const checks = createChecks([
-        '`0x123...` transfers 1.0 ETH to `0x456...` (formatted)',
-      ]);
-      
+      const checks = createChecks(['`0x123...` transfers 1.0 ETH to `0x456...` (formatted)']);
+
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain('Sends 1.0 ETH to 0x456');
     });
@@ -63,7 +61,7 @@ describe('Proposal Summary Generation', () => {
         '`0x123...` transfers 1000 USDC to `0x456...` on USDC Token (formatted)',
         '`0x123...` transfers 500 DAI to `0x789...` on DAI Token (formatted)',
       ]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain('Transfers 1000 USDC');
       expect(summary).toContain('transfers 500 DAI');
@@ -77,7 +75,7 @@ describe('Proposal Summary Generation', () => {
       const checks = createChecks([
         '`0x123...` calls `grantRole(0xabc..., 0x456...)` on AccessControl (decoded from ABI)',
       ]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain('Grants permissions');
     });
@@ -87,7 +85,7 @@ describe('Proposal Summary Generation', () => {
       const checks = createChecks([
         '`0x123...` calls `revokeRole(0xabc..., 0x456...)` on AccessControl (decoded from ABI)',
       ]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain('Revokes permissions');
     });
@@ -97,7 +95,7 @@ describe('Proposal Summary Generation', () => {
       const checks = createChecks([
         '`0x123...` calls `transferOwnership(0x456...)` on Ownable (decoded from ABI)',
       ]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain('Transfers permissions');
     });
@@ -109,7 +107,7 @@ describe('Proposal Summary Generation', () => {
       const checks = createChecks([
         '`0x123...` calls `upgradeTo(0x456789abc...)` on TransparentUpgradeableProxy (decoded from ABI)',
       ]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain('Upgrades proxy');
     });
@@ -119,7 +117,7 @@ describe('Proposal Summary Generation', () => {
       const checks = createChecks([
         '`0x123...` calls `upgradeToAndCall(0x456..., 0x789...)` on Proxy (decoded from ABI)',
       ]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain('Upgrades proxy');
     });
@@ -148,9 +146,7 @@ describe('Proposal Summary Generation', () => {
 
     it('should NOT falsely detect base/l2 in parameter names', () => {
       const proposal = createProposal();
-      const checks = createChecks([
-        'MessageDelivered(baseFeeL1: 45422782, l2CallValue: 0)',
-      ]);
+      const checks = createChecks(['MessageDelivered(baseFeeL1: 45422782, l2CallValue: 0)']);
 
       const summary = generateProposalSummary(proposal, checks);
       // Should NOT contain cross-chain since baseFeeL1 and l2CallValue are just parameter names
@@ -166,7 +162,7 @@ describe('Proposal Summary Generation', () => {
       const checks = createChecks([
         '`0x123...` calls `setFee(1000)` on FeeManager (decoded from ABI)',
       ]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain('Updates fee parameters');
     });
@@ -176,7 +172,7 @@ describe('Proposal Summary Generation', () => {
       const checks = createChecks([
         '`0x123...` calls `setRate(500)` on RateController (decoded from ABI)',
       ]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain('Updates rate parameters');
     });
@@ -186,7 +182,7 @@ describe('Proposal Summary Generation', () => {
       const checks = createChecks([
         '`0x123...` calls `setThreshold(10000)` on ThresholdManager (decoded from ABI)',
       ]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain('Updates threshold values');
     });
@@ -216,7 +212,7 @@ describe('Proposal Summary Generation', () => {
         '`0x123...` transfers 500 DAI to `0x789...` on DAI Token (formatted)',
         '`0x123...` calls `grantRole(...)` on AccessControl (decoded from ABI)',
       ]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
       // Should use comma and "and" for multiple operations
       expect(summary).toMatch(/,.*and/);
@@ -228,10 +224,8 @@ describe('Proposal Summary Generation', () => {
       const proposal = createProposal({
         targets: ['0x1234567890123456789012345678901234567890'],
       });
-      const checks = createChecks([
-        'Some unknown operation that does not match any pattern',
-      ]);
-      
+      const checks = createChecks(['Some unknown operation that does not match any pattern']);
+
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain('Executes transaction on 0x1234...7890');
     });
@@ -245,7 +239,7 @@ describe('Proposal Summary Generation', () => {
         ],
       });
       const checks = createChecks([]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain('Executes 3 transactions across 3 contracts');
     });
@@ -259,7 +253,7 @@ describe('Proposal Summary Generation', () => {
         ],
       });
       const checks = createChecks([]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain('Executes 3 transactions on 0x1234...7890');
     });
@@ -267,7 +261,7 @@ describe('Proposal Summary Generation', () => {
     it('should handle empty checks gracefully', () => {
       const proposal = createProposal();
       const checks: AllCheckResults = {};
-      
+
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toBeDefined();
       expect(summary.length).toBeGreaterThan(0);
@@ -287,7 +281,7 @@ describe('Proposal Summary Generation', () => {
           },
         },
       };
-      
+
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain('Executes transaction');
     });
@@ -298,7 +292,7 @@ describe('Proposal Summary Generation', () => {
         '`0x123...` calls `grantRole(...)` on AccessControl (decoded from ABI)',
         '`0x456...` calls `grantRole(...)` on AccessControl (decoded from ABI)',
       ]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
       // Should only mention "Grants permissions" once
       const matches = summary.match(/Grants permissions/g);
@@ -310,7 +304,7 @@ describe('Proposal Summary Generation', () => {
         targets: ['not-an-address'],
       });
       const checks = createChecks([]);
-      
+
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain('not-an-address');
     });
