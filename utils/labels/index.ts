@@ -1,5 +1,4 @@
-import { getAddress, type PublicClient } from 'viem';
-import { normalize } from 'viem/ens';
+import { type PublicClient, getAddress } from 'viem';
 import type { AddressLabel, TenderlyContract } from '../../types';
 import commonLabels from './common.json';
 
@@ -26,10 +25,7 @@ async function loadDaoLabels(daoName: string): Promise<LabelConfig> {
 /**
  * Resolve ENS name for an address
  */
-async function resolveEnsName(
-  address: string,
-  client: PublicClient,
-): Promise<string | null> {
+async function resolveEnsName(address: string, client: PublicClient): Promise<string | null> {
   try {
     const ensName = await client.getEnsName({
       address: getAddress(address),
