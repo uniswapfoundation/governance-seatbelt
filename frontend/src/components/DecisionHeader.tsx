@@ -35,6 +35,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
                    report.metadata.timestamp || 
                    '0';
   const age = formatRelativeTime(timestamp);
+  const localTime = formatLocalTime(timestamp);
   
   // Get block number with fallback for legacy format
   const blockNumber = report.metadata.simulationBlockNumber || 
@@ -53,14 +54,14 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
   const repoName = repoUrl ? repoUrl.split('/').slice(-2).join('/') : 'Repository';
   
   return (
-    <Card className="mb-6 overflow-hidden border-border/60 shadow-none">
-      <div className="border-b bg-muted/50 px-6 py-4">
+    <Card className="mb-6 overflow-hidden border-border/60 shadow-none p-0 gap-0">
+      <div className="border-b bg-slate-100 dark:bg-muted/80 px-6 py-4">
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <StatusBadge status={report.status} />
               {showProposalId && (
-                <Badge variant="outline" className="font-mono text-xs text-muted-foreground h-8 px-3">
+                <Badge variant="outline" className="font-mono text-sm text-muted-foreground h-8 px-3 bg-background">
                   #{proposalId}
                 </Badge>
               )}
@@ -120,7 +121,10 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
             <ClockIcon className="h-4 w-4" />
             Time
           </div>
-          <div className="text-sm font-medium">{age}</div>
+          <div className="flex flex-col items-start gap-0.5">
+            <div className="text-sm font-medium">{age}</div>
+            <div className="text-xs text-muted-foreground">{localTime}</div>
+          </div>
         </div>
 
         {/* Network Column */}
@@ -140,10 +144,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
                   className="group flex items-center gap-1"
                 >
                   Block {blockNumber}
-                  <span className="hidden group-hover:inline-flex items-center gap-1 underline">
-                    View
-                    <ExternalLinkIcon className="h-4 w-4" />
-                  </span>
+                  <ExternalLinkIcon className="hidden group-hover:block h-3.5 w-3.5 ml-1" />
                 </a>
               </Button>
             )}
@@ -203,6 +204,19 @@ function formatRelativeTime(timestamp: string): string {
   return 'just now';
 }
 
+// Helper: Format local time
+function formatLocalTime(timestamp: string): string {
+  const ts = parseInt(timestamp) * 1000;
+  if (isNaN(ts) || ts === 0) return '';
+  
+  return new Date(ts).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+}
+
 // Helper: Status badge component
 function StatusBadge({
   status,
@@ -212,28 +226,28 @@ function StatusBadge({
   switch (status) {
     case 'success':
       return (
-        <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100 gap-1.5 px-3 h-8">
+        <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100 gap-1.5 px-3 h-8 text-sm">
           <CheckCircleIcon className="h-4 w-4 text-green-600" />
           PASS
         </Badge>
       );
     case 'warning':
       return (
-        <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100 gap-1.5 px-3 h-8">
+        <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100 gap-1.5 px-3 h-8 text-sm">
           <AlertTriangleIcon className="h-4 w-4 text-yellow-600" />
           WARN
         </Badge>
       );
     case 'inconclusive':
       return (
-        <Badge className="bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-100 gap-1.5 px-3 h-8">
+        <Badge className="bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-100 gap-1.5 px-3 h-8 text-sm">
           <HelpCircleIcon className="h-4 w-4 text-gray-600" />
           INCONCLUSIVE
         </Badge>
       );
     case 'error':
       return (
-        <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 gap-1.5 px-3 h-8">
+        <Badge className="bg-red-100 text-red-800 border-red-200 hover:bg-red-100 gap-1.5 px-3 h-8 text-sm">
           <XCircleIcon className="h-4 w-4 text-red-600" />
           FAIL
         </Badge>

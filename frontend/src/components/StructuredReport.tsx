@@ -75,44 +75,48 @@ function SimulationWarningBanner({ metadata }: SimulationWarningBannerProps) {
   const getMessage = () => {
     if (simulationType === 'new') {
       return (
-        <>
+        <span className="leading-relaxed block">
           This is a simulation of a <strong>new proposal</strong> that has not been submitted
           on-chain yet.
           {hasPlaceholders && ' Placeholder addresses are being used for the proposer/executor.'}
-        </>
+        </span>
       );
     }
     if (simulationType === 'proposed') {
       return (
-        <>
+        <span className="leading-relaxed block">
           This is a simulation of a <strong>proposed</strong> governance action that has not yet
           been executed on-chain.
           {hasPlaceholders && ' Some addresses shown are simulation placeholders.'}
-        </>
+        </span>
       );
     }
     if (simulationType === 'executed') {
       return (
-        <>
+        <span className="leading-relaxed block">
           This is a <strong>re-simulation</strong> of an already executed proposal. Results shown
           reflect what the simulation produced, which may differ from actual on-chain execution.
-        </>
+        </span>
       );
     }
     // Fallback for unknown or missing simulation type
     return (
-      <>
+      <span className="leading-relaxed block">
         This report shows simulated execution results.
         {hasPlaceholders && ' Some addresses shown are simulation placeholders.'}
-      </>
+      </span>
     );
   };
 
   return (
-    <Alert className="mb-4 border-orange-300 bg-orange-50">
-      <AlertTriangleIcon className="h-4 w-4 text-orange-600" />
-      <AlertTitle className="text-orange-800">Simulated Execution</AlertTitle>
-      <AlertDescription className="text-orange-700">{getMessage()}</AlertDescription>
+    <Alert className="mb-4 border-orange-300 bg-orange-50 flex flex-row items-start gap-2 p-4">
+      <AlertTriangleIcon className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
+      <div className="flex flex-col gap-1">
+        <AlertTitle className="text-orange-800 font-semibold mb-0 leading-none">Simulated Execution</AlertTitle>
+        <AlertDescription className="text-orange-700 text-sm mt-1">
+          {getMessage()}
+        </AlertDescription>
+      </div>
     </Alert>
   );
 }
