@@ -45,7 +45,7 @@ describe('Proposal Summary Generation', () => {
       expect(summary).toContain('Transfers 1000000 USDC to 0x456');
     });
 
-    it('should detect ETH transfers', () => {
+    it('should detect ETH transfers from decoded calldata', () => {
       const proposal = createProposal({
         values: [1000000000000000000n], // 1 ETH
       });
@@ -53,6 +53,17 @@ describe('Proposal Summary Generation', () => {
 
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain('Sends 1.0 ETH to 0x456');
+    });
+
+    it('should detect ETH transfers from proposal values with recipient', () => {
+      const proposal = createProposal({
+        targets: ['0x1234567890123456789012345678901234567890'],
+        values: [1000000000000000000n], // 1 ETH
+      });
+      const checks = createChecks([]); // No decoded calldata
+
+      const summary = generateProposalSummary(proposal, checks);
+      expect(summary).toContain('Sends 1 ETH to 0x1234...7890');
     });
 
     it('should handle multiple transfers', () => {

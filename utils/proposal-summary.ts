@@ -504,13 +504,31 @@ function detectTransferOperations(
   if (!skipEthValue) {
     const hasEthValue = proposal.values?.some((v) => BigInt(v.toString()) > 0n);
     if (hasEthValue && operations.filter((op) => op.type === 'ethTransfer').length === 0) {
-      // Sum up all ETH values
-      const totalEth = proposal.values.reduce((sum, v) => sum + BigInt(v.toString()), 0n);
-      if (totalEth > 0n) {
+      // Find targets that receive ETH
+      const ethRecipients: { target: string; amount: bigint }[] = [];
+      for (let i = 0; i < proposal.values.length; i++) {
+        const value = BigInt(proposal.values[i].toString());
+        if (value > 0n && proposal.targets[i]) {
+          ethRecipients.push({ target: proposal.targets[i], amount: value });
+        }
+      }
+
+      if (ethRecipients.length === 1) {
+        // Single recipient - show the address
+        const ethAmount = formatUnits(ethRecipients[0].amount, 18);
+        const shortAddr = formatAddress(ethRecipients[0].target);
+        operations.push({
+          type: 'ethTransfer',
+          description: `Sends ${ethAmount} ETH to ${shortAddr}`,
+          priority: 4,
+        });
+      } else if (ethRecipients.length > 1) {
+        // Multiple recipients - sum up and mention count
+        const totalEth = ethRecipients.reduce((sum, r) => sum + r.amount, 0n);
         const ethAmount = formatUnits(totalEth, 18);
         operations.push({
           type: 'ethTransfer',
-          description: `Sends ${ethAmount} ETH`,
+          description: `Sends ${ethAmount} ETH to ${ethRecipients.length} recipients`,
           priority: 4,
         });
       }
