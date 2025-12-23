@@ -154,6 +154,93 @@ describe('Proposal Summary Generation', () => {
       expect(summary).not.toContain('Base');
       expect(summary).not.toContain('Layer 2');
     });
+
+    it('should use L2 checks to describe what happens on destination chain', () => {
+      const proposal = createProposal();
+      const checks = createChecks([
+        '`0x123...` calls `createRetryableTicket(...)` on Inbox at 0x456... (decoded from ABI)',
+      ]);
+      // L2 checks showing token transfer
+      const l2Checks: Record<number, AllCheckResults> = {
+        42161: createChecks([
+          '`0x2bad...` transfers 100000000000000000000000 ARB to `0x66cc...` on Arbitrum (arb) at `0x912CE...` (formatted)',
+        ]),
+      };
+
+      const summary = generateProposalSummary(proposal, checks, undefined, l2Checks);
+      expect(summary).toContain('Transfers ARB on Arbitrum');
+    });
+
+    it('should extract token symbol from contract name when null', () => {
+      const proposal = createProposal();
+      const checks = createChecks([
+        '`0x123...` calls `createRetryableTicket(...)` on Inbox at 0x456... (decoded from ABI)',
+      ]);
+      // L2 checks with null token symbol but contract name has symbol
+      const l2Checks: Record<number, AllCheckResults> = {
+        42161: createChecks([
+          '`0x2bad...` transfers 100000000000000000000000 null to `0x66cc...` on Arbitrum (arb) at `0x912CE...` (formatted)',
+        ]),
+      };
+
+      const summary = generateProposalSummary(proposal, checks, undefined, l2Checks);
+      expect(summary).toContain('Transfers ARB on Arbitrum');
+      expect(summary).not.toContain('null');
+    });
+
+    it('should include ETH for L2 gas in cross-chain description', () => {
+      const proposal = createProposal({
+        values: [1000000000000000n], // 0.001 ETH
+      });
+      const checks = createChecks([
+        '`0x123...` calls `createRetryableTicket(...)` on Inbox at 0x456... (decoded from ABI)',
+      ]);
+      const l2Checks: Record<number, AllCheckResults> = {
+        42161: createChecks([
+          '`0x2bad...` transfers 100000 ARB to `0x66cc...` on Arbitrum at `0x912CE...` (formatted)',
+        ]),
+      };
+
+      const summary = generateProposalSummary(proposal, checks, undefined, l2Checks);
+      expect(summary).toContain('with');
+      expect(summary).toContain('ETH for L2 gas');
+    });
+
+    it('should not show separate ETH transfer when cross-chain has ETH for gas', () => {
+      const proposal = createProposal({
+        values: [1000000000000000n], // 0.001 ETH
+      });
+      const checks = createChecks([
+        '`0x123...` calls `createRetryableTicket(...)` on Inbox at 0x456... (decoded from ABI)',
+      ]);
+      const l2Checks: Record<number, AllCheckResults> = {
+        42161: createChecks([
+          '`0x2bad...` transfers 100000 ARB to `0x66cc...` on Arbitrum at `0x912CE...` (formatted)',
+        ]),
+      };
+
+      const summary = generateProposalSummary(proposal, checks, undefined, l2Checks);
+      // Should not have a separate "Sends X ETH" operation - ETH is in the cross-chain description
+      expect(summary).not.toMatch(/and sends \d+\.?\d* ETH$/);
+    });
+
+    it('should describe multiple recipients for same token', () => {
+      const proposal = createProposal();
+      const checks = createChecks([
+        '`0x123...` calls `createRetryableTicket(...)` on Inbox at 0x456... (decoded from ABI)',
+      ]);
+      const l2Checks: Record<number, AllCheckResults> = {
+        42161: createChecks([
+          '`0x2bad...` transfers 100000 ARB to `0x66cc...` (formatted)',
+          '`0x2bad...` transfers 100000 ARB to `0x789a...` (formatted)',
+          '`0x2bad...` transfers 100000 ARB to `0xabcd...` (formatted)',
+        ]),
+      };
+
+      const summary = generateProposalSummary(proposal, checks, undefined, l2Checks);
+      // With 3 transfers of ARB, should say "Transfers ARB on Arbitrum to 3 recipients"
+      expect(summary).toContain('Transfers ARB on Arbitrum');
+    });
   });
 
   describe('Parameter Changes', () => {

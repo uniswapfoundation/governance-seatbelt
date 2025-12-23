@@ -383,6 +383,7 @@ function generateStructuredReport(
   simulationType?: 'executed' | 'proposed' | 'new',
   simulationId?: string,
   simulation?: TenderlySimulation,
+  destinationChecks?: Record<number, AllCheckResults>,
 ): StructuredSimulationReport {
   // Validate required fields
   if (!proposal.proposer) {
@@ -491,7 +492,13 @@ function generateStructuredReport(
 
   // Create the structured report
   // Generate plain-language summary using the new summary generator
-  const plainLanguageSummary = generateProposalSummary(proposal, checks, simulation);
+  // Pass L2 checks to enable detailed cross-chain summaries
+  const plainLanguageSummary = generateProposalSummary(
+    proposal,
+    checks,
+    simulation,
+    destinationChecks,
+  );
 
   // Combine with simulation status for complete summary
   const statusText =
@@ -553,6 +560,7 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
     governorAddress,
     outputPath,
     destinationSimulations,
+    destinationChecks,
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
@@ -573,7 +581,7 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
       description: proposal.description,
     };
 
-    // Generate the structured report with simulation ID
+    // Generate the structured report with simulation ID and L2 checks for cross-chain summaries
     const simulationId = simulation?.simulation?.id;
     const structuredReport = generateStructuredReport(
       governorType,
@@ -587,6 +595,8 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
       chainId,
       simulationType,
       simulationId,
+      simulation,
+      destinationChecks,
     );
 
     // Create a simplified report structure for the frontend
@@ -683,7 +693,7 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
       .process(baseReport),
   );
 
-  // Generate the structured report for JSON output
+  // Generate the structured report for JSON output with L2 checks for cross-chain summaries
   const structuredReport = generateStructuredReport(
     governorType,
     blocks,
@@ -697,6 +707,7 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     simulationType,
     simulation?.simulation?.id,
     simulation,
+    destinationChecks,
   );
 
   // Add coverage data to the structured report if available
@@ -746,6 +757,7 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     governorAddress,
     outputPath: simulationResultsPath,
     destinationSimulations,
+    destinationChecks,
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,

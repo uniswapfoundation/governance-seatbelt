@@ -681,6 +681,7 @@ export interface WriteSimulationResultsJsonParams {
   governorAddress: string;
   outputPath: string;
   destinationSimulations?: SimulationResult['destinationSimulations'];
+  destinationChecks?: Record<number, AllCheckResults>;
   executor?: string;
   proposalCreatedBlock?: SimulationBlock;
   proposalExecutedBlock?: SimulationBlock;

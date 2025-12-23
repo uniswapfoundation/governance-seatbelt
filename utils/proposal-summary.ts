@@ -31,8 +31,9 @@ export function generateProposalSummary(
   proposal: ProposalEvent,
   checks: AllCheckResults,
   simulation?: TenderlySimulation,
+  l2Checks?: Record<number, AllCheckResults>,
 ): string {
-  const operations = detectOperations(proposal, checks, simulation);
+  const operations = detectOperations(proposal, checks, simulation, l2Checks);
 
   if (operations.length === 0) {
     return generateFallbackSummary(proposal);
@@ -61,11 +62,13 @@ function detectOperations(
   proposal: ProposalEvent,
   checks: AllCheckResults,
   simulation?: TenderlySimulation,
+  l2Checks?: Record<number, AllCheckResults>,
 ): DetectedOperation[] {
   const operations: DetectedOperation[] = [];
 
   // 1. Check for cross-chain operations (highest priority)
-  const crossChainOps = detectCrossChainOperations(checks);
+  const crossChainOps = detectCrossChainOperations(checks, l2Checks, proposal);
+  const hasCrossChain = crossChainOps.length > 0;
   operations.push(...crossChainOps);
 
   // 2. Check for proxy upgrades
@@ -77,7 +80,8 @@ function detectOperations(
   operations.push(...permissionOps);
 
   // 4. Check for transfers (ETH and tokens)
-  const transferOps = detectTransferOperations(proposal, checks);
+  // Skip ETH value transfers when we have cross-chain ops (ETH is for L2 gas)
+  const transferOps = detectTransferOperations(proposal, checks, hasCrossChain);
   operations.push(...transferOps);
 
   // 5. Check for parameter changes
@@ -87,12 +91,30 @@ function detectOperations(
   return operations;
 }
 
+// Chain ID to name mapping for cross-chain summaries
+const CHAIN_NAMES: Record<number, string> = {
+  42161: 'Arbitrum',
+  10: 'Optimism',
+  8453: 'Base',
+  1301: 'Unichain',
+  57073: 'Ink',
+  1868: 'Soneium',
+  60808: 'BOB',
+};
+
 /**
  * Detect cross-chain operations from check results
  */
-function detectCrossChainOperations(checks: AllCheckResults): DetectedOperation[] {
+function detectCrossChainOperations(
+  checks: AllCheckResults,
+  l2Checks?: Record<number, AllCheckResults>,
+  proposal?: ProposalEvent,
+): DetectedOperation[] {
   const operations: DetectedOperation[] = [];
   const detectedChains = new Set<string>();
+
+  // Calculate total ETH from proposal values (used for L2 gas)
+  const totalEthForGas = proposal?.values?.reduce((sum, v) => sum + BigInt(v.toString()), 0n) || 0n;
 
   // Look for cross-chain message checks in decoded calldata
   const calldataCheck = checks.checkDecodeCalldata;
@@ -106,9 +128,15 @@ function detectCrossChainOperations(checks: AllCheckResults): DetectedOperation[
       ) {
         if (!detectedChains.has('Arbitrum')) {
           detectedChains.add('Arbitrum');
+          const description = buildCrossChainDescription(
+            'Arbitrum',
+            42161,
+            l2Checks,
+            totalEthForGas,
+          );
           operations.push({
             type: 'crossChain',
-            description: 'Sends via Arbitrum bridge',
+            description,
             priority: 1,
           });
         }
@@ -122,9 +150,18 @@ function detectCrossChainOperations(checks: AllCheckResults): DetectedOperation[
       ) {
         if (!detectedChains.has('Optimism')) {
           detectedChains.add('Optimism');
+          // Try Optimism first, then Base, Unichain, etc.
+          const opStackChainId = findOpStackChainId(l2Checks);
+          const chainName = opStackChainId ? CHAIN_NAMES[opStackChainId] || 'L2' : 'Optimism';
+          const description = buildCrossChainDescription(
+            chainName,
+            opStackChainId,
+            l2Checks,
+            totalEthForGas,
+          );
           operations.push({
             type: 'crossChain',
-            description: 'Sends via Optimism bridge',
+            description,
             priority: 1,
           });
         }
@@ -145,6 +182,136 @@ function detectCrossChainOperations(checks: AllCheckResults): DetectedOperation[
           });
         }
       }
+    }
+  }
+
+  return operations;
+}
+
+/**
+ * Find the OP Stack chain ID from L2 checks (for sendMessage calls that could go to multiple chains)
+ */
+function findOpStackChainId(l2Checks?: Record<number, AllCheckResults>): number | undefined {
+  if (!l2Checks) return undefined;
+
+  // OP Stack chains in order of priority
+  const opStackChains = [10, 8453, 1301, 57073, 1868, 60808];
+  for (const chainId of opStackChains) {
+    if (l2Checks[chainId]) return chainId;
+  }
+  return undefined;
+}
+
+/**
+ * Build a descriptive cross-chain summary using L2 check data
+ */
+function buildCrossChainDescription(
+  chainName: string,
+  chainId: number | undefined,
+  l2Checks?: Record<number, AllCheckResults>,
+  ethForGas?: bigint,
+): string {
+  // Format ETH amount if provided
+  const ethSuffix =
+    ethForGas && ethForGas > 0n ? ` (with ${formatUnits(ethForGas, 18)} ETH for L2 gas)` : '';
+
+  // If no L2 checks available, return basic description
+  if (!l2Checks || !chainId || !l2Checks[chainId]) {
+    return `Sends via ${chainName} bridge${ethSuffix}`;
+  }
+
+  // Extract L2 operations from decoded calldata
+  const l2Operations = extractL2Operations(l2Checks[chainId]);
+
+  if (l2Operations.length === 0) {
+    return `Sends via ${chainName} bridge${ethSuffix}`;
+  }
+
+  // Build description based on detected L2 operations
+  if (l2Operations.length === 1) {
+    return `${l2Operations[0]} on ${chainName}${ethSuffix}`;
+  }
+
+  // Group similar operations
+  const transferOps = l2Operations.filter((op) => op.toLowerCase().includes('transfer'));
+  const otherOps = l2Operations.filter((op) => !op.toLowerCase().includes('transfer'));
+
+  if (transferOps.length > 1 && otherOps.length === 0) {
+    // Multiple transfers of the same type
+    const tokenMatch = transferOps[0].match(/Transfers?\s+(\w+)/i);
+    const token = tokenMatch ? tokenMatch[1] : 'tokens';
+    return `Transfers ${token} on ${chainName} to ${transferOps.length} recipients${ethSuffix}`;
+  }
+
+  if (l2Operations.length <= 3) {
+    return `${l2Operations.slice(0, -1).join(', ')} and ${lowercaseFirst(l2Operations[l2Operations.length - 1])} on ${chainName}${ethSuffix}`;
+  }
+
+  return `Executes ${l2Operations.length} operations on ${chainName}${ethSuffix}`;
+}
+
+/**
+ * Extract operation descriptions from L2 check results
+ */
+function extractL2Operations(l2Check: AllCheckResults): string[] {
+  const operations: string[] = [];
+  const processedTokens = new Set<string>();
+
+  const calldataCheck = l2Check.checkDecodeCalldata;
+  if (!calldataCheck?.result.info) return operations;
+
+  for (const info of calldataCheck.result.info) {
+    // Detect token transfers (formatted style)
+    if (info.includes('transfers') && !info.includes('ETH')) {
+      const tokenMatch = info.match(/transfers?\s+([\d,\.]+)\s+(\w+)\s+to/i);
+      if (tokenMatch) {
+        let tokenSymbol = tokenMatch[2];
+
+        // If token symbol is null/undefined, try to extract from contract name
+        // Pattern: "on ContractName (symbol) at 0x..."
+        if (tokenSymbol === 'null' || tokenSymbol === 'undefined') {
+          const contractNameMatch = info.match(/on\s+([^(]+)\s*\((\w+)\)/i);
+          if (contractNameMatch) {
+            // Use the symbol in parentheses (e.g., "arb" from "Arbitrum (arb)")
+            tokenSymbol = contractNameMatch[2].toUpperCase();
+          } else {
+            // Fallback to generic "tokens"
+            tokenSymbol = 'tokens';
+          }
+        }
+
+        if (!processedTokens.has(tokenSymbol)) {
+          processedTokens.add(tokenSymbol);
+          operations.push(`Transfers ${tokenSymbol}`);
+        }
+      }
+    }
+
+    // Detect ETH transfers
+    if (info.includes('ETH') && info.includes('transfer')) {
+      if (!processedTokens.has('ETH')) {
+        processedTokens.add('ETH');
+        const ethMatch = info.match(/transfers?\s+([\d,\.]+)\s+ETH/i);
+        if (ethMatch) {
+          operations.push(`Sends ${ethMatch[1]} ETH`);
+        } else {
+          operations.push('Sends ETH');
+        }
+      }
+    }
+
+    // Detect permission changes
+    if (info.includes('grantRole') || info.includes('revokeRole')) {
+      if (info.includes('grant')) {
+        operations.push('Grants permissions');
+      } else {
+        operations.push('Revokes permissions');
+      }
+    }
+
+    // Detect upgrades
+    if (info.includes('upgradeTo') || info.includes('upgradeToAndCall')) {
+      operations.push('Upgrades proxy');
     }
   }
 
@@ -247,10 +414,12 @@ function detectPermissionOperations(
 
 /**
  * Detect transfer operations (ETH and tokens)
+ * @param skipEthValue - If true, skip detecting ETH transfers from proposal values (used for cross-chain ops where ETH is for L2 gas)
  */
 function detectTransferOperations(
   proposal: ProposalEvent,
   checks: AllCheckResults,
+  skipEthValue = false,
 ): DetectedOperation[] {
   const operations: DetectedOperation[] = [];
   const processedTransfers = new Set<string>();
@@ -331,18 +500,20 @@ function detectTransferOperations(
     }
   }
 
-  // Check for ETH transfers from proposal values
-  const hasEthValue = proposal.values?.some((v) => BigInt(v.toString()) > 0n);
-  if (hasEthValue && operations.filter((op) => op.type === 'ethTransfer').length === 0) {
-    // Sum up all ETH values
-    const totalEth = proposal.values.reduce((sum, v) => sum + BigInt(v.toString()), 0n);
-    if (totalEth > 0n) {
-      const ethAmount = formatUnits(totalEth, 18);
-      operations.push({
-        type: 'ethTransfer',
-        description: `Sends ${ethAmount} ETH`,
-        priority: 4,
-      });
+  // Check for ETH transfers from proposal values (skip if ETH is for L2 gas in cross-chain ops)
+  if (!skipEthValue) {
+    const hasEthValue = proposal.values?.some((v) => BigInt(v.toString()) > 0n);
+    if (hasEthValue && operations.filter((op) => op.type === 'ethTransfer').length === 0) {
+      // Sum up all ETH values
+      const totalEth = proposal.values.reduce((sum, v) => sum + BigInt(v.toString()), 0n);
+      if (totalEth > 0n) {
+        const ethAmount = formatUnits(totalEth, 18);
+        operations.push({
+          type: 'ethTransfer',
+          description: `Sends ${ethAmount} ETH`,
+          priority: 4,
+        });
+      }
     }
   }
 
