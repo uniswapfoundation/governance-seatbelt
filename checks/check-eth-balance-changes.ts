@@ -15,7 +15,12 @@ export const checkEthBalanceChanges: ProposalCheck = {
     const blockExplorerUrl = deps.chainConfig.blockExplorer.baseUrl;
 
     if (!sim.transaction.transaction_info.asset_changes) {
-      return { info: ['No ETH transfers detected'], warnings, errors };
+      return {
+        info: [],
+        warnings,
+        errors,
+        skipped: { reason: 'No ETH transfers detected' },
+      };
     }
 
     // Filter for ETH transfers
@@ -24,7 +29,12 @@ export const checkEthBalanceChanges: ProposalCheck = {
     );
 
     if (ethTransfers.length === 0) {
-      return { info: ['No ETH transfers detected'], warnings, errors };
+      return {
+        info: [],
+        warnings,
+        errors,
+        skipped: { reason: 'No ETH transfers detected' },
+      };
     }
 
     // Process ETH transfers

@@ -16,6 +16,7 @@ import type { Visitor } from 'unist-util-visit';
 import { getAddress } from 'viem';
 import type {
   AllCheckResults,
+  CoverageData,
   GenerateReportsParams,
   GovernorType,
   ProposalEvent,
@@ -166,24 +167,33 @@ function toMessageList(header: string, text: string[]): string {
  * @param name the descriptive name of the check
  */
 function toCheckSummary({
-  result: { errors, warnings, info },
+  result: { errors, warnings, info, skipped },
   name,
 }: AllCheckResults[string]): string {
-  const status =
-    errors.length === 0
-      ? warnings.length === 0
-        ? '✅ Passed'
-        : '❗❗ **Passed with warnings**'
-      : '❌ **Failed**';
+  let status: string;
 
-  return `### ${name} ${status}
+  if (skipped) {
+    status = '⏭️ **Skipped**';
+  } else if (errors.length === 0) {
+    status = warnings.length === 0 ? '✅ Passed' : '❗❗ **Passed with warnings**';
+  } else {
+    status = '❌ **Failed**';
+  }
 
-${toMessageList('Errors', errors)}
+  let report = `### ${name} ${status}\n\n`;
 
-${toMessageList('Warnings', warnings)}
+  if (skipped) {
+    report += `${bold('Skip Reason')}: ${skipped.reason}\n\n`;
+  }
 
-${toMessageList('Info', info)}
-`;
+  report += toMessageList('Errors', errors);
+  report += '\n\n';
+  report += toMessageList('Warnings', warnings);
+  report += '\n\n';
+  report += toMessageList('Info', info);
+  report += '\n';
+
+  return report;
 }
 
 /**
@@ -422,10 +432,15 @@ function generateStructuredReport(
   // Format checks
   const formattedChecks: SimulationCheck[] = Object.entries(checks).map(([_, check]) => {
     const { name, result } = check;
-    const { errors, warnings, info } = result;
+    const { errors, warnings, info, skipped } = result;
 
-    let checkStatus: 'passed' | 'warning' | 'failed' = 'passed';
-    if (errors.length > 0) {
+    let checkStatus: 'passed' | 'warning' | 'failed' | 'skipped' = 'passed';
+    let skipReason: string | undefined;
+
+    if (skipped) {
+      checkStatus = 'skipped';
+      skipReason = skipped.reason;
+    } else if (errors.length > 0) {
       checkStatus = 'failed';
     } else if (warnings.length > 0) {
       checkStatus = 'warning';
@@ -433,6 +448,7 @@ function generateStructuredReport(
 
     // Combine all messages into details
     const details = [
+      ...(skipped ? [`**Skipped**: ${skipped.reason}`] : []),
       ...errors.map((msg) => `**Error**: ${msg}`),
       ...warnings.map((msg) => `**Warning**: ${msg}`),
       ...info.map((msg) => `**Info**: ${msg}`),
@@ -441,6 +457,7 @@ function generateStructuredReport(
     return {
       title: name,
       status: checkStatus,
+      skipReason,
       details,
       info,
     };
@@ -619,6 +636,7 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     chainId,
     simulationType,
     simulation,
+    coverage,
   } = params;
   console.log(`[Report] Generating report for proposal ${proposal.id} (${proposal.proposalId})`);
   console.log(`[Report] Output directory: ${outputDir}`);
@@ -669,6 +687,11 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     simulation?.simulation?.id,
   );
 
+  // Add coverage data to the structured report if available
+  if (coverage) {
+    structuredReport.coverage = coverage;
+  }
+
   // Save off all reports. The Markdown and PDF reports use the `markdownReport`.
   await Promise.all([
     fsp.writeFile(`${path}.html`, htmlReport),
@@ -692,6 +715,11 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     ),
   ]);
 
+  // Write standalone coverage JSON file if coverage data is available
+  if (coverage) {
+    writeCoverageJson(coverage, outputDir, id);
+  }
+
   // Write simulation results JSON for both SIM_NAME and bulk modes
   const simulationResultsPath = process.env.SIM_NAME
     ? join(dirname(__dirname), 'frontend', 'public', 'simulation-results.json') // SIM_NAME mode: frontend directory
@@ -713,6 +741,15 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     simulationType,
     simulation,
   });
+}
+
+/**
+ * Write standalone coverage JSON file
+ */
+function writeCoverageJson(coverage: CoverageData, outputDir: string, proposalId: string): void {
+  const coveragePath = `${outputDir}/${proposalId}-coverage.json`;
+  writeFileSync(coveragePath, JSON.stringify(coverage, null, 2));
+  console.log(`[Report] Coverage JSON written to: ${coveragePath}`);
 }
 
 /**
@@ -910,6 +947,8 @@ function remarkFixEmojiLinks() {
           node.url = node.url.replace('--passed', '-✅-passed');
         } else if (isInternalLink && node.url.endsWith('--failed')) {
           node.url = node.url.replace('--failed', '-❌-failed');
+        } else if (isInternalLink && node.url.endsWith('--skipped')) {
+          node.url = node.url.replace('--skipped', '-⏭️-skipped');
         }
       }
     }) as Visitor<Link>);
