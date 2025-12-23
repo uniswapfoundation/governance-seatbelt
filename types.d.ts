@@ -1,6 +1,9 @@
 import type { Address, Block, Hex } from 'viem';
 import type { ChainConfig } from './utils/clients/client';
 
+// Type alias for From - represents an Ethereum address
+type From = Address;
+
 // --- Call Trace Types ---
 export interface CallTrace {
   from: string;

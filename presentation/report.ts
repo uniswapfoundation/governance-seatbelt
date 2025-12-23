@@ -62,29 +62,29 @@ function getRepoInfo(): { repoCommit?: string; repoUrl?: string } {
     if (process.env.GITHUB_SHA && process.env.GITHUB_REPOSITORY) {
       return {
         repoCommit: process.env.GITHUB_SHA,
-        repoUrl: `https://github.com/${process.env.GITHUB_REPOSITORY}`
+        repoUrl: `https://github.com/${process.env.GITHUB_REPOSITORY}`,
       };
     }
-    
+
     // Fallback to git commands for local development
-    const commit = execSync('git rev-parse HEAD', { 
-      encoding: 'utf-8', 
-      stdio: 'pipe' 
+    const commit = execSync('git rev-parse HEAD', {
+      encoding: 'utf-8',
+      stdio: 'pipe',
     }).trim();
-    
-    const remoteUrl = execSync('git config --get remote.origin.url', { 
-      encoding: 'utf-8', 
-      stdio: 'pipe' 
+
+    const remoteUrl = execSync('git config --get remote.origin.url', {
+      encoding: 'utf-8',
+      stdio: 'pipe',
     }).trim();
-    
+
     // Convert git SSH URL to HTTPS if needed
     const httpsUrl = remoteUrl
       .replace(/^git@github\.com:/, 'https://github.com/')
       .replace(/\.git$/, '');
-    
+
     return {
       repoCommit: commit,
-      repoUrl: httpsUrl
+      repoUrl: httpsUrl,
     };
   } catch {
     // Git not available or not in a git repository
@@ -99,7 +99,7 @@ function getTenderlyUrl(simulationId?: string): string | undefined {
   if (!simulationId || !process.env.TENDERLY_USER || !process.env.TENDERLY_PROJECT_SLUG) {
     return undefined;
   }
-  
+
   return `https://dashboard.tenderly.co/${process.env.TENDERLY_USER}/${process.env.TENDERLY_PROJECT_SLUG}/simulator/${simulationId}`;
 }
 
@@ -395,20 +395,20 @@ function generateStructuredReport(
 
   // Determine overall status
   let status: 'success' | 'warning' | 'error' | 'inconclusive' = 'success';
-  
+
   // Check for inconclusive conditions first
   let hasSkippedChecks = false;
   let hasErrors = false;
   let hasWarnings = false;
-  
+
   for (const checkId in checks) {
     const { result } = checks[checkId];
-    
+
     // Check if this check was skipped (indicates partial execution)
     if ('skipped' in result && result.skipped) {
       hasSkippedChecks = true;
     }
-    
+
     if (result.errors.length > 0) {
       hasErrors = true;
     }
@@ -416,7 +416,7 @@ function generateStructuredReport(
       hasWarnings = true;
     }
   }
-  
+
   // Set status based on conditions
   if (hasErrors) {
     status = 'error';
@@ -492,10 +492,13 @@ function generateStructuredReport(
     proposalText,
     status,
     summary: `Simulation ${
-      status === 'success' ? 'completed successfully' : 
-      status === 'warning' ? 'completed with warnings' : 
-      status === 'inconclusive' ? 'completed with inconclusive results' :
-      'completed with errors'
+      status === 'success'
+        ? 'completed successfully'
+        : status === 'warning'
+          ? 'completed with warnings'
+          : status === 'inconclusive'
+            ? 'completed with inconclusive results'
+            : 'completed with errors'
     } for proposal: "${title}".`,
     checks: formattedChecks,
     stateChanges: extractStateChanges(checks),

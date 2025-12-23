@@ -1,22 +1,20 @@
-import type { StructuredSimulationReport } from '@/hooks/use-simulation-results';
-import { 
-  CheckCircleIcon, 
-  AlertTriangleIcon, 
-  XCircleIcon, 
-  ExternalLinkIcon,
-  GitCommitIcon,
-  HelpCircleIcon,
-  ClockIcon,
-  GlobeIcon,
-  ActivityIcon,
-  ShieldCheckIcon,
-  GithubIcon
-} from 'lucide-react';
-import { buildBlockLink } from './StructuredReport';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { Card, CardContent } from '@/components/ui/card';
+import type { StructuredSimulationReport } from '@/hooks/use-simulation-results';
+import {
+  ActivityIcon,
+  AlertTriangleIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  ExternalLinkIcon,
+  GithubIcon,
+  GlobeIcon,
+  HelpCircleIcon,
+  ShieldCheckIcon,
+  XCircleIcon,
+} from 'lucide-react';
+import { buildBlockLink } from './StructuredReport';
 
 interface DecisionHeaderProps {
   report: StructuredSimulationReport;
@@ -25,22 +23,19 @@ interface DecisionHeaderProps {
 export function DecisionHeader({ report }: DecisionHeaderProps) {
   const checks = report.checks ?? [];
   const ranChecks = checks.length;
-  
+
   // Count warnings and failures for display
   const warningCount = checks.filter((check) => check.status === 'warning').length;
   const failureCount = checks.filter((check) => check.status === 'failed').length;
-  
+
   // Get timestamp with fallback for legacy format
-  const timestamp = report.metadata.simulationTimestamp || 
-                   report.metadata.timestamp || 
-                   '0';
+  const timestamp = report.metadata.simulationTimestamp || report.metadata.timestamp || '0';
   const age = formatRelativeTime(timestamp);
   const localTime = formatLocalTime(timestamp);
-  
+
   // Get block number with fallback for legacy format
-  const blockNumber = report.metadata.simulationBlockNumber || 
-                     report.metadata.blockNumber;
-  
+  const blockNumber = report.metadata.simulationBlockNumber || report.metadata.blockNumber;
+
   // Extract proposal ID - check if it's already in the title
   const proposalId = report.metadata.proposalId;
   const showProposalId = proposalId && !report.title.includes(`#${proposalId}`);
@@ -49,10 +44,10 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
   const repoCommit = report.metadata.repoCommit;
   const repoUrl = report.metadata.repoUrl;
   const tenderlyUrl = report.metadata.tenderlyUrl;
-  
+
   // Extract repo name if available
   const repoName = repoUrl ? repoUrl.split('/').slice(-2).join('/') : 'Repository';
-  
+
   return (
     <Card className="mb-6 overflow-hidden border-border/60 shadow-none p-0 gap-0">
       <div className="border-b bg-slate-100 dark:bg-muted/80 px-6 py-4">
@@ -61,12 +56,15 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
             <div className="flex items-center gap-3">
               <StatusBadge status={report.status} />
               {showProposalId && (
-                <Badge variant="outline" className="font-mono text-sm text-muted-foreground h-8 px-3 bg-background">
+                <Badge
+                  variant="outline"
+                  className="font-mono text-sm text-muted-foreground h-8 px-3 bg-background"
+                >
                   #{proposalId}
                 </Badge>
               )}
             </div>
-            
+
             {repoCommit && repoUrl && (
               <Button variant="outline" size="sm" className="h-8 gap-2" asChild>
                 <a
@@ -80,7 +78,7 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
               </Button>
             )}
           </div>
-          
+
           <h1 className="text-2xl font-bold tracking-tight text-foreground">{report.title}</h1>
         </div>
       </div>
@@ -94,21 +92,30 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
           </div>
           <div className="flex flex-col items-start gap-1">
             <span className="text-sm font-medium">{ranChecks} executed</span>
-            {(warningCount > 0 || failureCount > 0) ? (
+            {warningCount > 0 || failureCount > 0 ? (
               <div className="flex gap-1.5">
                 {warningCount > 0 && (
-                  <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-yellow-200 h-5 px-1.5 text-[10px]">
+                  <Badge
+                    variant="secondary"
+                    className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-yellow-200 h-5 px-1.5 text-[10px]"
+                  >
                     {warningCount} warn
                   </Badge>
                 )}
                 {failureCount > 0 && (
-                  <Badge variant="secondary" className="bg-red-100 text-red-800 hover:bg-red-100 border-red-200 h-5 px-1.5 text-[10px]">
+                  <Badge
+                    variant="secondary"
+                    className="bg-red-100 text-red-800 hover:bg-red-100 border-red-200 h-5 px-1.5 text-[10px]"
+                  >
                     {failureCount} fail
                   </Badge>
                 )}
               </div>
             ) : (
-              <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 h-5 px-1.5 text-[10px]">
+              <Badge
+                variant="outline"
+                className="text-green-600 border-green-200 bg-green-50 h-5 px-1.5 text-[10px]"
+              >
                 All Passed
               </Badge>
             )}
@@ -136,9 +143,14 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
           <div className="flex flex-col items-start gap-1">
             <span className="text-sm font-medium">{report.metadata.chainName || 'Ethereum'}</span>
             {blockNumber && blockNumber !== 'unknown' && (
-              <Button variant="link" size="sm" className="h-auto p-0 !px-0 text-xs text-muted-foreground hover:text-primary justify-start text-left" asChild>
-                <a 
-                  href={buildBlockLink(blockNumber, report.metadata)} 
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto p-0 !px-0 text-xs text-muted-foreground hover:text-primary justify-start text-left"
+                asChild
+              >
+                <a
+                  href={buildBlockLink(blockNumber, report.metadata)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="group flex items-center gap-1"
@@ -159,17 +171,13 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
           </div>
           <div>
             {tenderlyUrl ? (
-              <Button 
-                variant="default" 
-                size="sm" 
-                className="h-7 text-xs gap-1.5 bg-[#646cff] hover:bg-[#646cff]/90 text-white border-transparent" 
+              <Button
+                variant="default"
+                size="sm"
+                className="h-7 text-xs gap-1.5 bg-[#646cff] hover:bg-[#646cff]/90 text-white border-transparent"
                 asChild
               >
-                <a
-                  href={tenderlyUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <a href={tenderlyUrl} target="_blank" rel="noopener noreferrer">
                   View on Tenderly
                   <ExternalLinkIcon className="h-4 w-4" />
                 </a>
@@ -187,17 +195,17 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
 // Helper: Format relative time (static, not updating)
 function formatRelativeTime(timestamp: string): string {
   const now = Date.now();
-  const then = parseInt(timestamp) * 1000;
+  const then = Number.parseInt(timestamp) * 1000;
   const diff = now - then;
-  
-  if (isNaN(then) || then === 0) {
+
+  if (Number.isNaN(then) || then === 0) {
     return 'Unknown time';
   }
-  
+
   const minutes = Math.floor(diff / 60000);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
-  
+
   if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
   if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
   if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
@@ -206,14 +214,14 @@ function formatRelativeTime(timestamp: string): string {
 
 // Helper: Format local time
 function formatLocalTime(timestamp: string): string {
-  const ts = parseInt(timestamp) * 1000;
-  if (isNaN(ts) || ts === 0) return '';
-  
+  const ts = Number.parseInt(timestamp) * 1000;
+  if (Number.isNaN(ts) || ts === 0) return '';
+
   return new Date(ts).toLocaleString(undefined, {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
-    minute: '2-digit'
+    minute: '2-digit',
   });
 }
 

@@ -1,7 +1,7 @@
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, test, beforeAll, afterAll } from 'bun:test';
 import { generateAndSaveReports } from '../presentation/report';
 import type { TenderlySimulation } from '../types';
 
@@ -27,10 +27,10 @@ const mockSimulation: TenderlySimulation = {
     created_at: new Date('2024-01-01T00:00:00Z'),
   },
   transaction: {
-    hash: '0xtest' as any,
+    hash: '0xtest',
     block_hash: '0xblock',
     block_number: 123456,
-    from: '0x0000000000000000000000000000000000001234' as any,
+    from: '0x0000000000000000000000000000000000001234',
     gas: 21000,
     gas_price: 1000000000,
     gas_fee_cap: 1000000000,
@@ -40,7 +40,7 @@ const mockSimulation: TenderlySimulation = {
     effective_gas_price: 1000000000,
     input: '0x',
     nonce: 0,
-    to: '0x0000000000000000000000000000000000005678' as any,
+    to: '0x0000000000000000000000000000000000005678',
     index: 0,
     value: '0',
     access_list: null,
@@ -52,17 +52,17 @@ const mockSimulation: TenderlySimulation = {
     transaction_info: {
       contract_id: 'test',
       block_number: 123456,
-      transaction_id: '0xtest' as any,
-      contract_address: '0x0000000000000000000000000000000000005678' as any,
+      transaction_id: '0xtest',
+      contract_address: '0x0000000000000000000000000000000000005678',
       method: 'test',
       parameters: null,
       intrinsic_gas: 21000,
       refund_gas: 0,
       call_trace: {
-        from: '0x0000000000000000000000000000000000001234' as any,
-        to: '0x0000000000000000000000000000000000005678' as any,
+        from: '0x0000000000000000000000000000000000001234',
+        to: '0x0000000000000000000000000000000000005678',
         input: '0x',
-      } as any,
+      },
       stack_trace: null,
       logs: null,
       state_diff: [],
@@ -119,7 +119,7 @@ describe('Issue #92: Decision Header Metadata', () => {
       rmSync(TEST_DIR, { recursive: true, force: true });
     }
     mkdirSync(TEST_DIR, { recursive: true });
-    
+
     // Mock environment variables for Tenderly URL generation
     process.env.TENDERLY_USER = 'test_user';
     process.env.TENDERLY_PROJECT_SLUG = 'test_project';
@@ -130,18 +130,20 @@ describe('Issue #92: Decision Header Metadata', () => {
     if (existsSync(TEST_DIR)) {
       rmSync(TEST_DIR, { recursive: true, force: true });
     }
-    delete process.env.TENDERLY_USER;
-    delete process.env.TENDERLY_PROJECT_SLUG;
+    process.env.TENDERLY_USER = undefined;
+    process.env.TENDERLY_PROJECT_SLUG = undefined;
   });
 
   test('should include repoCommit and repoUrl in metadata', async () => {
     // Get actual git commit and repo URL
     let expectedCommit: string | undefined;
     let expectedUrl: string | undefined;
-    
+
     try {
       expectedCommit = execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim();
-      const remoteUrl = execSync('git config --get remote.origin.url', { encoding: 'utf-8' }).trim();
+      const remoteUrl = execSync('git config --get remote.origin.url', {
+        encoding: 'utf-8',
+      }).trim();
       expectedUrl = remoteUrl
         .replace(/^git@github\.com:/, 'https://github.com/')
         .replace(/\.git$/, '');
@@ -164,16 +166,16 @@ describe('Issue #92: Decision Header Metadata', () => {
     // Read the generated JSON report
     const reportPath = join(TEST_DIR, '92.json');
     expect(existsSync(reportPath)).toBe(true);
-    
+
     const report = JSON.parse(readFileSync(reportPath, 'utf-8'));
-    
+
     // Check metadata fields
     expect(report.metadata).toBeDefined();
-    
+
     if (expectedCommit) {
       expect(report.metadata.repoCommit).toBe(expectedCommit);
     }
-    
+
     if (expectedUrl) {
       expect(report.metadata.repoUrl).toBe(expectedUrl);
     }
@@ -195,10 +197,10 @@ describe('Issue #92: Decision Header Metadata', () => {
     // Read the generated JSON report
     const reportPath = join(TEST_DIR, '92.json');
     const report = JSON.parse(readFileSync(reportPath, 'utf-8'));
-    
+
     // Check Tenderly URL
     expect(report.metadata.tenderlyUrl).toBe(
-      'https://dashboard.tenderly.co/test_user/test_project/simulator/test-simulation-id-123'
+      'https://dashboard.tenderly.co/test_user/test_project/simulator/test-simulation-id-123',
     );
   });
 
@@ -218,10 +220,10 @@ describe('Issue #92: Decision Header Metadata', () => {
     // Read the generated JSON report
     const reportPath = join(TEST_DIR, '92.json');
     const report = JSON.parse(readFileSync(reportPath, 'utf-8'));
-    
+
     // Tenderly URL should be undefined when no simulation
     expect(report.metadata.tenderlyUrl).toBeUndefined();
-    
+
     // But repo fields should still be present
     expect(report.metadata).toBeDefined();
     if (report.metadata.repoCommit) {
@@ -248,7 +250,7 @@ describe('Issue #92: Decision Header Metadata', () => {
     // Read the generated JSON report
     const reportPath = join(TEST_DIR, '92.json');
     const report = JSON.parse(readFileSync(reportPath, 'utf-8'));
-    
+
     // Check all required existing fields are still present
     expect(report.metadata.proposalId).toBe('92');
     expect(report.metadata.proposer).toBe('0x0000000000000000000000000000000000001234');
@@ -259,7 +261,7 @@ describe('Issue #92: Decision Header Metadata', () => {
     expect(report.metadata.chainName).toBe('Ethereum');
     expect(report.metadata.blockExplorerBaseUrl).toBe('https://etherscan.io');
     expect(report.metadata.simulationType).toBe('new');
-    
+
     // New fields should also be present
     expect(report.metadata.repoCommit).toBeDefined();
     expect(report.metadata.repoUrl).toBeDefined();
