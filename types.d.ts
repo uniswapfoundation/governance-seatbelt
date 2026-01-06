@@ -574,9 +574,12 @@ export interface CoverageData {
  * Structured simulation report types
  */
 export interface SimulationCheck {
+  checkId?: string;
   title: string;
   status: 'passed' | 'warning' | 'failed' | 'skipped';
   skipReason?: string;
+  warningCount?: number;
+  errorCount?: number;
   details?: string;
   info?: string[];
   infoItems?: Array<{
@@ -702,6 +705,7 @@ export interface WriteSimulationResultsJsonParams {
   chainId?: number;
   simulationType?: 'executed' | 'proposed' | 'new';
   simulation?: TenderlySimulation;
+  coverage?: CoverageData;
   // Pre-generated structured report (with labels) to avoid regenerating
   structuredReport?: StructuredSimulationReport;
 }

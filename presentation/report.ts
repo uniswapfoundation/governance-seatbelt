@@ -438,7 +438,7 @@ function generateStructuredReport(
   }
 
   // Format checks
-  const formattedChecks: SimulationCheck[] = Object.entries(checks).map(([_, check]) => {
+  const formattedChecks: SimulationCheck[] = Object.entries(checks).map(([checkId, check]) => {
     const { name, result } = check;
     const { errors, warnings, info, skipped } = result;
 
@@ -463,9 +463,12 @@ function generateStructuredReport(
     ].join('\n\n');
 
     return {
+      checkId,
       title: name,
       status: checkStatus,
       skipReason,
+      warningCount: warnings.length,
+      errorCount: errors.length,
       details,
       info,
     };
@@ -571,6 +574,7 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
     chainId,
     simulationType,
     simulation,
+    coverage,
   } = params;
 
   try {
@@ -604,6 +608,10 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
         simulation,
         destinationChecks,
       );
+
+    if (coverage) {
+      structuredReport.coverage = coverage;
+    }
 
     // Create a simplified report structure for the frontend
     const reportForFrontend = {
@@ -802,6 +810,7 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     chainId,
     simulationType,
     simulation,
+    coverage,
     structuredReport, // Pass the report with labels already resolved
   });
 }

@@ -229,6 +229,148 @@ function getExecutorLabel(simulationType?: string): string {
   }
 }
 
+function CoverageTable({ report }: { report: StructuredSimulationReport }) {
+  const coverage = report.coverage;
+  const checksById = useMemo(() => {
+    const map = new Map<string, SimulationCheck>();
+    for (const check of report.checks) {
+      if (check.checkId) map.set(check.checkId, check);
+    }
+    return map;
+  }, [report.checks]);
+
+  if (!coverage || coverage.checks.length === 0) return null;
+
+  const checksByChainId = coverage.checks.reduce<Record<string, typeof coverage.checks>>(
+    (acc, check) => {
+      const chainKey = String(check.chainId ?? 'unknown');
+      if (!acc[chainKey]) acc[chainKey] = [];
+      acc[chainKey].push(check);
+      return acc;
+    },
+    {},
+  );
+
+  const chainEntries = Object.entries(checksByChainId).sort(([a], [b]) => {
+    if (a === 'unknown') return 1;
+    if (b === 'unknown') return -1;
+    return Number(a) - Number(b);
+  });
+
+  const badgeForExecution = (status: 'ran' | 'skipped' | 'failed') => {
+    if (status === 'skipped') {
+      return (
+        <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-300">
+          Not executed
+        </Badge>
+      );
+    }
+    if (status === 'failed') {
+      return <Badge variant="destructive">Failed</Badge>;
+    }
+    return (
+      <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+        Ran
+      </Badge>
+    );
+  };
+
+  return (
+    <div className="border border-muted rounded-md p-4 bg-card">
+      <h3 className="text-lg font-semibold mb-3">Coverage</h3>
+      <div className="space-y-6">
+        {chainEntries.map(([chainId, chainChecks]) => (
+          <div key={chainId} className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-medium">
+                Chain {chainId === 'unknown' ? 'unknown' : chainId}
+              </div>
+              <div className="text-xs text-muted-foreground">{chainChecks.length} checks</div>
+            </div>
+
+            <div className="overflow-x-auto border border-muted rounded-md">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr className="text-left">
+                    <th className="py-2 px-3 font-medium">Check</th>
+                    <th className="py-2 px-3 font-medium">Execution</th>
+                    <th className="py-2 px-3 font-medium">Findings</th>
+                    <th className="py-2 px-3 font-medium">Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {chainChecks.map((coverageCheck) => {
+                    const structuredCheck = checksById.get(coverageCheck.checkId);
+                    const errorCount = structuredCheck?.errorCount ?? 0;
+                    const warningCount = structuredCheck?.warningCount ?? 0;
+
+                    const findings =
+                      coverageCheck.status === 'skipped'
+                        ? null
+                        : {
+                            errorCount,
+                            warningCount,
+                          };
+
+                    return (
+                      <tr key={coverageCheck.checkId} className="border-t border-muted">
+                        <td className="py-2 px-3">
+                          <div className="font-medium">{coverageCheck.checkName}</div>
+                          <div className="text-xs text-muted-foreground font-mono">
+                            {coverageCheck.checkId}
+                          </div>
+                        </td>
+                        <td className="py-2 px-3">{badgeForExecution(coverageCheck.status)}</td>
+                        <td className="py-2 px-3">
+                          {findings === null ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : findings.errorCount > 0 || findings.warningCount > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {findings.errorCount > 0 && (
+                                <span className="text-red-600">{findings.errorCount} errors</span>
+                              )}
+                              {findings.warningCount > 0 && (
+                                <span className="text-yellow-700">
+                                  {findings.warningCount} warnings
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">0</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-3">
+                          <div className="flex flex-wrap gap-2 items-center">
+                            {coverageCheck.wasInferred && (
+                              <Badge
+                                variant="outline"
+                                className="bg-gray-100 text-gray-600 border-gray-300"
+                              >
+                                Inferred
+                              </Badge>
+                            )}
+                            {coverageCheck.skipReason ? (
+                              <span className="text-muted-foreground">
+                                {coverageCheck.skipReason}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function StructuredReport({ report }: StructuredReportProps) {
   // Get block number with fallback for backwards compatibility
   const blockNumber =
@@ -378,6 +520,7 @@ export function StructuredReport({ report }: StructuredReportProps) {
 
             <TabsContent value="checks" className="mt-4 absolute inset-0 overflow-y-auto pb-8 px-1">
               <div className="space-y-4">
+                <CoverageTable report={report} />
                 {report.checks.length === 0 ? (
                   <div className="flex items-center justify-center p-6 text-muted-foreground border border-muted rounded-md">
                     <InfoIcon className="h-4 w-4 mr-2" />
