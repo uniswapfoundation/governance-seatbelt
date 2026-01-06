@@ -55,6 +55,23 @@ const TENDERLY_FETCH_OPTIONS = {
   headers: { 'X-Access-Key': TENDERLY_ACCESS_TOKEN },
 };
 
+function parseBooleanEnv(value: string | undefined): boolean | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'y', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'n', 'off'].includes(normalized)) return false;
+  return undefined;
+}
+
+function getTenderlySaveFlags(defaultSaveIfFails: boolean): {
+  save: boolean;
+  saveIfFails: boolean;
+} {
+  const save = parseBooleanEnv(process.env.TENDERLY_SAVE_SIMULATIONS) ?? true;
+  const saveIfFails = parseBooleanEnv(process.env.TENDERLY_SAVE_IF_FAILS) ?? defaultSaveIfFails;
+  return { save, saveIfFails: save ? saveIfFails : false };
+}
+
 // Placeholder sender for simulations.
 // IMPORTANT: This MUST remain an empty EOA on mainnet (no code, nonce = 0).
 // The test at tests/placeholder-constant.test.ts enforces this invariant.
@@ -519,6 +536,7 @@ async function simulateExecuted(config: SimulationConfigExecuted): Promise<Simul
   // --- Simulate it ---
   // Prepare tenderly payload. Since this proposal was already executed, we directly use that transaction data
   const tx = await publicClient.getTransaction({ hash: proposalExecutedEvent.transactionHash });
+  const { save: saveSimulation, saveIfFails: saveSimulationIfFails } = getTenderlySaveFlags(true);
   const simulationPayload: TenderlyPayload = {
     network_id: String(tx.chainId) as TenderlyPayload['network_id'],
     block_number: Number(tx.blockNumber),
@@ -528,8 +546,8 @@ async function simulateExecuted(config: SimulationConfigExecuted): Promise<Simul
     gas: Number(tx.gas),
     gas_price: tx.gasPrice?.toString(),
     value: tx.value.toString(),
-    save_if_fails: true, // Set to true to save the simulation to your Tenderly dashboard if it fails.
-    save: true, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
+    save_if_fails: saveSimulationIfFails, // Save failed sims when enabled.
+    save: saveSimulation, // Save successful sims when enabled.
     generate_access_list: true,
   };
   const sim = await sendSimulation(simulationPayload);
@@ -623,6 +641,8 @@ export async function handleCrossChainSimulations(
     extractedMessages.map(async (message) => {
       console.log(`[CrossChainHandler] Simulating L2 message to: ${message.l2TargetAddress}`);
       try {
+        const { save: saveSimulation, saveIfFails: saveSimulationIfFails } =
+          getTenderlySaveFlags(true);
         const destinationPayload: TenderlyPayload = {
           network_id: message.destinationChainId.toString() as TenderlyPayload['network_id'],
           from: message.l2FromAddress ?? DEFAULT_SIMULATION_ADDRESS,
@@ -631,8 +651,8 @@ export async function handleCrossChainSimulations(
           gas: BLOCK_GAS_LIMIT,
           gas_price: '0',
           value: message.l2Value,
-          save_if_fails: true,
-          save: true,
+          save_if_fails: saveSimulationIfFails,
+          save: saveSimulation,
         };
 
         // Log the payload before sending
@@ -744,6 +764,8 @@ function buildSimulationPayload(params: SimulationPayloadParams): TenderlyPayloa
     saveIfFails = false,
   } = params;
 
+  const { save: saveSimulation, saveIfFails: saveSimulationIfFails } =
+    getTenderlySaveFlags(saveIfFails);
   return {
     network_id: '1',
     // this field represents the block state to simulate against, so we use the latest block number
@@ -758,8 +780,8 @@ function buildSimulationPayload(params: SimulationPayloadParams): TenderlyPayloa
     gas: BLOCK_GAS_LIMIT,
     gas_price: '0',
     value: '0', // Will be updated by handleETHValueRequirements if needed
-    save_if_fails: saveIfFails, // Set to true to save the simulation to your Tenderly dashboard if it fails.
-    save: true, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
+    save_if_fails: saveSimulationIfFails, // Save failed sims when enabled.
+    save: saveSimulation, // Save successful sims when enabled.
     generate_access_list: true, // not required, but useful as a sanity check to ensure consistency in the simulation response
     block_header: {
       // this data represents what block.number and block.timestamp should return in the EVM during the simulation

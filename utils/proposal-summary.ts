@@ -102,6 +102,8 @@ const CHAIN_NAMES: Record<number, string> = {
   60808: 'BOB',
 };
 
+const ADDRESS_REGEX = /0x[a-fA-F0-9]{40}/g;
+
 /**
  * Detect cross-chain operations from check results
  */
@@ -238,7 +240,7 @@ function buildCrossChainDescription(
 
   if (transferOps.length > 1 && otherOps.length === 0) {
     // Multiple transfers of the same type
-    const tokenMatch = transferOps[0].match(/Transfers?\s+(\w+)/i);
+    const tokenMatch = transferOps[0].match(/Transfers?\s+([\w.-]+)/i);
     const token = tokenMatch ? tokenMatch[1] : 'tokens';
     return `Transfers ${token} on ${chainName} to ${transferOps.length} recipients${ethSuffix}`;
   }
@@ -263,14 +265,14 @@ function extractL2Operations(l2Check: AllCheckResults): string[] {
   for (const info of calldataCheck.result.info) {
     // Detect token transfers (formatted style)
     if (info.includes('transfers') && !info.includes('ETH')) {
-      const tokenMatch = info.match(/transfers?\s+([\d,\.]+)\s+(\w+)\s+to/i);
+      const tokenMatch = info.match(/transfers?\s+([\d,\.]+)\s+([\w.-]+)\s+to/i);
       if (tokenMatch) {
         let tokenSymbol = tokenMatch[2];
 
         // If token symbol is null/undefined, try to extract from contract name
         // Pattern: "on ContractName (symbol) at 0x..."
         if (tokenSymbol === 'null' || tokenSymbol === 'undefined') {
-          const contractNameMatch = info.match(/on\s+([^(]+)\s*\((\w+)\)/i);
+          const contractNameMatch = info.match(/on\s+([^(]+)\s*\(([\w.-]+)\)/i);
           if (contractNameMatch) {
             // Use the symbol in parentheses (e.g., "arb" from "Arbitrum (arb)")
             tokenSymbol = contractNameMatch[2].toUpperCase();
@@ -339,8 +341,7 @@ function detectUpgradeOperations(
         info.includes('_setImplementation')
       ) {
         // Try to extract addresses from the info string
-        const addressPattern = /0x[a-fA-F0-9]{40}/g;
-        const addresses = info.match(addressPattern) || [];
+        const addresses = info.match(ADDRESS_REGEX) || [];
 
         if (addresses.length >= 2) {
           operations.push({
@@ -392,8 +393,7 @@ function detectPermissionOperations(
         else if (info.includes('transfer')) action = 'Transfers';
 
         // Try to extract role name and address
-        const addressPattern = /0x[a-fA-F0-9]{40}/g;
-        const addresses = info.match(addressPattern) || [];
+        const addresses = info.match(ADDRESS_REGEX) || [];
 
         let description = `${action} permissions`;
         if (addresses.length > 0) {
@@ -450,7 +450,7 @@ function detectTransferOperations(
       // Token transfers (formatted style)
       else if (info.includes('transfers') && !info.includes('ETH')) {
         // Extract amount and token from patterns like "transfers 1000000 USDC to"
-        const tokenMatch = info.match(/transfers?\s+([\d,\.]+)\s+(\w+)\s+to/i);
+        const tokenMatch = info.match(/transfers?\s+([\d,\.]+)\s+([\w.-]+)\s+to/i);
         if (tokenMatch) {
           const amount = tokenMatch[1];
           const token = tokenMatch[2];

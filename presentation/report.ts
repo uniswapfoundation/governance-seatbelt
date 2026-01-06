@@ -89,8 +89,11 @@ function getRepoInfo(): { repoCommit?: string; repoUrl?: string } {
       repoCommit: commit,
       repoUrl: httpsUrl,
     };
-  } catch {
+  } catch (error: unknown) {
     // Git not available or not in a git repository
+    if (process.env.DEBUG_REPO_INFO) {
+      console.warn('[Report] Failed to get repo info:', error);
+    }
     return {};
   }
 }

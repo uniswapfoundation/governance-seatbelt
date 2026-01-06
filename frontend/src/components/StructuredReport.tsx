@@ -1,8 +1,9 @@
+'use client';
+
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type {
-  AddressLabel as AddressLabelType,
   SimulationCheck,
   SimulationStateChange,
   StructuredSimulationReport,
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useMemo, useState } from 'react';
+import { AddressLabel, useAddressLabel } from './AddressLabel';
 import { DecisionHeader } from './DecisionHeader';
 
 // --- Explorer URL helpers ---
@@ -50,41 +52,6 @@ function isPlaceholderAddress(
   return metadata.placeholderAddresses.some(
     (placeholder) => placeholder.toLowerCase() === address.toLowerCase(),
   );
-}
-
-// --- Address label helpers ---
-
-function getAddressLabel(
-  address: string,
-  metadata: StructuredSimulationReport['metadata'],
-): AddressLabelType | undefined {
-  if (!metadata.addressLabels) return undefined;
-
-  // Try exact match first
-  const label = metadata.addressLabels[address];
-  if (label) return label;
-
-  // Try case-insensitive match
-  const lowerAddress = address.toLowerCase();
-  for (const [key, value] of Object.entries(metadata.addressLabels)) {
-    if (key.toLowerCase() === lowerAddress) {
-      return value;
-    }
-  }
-
-  return undefined;
-}
-
-function formatAddressWithLabel(
-  address: string,
-  metadata: StructuredSimulationReport['metadata'],
-): string {
-  const label = getAddressLabel(address, metadata);
-  if (label) {
-    const abbreviated = `${address.slice(0, 6)}...${address.slice(-4)}`;
-    return `${label.label} (${abbreviated})`;
-  }
-  return address;
 }
 
 // --- Simulation warning components ---
@@ -350,16 +317,17 @@ export function StructuredReport({ report }: StructuredReportProps) {
                   <div className="bg-muted p-3 rounded-md col-span-2">
                     <div className="text-sm text-muted-foreground">Proposer</div>
                     <div className="font-medium flex items-center gap-2 flex-wrap">
-                      <a
-                        href={buildAddressLink(report.metadata.proposer, report.metadata)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
-                        title={report.metadata.proposer}
-                      >
-                        {formatAddressWithLabel(report.metadata.proposer, report.metadata)}
-                        <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                      </a>
+                      <AddressLabel
+                        address={report.metadata.proposer}
+                        label={useAddressLabel(
+                          report.metadata.proposer,
+                          report.metadata.addressLabels,
+                        )}
+                        blockExplorerUrl={getExplorerUrl(report.metadata)}
+                        showLink={false}
+                        linkMode="inline"
+                        className="text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline"
+                      />
                       {report.metadata.proposerIsPlaceholder && <SimulationPlaceholderBadge />}
                     </div>
                   </div>
@@ -370,16 +338,17 @@ export function StructuredReport({ report }: StructuredReportProps) {
                         {getExecutorLabel(report.metadata.simulationType)}
                       </div>
                       <div className="font-medium flex items-center gap-2 flex-wrap">
-                        <a
-                          href={buildAddressLink(report.metadata.executor, report.metadata)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
-                          title={report.metadata.executor}
-                        >
-                          {formatAddressWithLabel(report.metadata.executor, report.metadata)}
-                          <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                        </a>
+                        <AddressLabel
+                          address={report.metadata.executor}
+                          label={useAddressLabel(
+                            report.metadata.executor,
+                            report.metadata.addressLabels,
+                          )}
+                          blockExplorerUrl={getExplorerUrl(report.metadata)}
+                          showLink={false}
+                          linkMode="inline"
+                          className="text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline"
+                        />
                         {report.metadata.executorIsPlaceholder && <SimulationPlaceholderBadge />}
                       </div>
                     </div>
@@ -389,16 +358,17 @@ export function StructuredReport({ report }: StructuredReportProps) {
                     <div className="bg-muted p-3 rounded-md col-span-2">
                       <div className="text-sm text-muted-foreground">Governor</div>
                       <div className="font-medium">
-                        <a
-                          href={buildAddressLink(report.metadata.governorAddress, report.metadata)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
-                          title={report.metadata.governorAddress}
-                        >
-                          {formatAddressWithLabel(report.metadata.governorAddress, report.metadata)}
-                          <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                        </a>
+                        <AddressLabel
+                          address={report.metadata.governorAddress}
+                          label={useAddressLabel(
+                            report.metadata.governorAddress,
+                            report.metadata.addressLabels,
+                          )}
+                          blockExplorerUrl={getExplorerUrl(report.metadata)}
+                          showLink={false}
+                          linkMode="inline"
+                          className="text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline"
+                        />
                       </div>
                     </div>
                   )}

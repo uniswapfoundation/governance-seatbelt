@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { getAddress } from 'viem';
 import { checkTargetsNoSelfdestruct } from '../checks/check-targets-no-selfdestruct';
-import type { ProposalData, ProposalEvent } from '../types';
+import type { ProposalData, ProposalEvent, TenderlySimulation } from '../types';
 import { DEFAULT_SIMULATION_ADDRESS } from '../utils/clients/tenderly';
 
 function makeDeps(overrides?: Partial<ProposalData>): ProposalData {
@@ -62,7 +62,11 @@ describe('Selfdestruct checks - security against placeholder bypass', () => {
     // Mock a scenario where someone has marked this malicious address as a "placeholder"
     // by modifying the isOurPlaceholder detection (this simulates the attack)
     const proposal = makeProposal([maliciousPlaceholder]);
-    const res = await checkTargetsNoSelfdestruct.checkProposal(proposal, {} as any, deps);
+    const res = await checkTargetsNoSelfdestruct.checkProposal(
+      proposal,
+      {} as unknown as TenderlySimulation,
+      deps,
+    );
 
     // The malicious placeholder should NOT be suppressed - warning should remain
     expect(res.warnings.length).toBeGreaterThan(0);
@@ -88,7 +92,11 @@ describe('Selfdestruct checks - security against placeholder bypass', () => {
     });
 
     const proposal = makeProposal([legitimatePlaceholder]);
-    const res = await checkTargetsNoSelfdestruct.checkProposal(proposal, {} as any, deps);
+    const res = await checkTargetsNoSelfdestruct.checkProposal(
+      proposal,
+      {} as unknown as TenderlySimulation,
+      deps,
+    );
 
     // Only the legitimate hardcoded placeholder should be suppressed
     expect(res.warnings.length).toBe(0);

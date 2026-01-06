@@ -5,13 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { AddressLabel as AddressLabelType } from '@/hooks/use-simulation-results';
 import { CheckIcon, CopyIcon, ExternalLinkIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface AddressLabelProps {
   address: string;
   label?: AddressLabelType;
   blockExplorerUrl?: string;
   showLink?: boolean;
+  linkMode?: 'none' | 'tooltip' | 'inline';
   className?: string;
 }
 
@@ -55,33 +56,65 @@ export function AddressLabel({
   label,
   blockExplorerUrl,
   showLink = true,
+  linkMode = 'tooltip',
   className = '',
 }: AddressLabelProps) {
   const [copied, setCopied] = useState(false);
+  const resetTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) {
+        window.clearTimeout(resetTimerRef.current);
+        resetTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const abbreviated = abbreviateAddress(address);
   const displayText = label ? `${label.label} (${abbreviated})` : abbreviated;
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(address);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+
+      if (resetTimerRef.current) window.clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API can fail in non-secure contexts; ignore silently.
+    }
   };
 
   const explorerLink = blockExplorerUrl ? `${blockExplorerUrl}/address/${address}` : undefined;
+
+  const Trigger = explorerLink && showLink && linkMode === 'inline' ? 'a' : 'span';
+  const triggerProps =
+    Trigger === 'a'
+      ? {
+          href: explorerLink,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          title: address,
+        }
+      : {};
 
   return (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className={`inline-flex items-center gap-1.5 font-mono text-sm ${className}`}>
+          <Trigger
+            {...triggerProps}
+            className={`inline-flex items-center gap-1.5 font-mono text-sm ${className}`}
+          >
             {label?.type && (
               <Badge variant={getTypeVariant(label.type)} className="text-xs px-1.5 py-0">
                 {label.type}
               </Badge>
             )}
             <span className="hover:underline cursor-help">{displayText}</span>
-          </span>
+            {Trigger === 'a' && <ExternalLinkIcon className="h-3 w-3" />}
+          </Trigger>
         </TooltipTrigger>
         <TooltipContent className="max-w-md">
           <div className="space-y-2">
@@ -92,6 +125,7 @@ export function AddressLabel({
                 size="sm"
                 className="h-6 w-6 p-0 shrink-0"
                 onClick={handleCopy}
+                aria-label="Copy address"
               >
                 {copied ? (
                   <CheckIcon className="h-3 w-3 text-green-500" />
@@ -107,7 +141,7 @@ export function AddressLabel({
                 {label.source === 'tenderly' && 'Contract Name'}
               </div>
             )}
-            {showLink && explorerLink && (
+            {showLink && explorerLink && linkMode !== 'none' && (
               <a
                 href={explorerLink}
                 target="_blank"

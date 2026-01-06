@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { getAddress } from 'viem';
 import { checkTargetsNoSelfdestruct } from '../checks/check-targets-no-selfdestruct';
-import type { ProposalData, ProposalEvent } from '../types';
+import type { ProposalData, ProposalEvent, TenderlySimulation } from '../types';
 import { DEFAULT_SIMULATION_ADDRESS } from '../utils/clients/tenderly';
 
 function makeDeps(overrides?: Partial<ProposalData>): ProposalData {
@@ -62,7 +62,11 @@ describe('Selfdestruct checks - placeholder warning suppression', () => {
     });
 
     const proposal = makeProposal([placeholder, realEoa]);
-    const res = await checkTargetsNoSelfdestruct.checkProposal(proposal, {} as any, deps);
+    const res = await checkTargetsNoSelfdestruct.checkProposal(
+      proposal,
+      {} as unknown as TenderlySimulation,
+      deps,
+    );
 
     // Only placeholder would have triggered a warning; suppression should clear all warnings
     expect(res.warnings.length).toBe(0);
@@ -83,7 +87,11 @@ describe('Selfdestruct checks - placeholder warning suppression', () => {
     });
 
     const proposal = makeProposal([placeholder, otherEmpty]);
-    const res = await checkTargetsNoSelfdestruct.checkProposal(proposal, {} as any, deps);
+    const res = await checkTargetsNoSelfdestruct.checkProposal(
+      proposal,
+      {} as unknown as TenderlySimulation,
+      deps,
+    );
 
     // Two warnings should remain (no suppression because non-placeholder also warns)
     expect(res.warnings.length).toBeGreaterThanOrEqual(1);

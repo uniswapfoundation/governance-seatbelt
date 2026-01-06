@@ -7,17 +7,70 @@ import commonLabels from './common.json';
  */
 type LabelConfig = Record<string, { label: string; type?: string }>;
 
+const DEFAULT_LABEL_RESOLUTION_CONCURRENCY = 10;
+
+function isModuleNotFound(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const maybeCode = 'code' in error ? (error as { code?: unknown }).code : undefined;
+  if (maybeCode === 'ERR_MODULE_NOT_FOUND') return true;
+
+  const maybeMessage = 'message' in error ? (error as { message?: unknown }).message : undefined;
+  if (typeof maybeMessage === 'string') {
+    return (
+      maybeMessage.includes('Cannot find module') || maybeMessage.includes('ERR_MODULE_NOT_FOUND')
+    );
+  }
+
+  return false;
+}
+
+function normalizeDaoName(daoName: string): string | null {
+  const normalized = daoName.toLowerCase().trim().replace(/\s+/g, '-');
+  if (!normalized) return null;
+  if (normalized.length > 80) return null;
+  if (!/^[a-z0-9-]+$/.test(normalized)) return null;
+  return normalized;
+}
+
+async function forEachWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  const safeConcurrency =
+    Number.isFinite(concurrency) && concurrency > 0 ? Math.floor(concurrency) : 1;
+
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(safeConcurrency, items.length) }, async () => {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) return;
+      await fn(items[index]);
+    }
+  });
+
+  await Promise.all(workers);
+}
+
 /**
  * Load DAO-specific labels if they exist
  */
 async function loadDaoLabels(daoName: string): Promise<LabelConfig> {
+  const normalizedName = normalizeDaoName(daoName);
+  if (!normalizedName) return {};
+
   try {
     // Dynamic import of DAO-specific labels from utils/labels/<daoName>.json
-    const normalizedName = daoName.toLowerCase().replace(/\s+/g, '-');
     const labels = await import(`./${normalizedName}.json`);
     return labels.default || labels;
-  } catch {
+  } catch (error: unknown) {
     // No DAO-specific labels found, that's fine
+    if (isModuleNotFound(error)) return {};
+
+    // Labels are optional, but failures beyond "not found" are worth surfacing
+    console.warn('[Labels] Failed to load DAO-specific labels:', error);
     return {};
   }
 }
@@ -97,8 +150,10 @@ export async function resolveLabelsForAddresses(
   // Resolve labels for each unique address
   const uniqueAddresses = [...new Set(addresses)];
 
-  await Promise.all(
-    uniqueAddresses.map(async (address) => {
+  await forEachWithConcurrency(
+    uniqueAddresses,
+    DEFAULT_LABEL_RESOLUTION_CONCURRENCY,
+    async (address) => {
       let checksumAddress: string;
       try {
         checksumAddress = getAddress(address);
@@ -138,7 +193,7 @@ export async function resolveLabelsForAddresses(
           source: 'tenderly',
         };
       }
-    }),
+    },
   );
 
   return labels;
@@ -175,7 +230,7 @@ export function formatAddressWithLabel(
 export function extractAddressesFromReport(
   checks: Array<{ info: string[]; warnings: string[]; errors: string[] }>,
   stateChanges: Array<{ contractAddress?: string }>,
-  events: Array<{ contractAddress?: string }>,
+  events: Array<{ contractAddress?: string; params?: Array<{ value?: string }> }>,
   metadata: { proposer?: string; executor?: string; governorAddress?: string },
 ): string[] {
   const addresses: string[] = [];
@@ -196,6 +251,14 @@ export function extractAddressesFromReport(
   for (const event of events) {
     if (event.contractAddress) {
       addresses.push(event.contractAddress);
+    }
+
+    if (event.params) {
+      for (const param of event.params) {
+        if (!param?.value) continue;
+        const matches = param.value.match(/0x[a-fA-F0-9]{40}/g);
+        if (matches) addresses.push(...matches);
+      }
     }
   }
 
