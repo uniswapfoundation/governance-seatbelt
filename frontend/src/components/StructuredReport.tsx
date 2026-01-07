@@ -372,6 +372,8 @@ function CoverageSummary({
 }
 
 export function StructuredReport({ report }: StructuredReportProps) {
+  const [activeTab, setActiveTab] = useState<'overview' | 'checks' | 'state-changes'>('overview');
+
   const coverageByCheckId = useMemo(() => {
     const map = new Map<string, CheckCoverage>();
     for (const coverageEntry of report.coverage?.checks ?? []) {
@@ -396,7 +398,11 @@ export function StructuredReport({ report }: StructuredReportProps) {
 
         {/* REMOVED: Old header section - now in DecisionHeader */}
 
-        <Tabs defaultValue="overview" className="w-full">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value as typeof activeTab)}
+          className="w-full"
+        >
           <TabsList className="grid w-full grid-cols-3 mb-4">
             <TabsTrigger className="cursor-pointer" value="overview">
               Overview
@@ -410,6 +416,19 @@ export function StructuredReport({ report }: StructuredReportProps) {
           </TabsList>
 
           <TabsContent value="overview" className="mt-4 space-y-6 px-1">
+            <div className="space-y-2">
+              <CoverageSummary report={report} coverageByCheckId={coverageByCheckId} />
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:underline"
+                  onClick={() => setActiveTab('checks')}
+                >
+                  View checks
+                </button>
+              </div>
+            </div>
+
             {report.proposalText && (
               <div className="border border-muted rounded-md p-6 bg-card">
                 <h3 className="text-lg font-semibold mb-3">Proposal Details</h3>
@@ -524,7 +543,6 @@ export function StructuredReport({ report }: StructuredReportProps) {
 
           <TabsContent value="checks" className="mt-4 px-1">
             <div className="space-y-4">
-              <CoverageSummary report={report} coverageByCheckId={coverageByCheckId} />
               {report.checks.length === 0 ? (
                 <div className="flex items-center justify-center p-6 text-muted-foreground border border-muted rounded-md">
                   <InfoIcon className="h-4 w-4 mr-2" />
