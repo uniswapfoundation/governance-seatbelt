@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type {
   CheckCoverage,
+  Proposal,
   SimulationCheck,
   SimulationStateChange,
   StructuredSimulationReport,
@@ -22,6 +23,7 @@ import {
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import { AddressLabel, useAddressLabel } from './AddressLabel';
+import { CallGroupedView } from './CallGroupedView';
 import { DecisionHeader } from './DecisionHeader';
 
 // --- Explorer URL helpers ---
@@ -215,6 +217,7 @@ function StateChanges({ stateChanges, metadata }: StateChangesProps) {
 
 interface StructuredReportProps {
   report: StructuredSimulationReport;
+  proposal: Proposal;
 }
 
 // Helper function for contextual executor labels
@@ -387,8 +390,10 @@ function CoverageSummary({
   );
 }
 
-export function StructuredReport({ report }: StructuredReportProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'checks' | 'state-changes'>('overview');
+export function StructuredReport({ report, proposal }: StructuredReportProps) {
+  const [activeTab, setActiveTab] = useState<'overview' | 'checks' | 'calls' | 'state-changes'>(
+    'overview',
+  );
 
   const coverageByCheckId = useMemo(() => {
     const map = new Map<string, CheckCoverage>();
@@ -429,12 +434,15 @@ export function StructuredReport({ report }: StructuredReportProps) {
           onValueChange={(value) => setActiveTab(value as typeof activeTab)}
           className="w-full"
         >
-          <TabsList className="grid w-full grid-cols-3 mb-4">
+          <TabsList className="grid w-full grid-cols-4 mb-4">
             <TabsTrigger className="cursor-pointer" value="overview">
               Overview
             </TabsTrigger>
             <TabsTrigger className="cursor-pointer" value="checks">
               Checks
+            </TabsTrigger>
+            <TabsTrigger className="cursor-pointer" value="calls">
+              Calls
             </TabsTrigger>
             <TabsTrigger className="cursor-pointer" value="state-changes">
               State Changes
@@ -579,6 +587,10 @@ export function StructuredReport({ report }: StructuredReportProps) {
                 ))
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="calls" className="mt-4 px-1">
+            <CallGroupedView proposal={proposal} report={report} />
           </TabsContent>
 
           <TabsContent value="state-changes" className="mt-4 px-1">
