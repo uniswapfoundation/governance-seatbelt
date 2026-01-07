@@ -358,7 +358,8 @@ function CoverageSummary({
       </div>
 
       <div className="text-xs text-muted-foreground mb-3">
-        Coverage tracks whether checks executed (ran/skipped/failed). It does not indicate pass/fail.
+        Coverage tracks whether checks executed (ran/skipped/failed). It does not indicate
+        pass/fail.
       </div>
 
       <div className="space-y-3">

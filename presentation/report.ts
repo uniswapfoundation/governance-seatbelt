@@ -267,13 +267,13 @@ function toCoverageMarkdown(coverage: CoverageData): string {
                 : '❌ failed';
           const methodSuffix = entry.wasInferred ? ' (inferred)' : '';
           const timeSuffix = entry.executionTimeMs != null ? ` • ${entry.executionTimeMs}ms` : '';
-          const notesSuffix = entry.skipReason ? ` • ${escapeMarkdownInline(entry.skipReason)}` : '';
+          const notesSuffix = entry.skipReason
+            ? ` • ${escapeMarkdownInline(entry.skipReason)}`
+            : '';
 
           const anchorId = `check-${chainId}-${entry.checkId}`;
           const nameWithLink =
-            chainId === 'unknown'
-              ? entry.checkName
-              : `[${entry.checkName}](#${anchorId})`;
+            chainId === 'unknown' ? entry.checkName : `[${entry.checkName}](#${anchorId})`;
 
           return `- ${nameWithLink} (\`${entry.checkId}\`) — ${status}${methodSuffix}${timeSuffix}${notesSuffix}`;
         })
