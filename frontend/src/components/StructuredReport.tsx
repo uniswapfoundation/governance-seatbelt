@@ -4,6 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type {
+  CheckCoverage,
   SimulationCheck,
   SimulationStateChange,
   StructuredSimulationReport,
@@ -229,149 +230,114 @@ function getExecutorLabel(simulationType?: string): string {
   }
 }
 
-function CoverageTable({ report }: { report: StructuredSimulationReport }) {
-  const coverage = report.coverage;
-  const checksById = useMemo(() => {
-    const map = new Map<string, SimulationCheck>();
-    for (const check of report.checks) {
-      if (check.checkId) map.set(check.checkId, check);
-    }
-    return map;
-  }, [report.checks]);
+type CheckOutcome = 'passed' | 'warning' | 'failed' | 'not_applicable' | 'not_run';
 
+function getOutcome(check: SimulationCheck, coverage?: CheckCoverage): CheckOutcome {
+  if (check.status === 'failed') return 'failed';
+  if (check.status === 'warning') return 'warning';
+  if (check.status === 'skipped') return 'not_applicable';
+
+  if (coverage?.status === 'failed') return 'not_run';
+
+  return 'passed';
+}
+
+function CoverageSummary({
+  report,
+  coverageByCheckId,
+}: {
+  report: StructuredSimulationReport;
+  coverageByCheckId: Map<string, CheckCoverage>;
+}) {
+  const coverage = report.coverage;
   if (!coverage || coverage.checks.length === 0) return null;
 
-  const checksByChainId = coverage.checks.reduce<Record<string, typeof coverage.checks>>(
-    (acc, check) => {
-      const chainKey = String(check.chainId ?? 'unknown');
-      if (!acc[chainKey]) acc[chainKey] = [];
-      acc[chainKey].push(check);
-      return acc;
-    },
-    {},
-  );
+  const checksByChain = report.checks.reduce<Record<string, SimulationCheck[]>>((acc, check) => {
+    const coverageEntry = check.checkId ? coverageByCheckId.get(check.checkId) : undefined;
+    const chainKey = String(coverageEntry?.chainId ?? report.metadata.chainId ?? 'unknown');
+    if (!acc[chainKey]) acc[chainKey] = [];
+    acc[chainKey].push(check);
+    return acc;
+  }, {});
 
-  const chainEntries = Object.entries(checksByChainId).sort(([a], [b]) => {
+  const chainEntries = Object.entries(checksByChain).sort(([a], [b]) => {
     if (a === 'unknown') return 1;
     if (b === 'unknown') return -1;
     return Number(a) - Number(b);
   });
 
-  const badgeForExecution = (status: 'ran' | 'skipped' | 'failed') => {
-    if (status === 'skipped') {
-      return (
-        <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-300">
-          Not executed
-        </Badge>
-      );
+  const summarize = (checks: SimulationCheck[]) => {
+    const counts = {
+      passed: 0,
+      warning: 0,
+      failed: 0,
+      notApplicable: 0,
+      notRun: 0,
+      inferred: 0,
+    };
+
+    for (const check of checks) {
+      const coverageEntry = check.checkId ? coverageByCheckId.get(check.checkId) : undefined;
+      const outcome = getOutcome(check, coverageEntry);
+      if (coverageEntry?.wasInferred) counts.inferred += 1;
+
+      if (outcome === 'passed') counts.passed += 1;
+      else if (outcome === 'warning') counts.warning += 1;
+      else if (outcome === 'failed') counts.failed += 1;
+      else if (outcome === 'not_run') counts.notRun += 1;
+      else counts.notApplicable += 1;
     }
-    if (status === 'failed') {
-      return <Badge variant="destructive">Failed</Badge>;
-    }
-    return (
-      <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
-        Ran
-      </Badge>
-    );
+
+    return counts;
   };
+
+  const overallSummary = summarize(report.checks);
 
   return (
     <div className="border border-muted rounded-md p-4 bg-card">
-      <h3 className="text-lg font-semibold mb-3">Coverage</h3>
-      <div className="space-y-6">
-        {chainEntries.map(([chainId, chainChecks]) => (
-          <div key={chainId} className="space-y-2">
-            <div className="flex items-center gap-2">
-              <div className="text-sm font-medium">
-                Chain {chainId === 'unknown' ? 'unknown' : chainId}
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h3 className="text-lg font-semibold">Coverage</h3>
+        <div className="text-sm text-muted-foreground">
+          {overallSummary.passed} passed • {overallSummary.notApplicable} not applicable •{' '}
+          {overallSummary.warning} warnings • {overallSummary.failed} failed
+          {overallSummary.notRun > 0 ? ` • ${overallSummary.notRun} not run` : ''}
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {chainEntries.map(([chainId, chainChecks]) => {
+          const chainSummary = summarize(chainChecks);
+          const chainLabel =
+            chainId !== 'unknown' && Number(chainId) === report.metadata.chainId
+              ? `${report.metadata.chainName || 'Chain'} ${chainId}`
+              : `Chain ${chainId === 'unknown' ? 'unknown' : chainId}`;
+
+          return (
+            <div key={chainId} className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-sm font-medium">{chainLabel}</div>
+              <div className="text-sm text-muted-foreground">
+                {chainSummary.passed} passed • {chainSummary.notApplicable} not applicable •{' '}
+                {chainSummary.warning} warnings • {chainSummary.failed} failed
+                {chainSummary.notRun > 0 ? ` • ${chainSummary.notRun} not run` : ''}
+                {chainSummary.inferred > 0 ? ` • ${chainSummary.inferred} inferred` : ''}
               </div>
-              <div className="text-xs text-muted-foreground">{chainChecks.length} checks</div>
             </div>
-
-            <div className="overflow-x-auto border border-muted rounded-md">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr className="text-left">
-                    <th className="py-2 px-3 font-medium">Check</th>
-                    <th className="py-2 px-3 font-medium">Execution</th>
-                    <th className="py-2 px-3 font-medium">Findings</th>
-                    <th className="py-2 px-3 font-medium">Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {chainChecks.map((coverageCheck) => {
-                    const structuredCheck = checksById.get(coverageCheck.checkId);
-                    const errorCount = structuredCheck?.errorCount ?? 0;
-                    const warningCount = structuredCheck?.warningCount ?? 0;
-
-                    const findings =
-                      coverageCheck.status === 'skipped'
-                        ? null
-                        : {
-                            errorCount,
-                            warningCount,
-                          };
-
-                    return (
-                      <tr key={coverageCheck.checkId} className="border-t border-muted">
-                        <td className="py-2 px-3">
-                          <div className="font-medium">{coverageCheck.checkName}</div>
-                          <div className="text-xs text-muted-foreground font-mono">
-                            {coverageCheck.checkId}
-                          </div>
-                        </td>
-                        <td className="py-2 px-3">{badgeForExecution(coverageCheck.status)}</td>
-                        <td className="py-2 px-3">
-                          {findings === null ? (
-                            <span className="text-muted-foreground">—</span>
-                          ) : findings.errorCount > 0 || findings.warningCount > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                              {findings.errorCount > 0 && (
-                                <span className="text-red-600">{findings.errorCount} errors</span>
-                              )}
-                              {findings.warningCount > 0 && (
-                                <span className="text-yellow-700">
-                                  {findings.warningCount} warnings
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">0</span>
-                          )}
-                        </td>
-                        <td className="py-2 px-3">
-                          <div className="flex flex-wrap gap-2 items-center">
-                            {coverageCheck.wasInferred && (
-                              <Badge
-                                variant="outline"
-                                className="bg-gray-100 text-gray-600 border-gray-300"
-                              >
-                                Inferred
-                              </Badge>
-                            )}
-                            {coverageCheck.skipReason ? (
-                              <span className="text-muted-foreground">
-                                {coverageCheck.skipReason}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
 export function StructuredReport({ report }: StructuredReportProps) {
+  const coverageByCheckId = useMemo(() => {
+    const map = new Map<string, CheckCoverage>();
+    for (const coverageEntry of report.coverage?.checks ?? []) {
+      map.set(coverageEntry.checkId, coverageEntry);
+    }
+    return map;
+  }, [report.coverage?.checks]);
+
   // Get block number with fallback for backwards compatibility
   const blockNumber =
     report.metadata.simulationBlockNumber || report.metadata.blockNumber || 'unknown';
@@ -401,68 +367,85 @@ export function StructuredReport({ report }: StructuredReportProps) {
             </TabsTrigger>
           </TabsList>
 
-          <div className="h-[600px] overflow-y-auto relative">
-            <TabsContent
-              value="overview"
-              className="mt-4 space-y-6 absolute inset-0 overflow-y-auto pb-8 px-1"
-            >
-              {report.proposalText && (
-                <div className="border border-muted rounded-md p-6 bg-card">
-                  <h3 className="text-lg font-semibold mb-3">Proposal Details</h3>
-                  <div className="bg-muted p-4 rounded-md whitespace-pre-wrap">
-                    {report.proposalText}
-                  </div>
-                </div>
-              )}
-
-              {report.calldata && (
-                <div className="border border-muted rounded-md p-6 bg-card">
-                  <h3 className="text-lg font-semibold mb-3">Calldata Decoded</h3>
-                  <div className="bg-muted p-4 rounded-md font-mono text-sm overflow-x-auto">
-                    {report.calldata.decoded}
-                  </div>
-                </div>
-              )}
-
+          <TabsContent value="overview" className="mt-4 space-y-6 px-1">
+            {report.proposalText && (
               <div className="border border-muted rounded-md p-6 bg-card">
-                <h3 className="text-lg font-semibold mb-3">Metadata</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-muted p-3 rounded-md">
-                    <div className="text-sm text-muted-foreground">Block Number</div>
-                    <div className="font-medium">
-                      <a
-                        href={buildBlockLink(blockNumber, report.metadata)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
-                      >
-                        {blockNumber}
-                        <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                      </a>
-                    </div>
+                <h3 className="text-lg font-semibold mb-3">Proposal Details</h3>
+                <div className="bg-muted p-4 rounded-md whitespace-pre-wrap">
+                  {report.proposalText}
+                </div>
+              </div>
+            )}
+
+            {report.calldata && (
+              <div className="border border-muted rounded-md p-6 bg-card">
+                <h3 className="text-lg font-semibold mb-3">Calldata Decoded</h3>
+                <div className="bg-muted p-4 rounded-md font-mono text-sm overflow-x-auto">
+                  {report.calldata.decoded}
+                </div>
+              </div>
+            )}
+
+            <div className="border border-muted rounded-md p-6 bg-card">
+              <h3 className="text-lg font-semibold mb-3">Metadata</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-muted p-3 rounded-md">
+                  <div className="text-sm text-muted-foreground">Block Number</div>
+                  <div className="font-medium">
+                    <a
+                      href={buildBlockLink(blockNumber, report.metadata)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                    >
+                      {blockNumber}
+                      <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                    </a>
                   </div>
-                  <div className="bg-muted p-3 rounded-md">
-                    <div className="text-sm text-muted-foreground">Timestamp</div>
-                    <div className="font-medium">
-                      {new Date(Number.parseInt(timestamp) * 1000).toLocaleString()}
-                    </div>
+                </div>
+                <div className="bg-muted p-3 rounded-md">
+                  <div className="text-sm text-muted-foreground">Timestamp</div>
+                  <div className="font-medium">
+                    {new Date(Number.parseInt(timestamp) * 1000).toLocaleString()}
                   </div>
-                  <div className="bg-muted p-3 rounded-md">
-                    <div className="text-sm text-muted-foreground">Proposal ID</div>
-                    <div className="font-medium">{report.metadata.proposalId}</div>
+                </div>
+                <div className="bg-muted p-3 rounded-md">
+                  <div className="text-sm text-muted-foreground">Proposal ID</div>
+                  <div className="font-medium">{report.metadata.proposalId}</div>
+                </div>
+                <div className="bg-muted p-3 rounded-md">
+                  <div className="text-sm text-muted-foreground">Network</div>
+                  <div className="font-medium">{report.metadata.chainName || 'Ethereum'}</div>
+                </div>
+                {/* Proposer with placeholder badge */}
+                <div className="bg-muted p-3 rounded-md col-span-2">
+                  <div className="text-sm text-muted-foreground">Proposer</div>
+                  <div className="font-medium flex items-center gap-2 flex-wrap">
+                    <AddressLabel
+                      address={report.metadata.proposer}
+                      label={useAddressLabel(
+                        report.metadata.proposer,
+                        report.metadata.addressLabels,
+                      )}
+                      blockExplorerUrl={getExplorerUrl(report.metadata)}
+                      showLink={false}
+                      linkMode="inline"
+                      className="text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline"
+                    />
+                    {report.metadata.proposerIsPlaceholder && <SimulationPlaceholderBadge />}
                   </div>
-                  <div className="bg-muted p-3 rounded-md">
-                    <div className="text-sm text-muted-foreground">Network</div>
-                    <div className="font-medium">{report.metadata.chainName || 'Ethereum'}</div>
-                  </div>
-                  {/* Proposer with placeholder badge */}
+                </div>
+                {/* Executor with placeholder badge (only show if available) */}
+                {report.metadata.executor && (
                   <div className="bg-muted p-3 rounded-md col-span-2">
-                    <div className="text-sm text-muted-foreground">Proposer</div>
+                    <div className="text-sm text-muted-foreground">
+                      {getExecutorLabel(report.metadata.simulationType)}
+                    </div>
                     <div className="font-medium flex items-center gap-2 flex-wrap">
                       <AddressLabel
-                        address={report.metadata.proposer}
+                        address={report.metadata.executor}
                         label={useAddressLabel(
-                          report.metadata.proposer,
+                          report.metadata.executor,
                           report.metadata.addressLabels,
                         )}
                         blockExplorerUrl={getExplorerUrl(report.metadata)}
@@ -470,84 +453,60 @@ export function StructuredReport({ report }: StructuredReportProps) {
                         linkMode="inline"
                         className="text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline"
                       />
-                      {report.metadata.proposerIsPlaceholder && <SimulationPlaceholderBadge />}
+                      {report.metadata.executorIsPlaceholder && <SimulationPlaceholderBadge />}
                     </div>
                   </div>
-                  {/* Executor with placeholder badge (only show if available) */}
-                  {report.metadata.executor && (
-                    <div className="bg-muted p-3 rounded-md col-span-2">
-                      <div className="text-sm text-muted-foreground">
-                        {getExecutorLabel(report.metadata.simulationType)}
-                      </div>
-                      <div className="font-medium flex items-center gap-2 flex-wrap">
-                        <AddressLabel
-                          address={report.metadata.executor}
-                          label={useAddressLabel(
-                            report.metadata.executor,
-                            report.metadata.addressLabels,
-                          )}
-                          blockExplorerUrl={getExplorerUrl(report.metadata)}
-                          showLink={false}
-                          linkMode="inline"
-                          className="text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline"
-                        />
-                        {report.metadata.executorIsPlaceholder && <SimulationPlaceholderBadge />}
-                      </div>
+                )}
+                {/* Governor address (only show if available) */}
+                {report.metadata.governorAddress && (
+                  <div className="bg-muted p-3 rounded-md col-span-2">
+                    <div className="text-sm text-muted-foreground">Governor</div>
+                    <div className="font-medium">
+                      <AddressLabel
+                        address={report.metadata.governorAddress}
+                        label={useAddressLabel(
+                          report.metadata.governorAddress,
+                          report.metadata.addressLabels,
+                        )}
+                        blockExplorerUrl={getExplorerUrl(report.metadata)}
+                        showLink={false}
+                        linkMode="inline"
+                        className="text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline"
+                      />
                     </div>
-                  )}
-                  {/* Governor address (only show if available) */}
-                  {report.metadata.governorAddress && (
-                    <div className="bg-muted p-3 rounded-md col-span-2">
-                      <div className="text-sm text-muted-foreground">Governor</div>
-                      <div className="font-medium">
-                        <AddressLabel
-                          address={report.metadata.governorAddress}
-                          label={useAddressLabel(
-                            report.metadata.governorAddress,
-                            report.metadata.addressLabels,
-                          )}
-                          blockExplorerUrl={getExplorerUrl(report.metadata)}
-                          showLink={false}
-                          linkMode="inline"
-                          className="text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="checks" className="mt-4 absolute inset-0 overflow-y-auto pb-8 px-1">
-              <div className="space-y-4">
-                <CoverageTable report={report} />
-                {report.checks.length === 0 ? (
-                  <div className="flex items-center justify-center p-6 text-muted-foreground border border-muted rounded-md">
-                    <InfoIcon className="h-4 w-4 mr-2" />
-                    <span>No checks found in the report</span>
                   </div>
-                ) : (
-                  report.checks.map((check: SimulationCheck, index: number) => (
-                    <ExpandableCheckItem
-                      key={`check-${check.title}-${index}`}
-                      check={check}
-                      stateChanges={report.stateChanges}
-                      metadata={report.metadata}
-                    />
-                  ))
                 )}
               </div>
-            </TabsContent>
+            </div>
+          </TabsContent>
 
-            <TabsContent
-              value="state-changes"
-              className="mt-4 absolute inset-0 overflow-y-auto pb-8 px-1"
-            >
-              <div className="space-y-4">
-                <StateChanges stateChanges={report.stateChanges} metadata={report.metadata} />
-              </div>
-            </TabsContent>
-          </div>
+          <TabsContent value="checks" className="mt-4 px-1">
+            <div className="space-y-4">
+              <CoverageSummary report={report} coverageByCheckId={coverageByCheckId} />
+              {report.checks.length === 0 ? (
+                <div className="flex items-center justify-center p-6 text-muted-foreground border border-muted rounded-md">
+                  <InfoIcon className="h-4 w-4 mr-2" />
+                  <span>No checks found in the report</span>
+                </div>
+              ) : (
+                report.checks.map((check: SimulationCheck, index: number) => (
+                  <ExpandableCheckItem
+                    key={`check-${check.title}-${index}`}
+                    check={check}
+                    coverage={check.checkId ? coverageByCheckId.get(check.checkId) : undefined}
+                    stateChanges={report.stateChanges}
+                    metadata={report.metadata}
+                  />
+                ))
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="state-changes" className="mt-4 px-1">
+            <div className="space-y-4">
+              <StateChanges stateChanges={report.stateChanges} metadata={report.metadata} />
+            </div>
+          </TabsContent>
         </Tabs>
       </div>
     </div>
@@ -557,43 +516,67 @@ export function StructuredReport({ report }: StructuredReportProps) {
 // Helper components
 function ExpandableCheckItem({
   check,
+  coverage,
   stateChanges,
   metadata,
 }: {
   check: SimulationCheck;
+  coverage?: CheckCoverage;
   stateChanges?: SimulationStateChange[];
   metadata?: StructuredSimulationReport['metadata'];
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
+  const outcome = getOutcome(check, coverage);
+  const methodTag = coverage?.wasInferred ? 'Inferred' : null;
+  const secondaryLine =
+    outcome === 'not_applicable'
+      ? (coverage?.skipReason ?? check.skipReason ?? 'Not applicable')
+      : outcome === 'not_run'
+        ? (coverage?.skipReason ?? 'Not run')
+        : coverage?.wasInferred && coverage?.skipReason
+          ? `Inferred: ${coverage.skipReason}`
+          : null;
+
+  const isExpandable = Boolean(
+    check.details || check.skipReason || coverage?.skipReason || check.checkId,
+  );
+
   const getStatusIcon = () => {
-    if (check.status === 'warning') {
+    if (outcome === 'warning') {
       return <AlertTriangleIcon className="h-5 w-5 text-yellow-500" />;
     }
-    if (check.status === 'failed') {
+    if (outcome === 'failed' || outcome === 'not_run') {
       return <AlertTriangleIcon className="h-5 w-5 text-red-500" />;
     }
-    if (check.status === 'skipped') {
+    if (outcome === 'not_applicable') {
       return <SkipForwardIcon className="h-5 w-5 text-gray-400" />;
     }
     return <CheckCircleIcon className="h-5 w-5 text-green-500" />;
   };
 
   const getStatusBadge = () => {
-    if (check.status === 'warning') {
+    if (outcome === 'warning') {
       return (
         <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
           Warning
         </Badge>
       );
     }
-    if (check.status === 'failed') {
+    if (outcome === 'failed') {
       return <Badge variant="destructive">Failed</Badge>;
     }
-    if (check.status === 'skipped') {
+    if (outcome === 'not_run') {
+      return (
+        <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">
+          Not run
+        </Badge>
+      );
+    }
+    if (outcome === 'not_applicable') {
       return (
         <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-300">
-          Skipped
+          Not applicable
         </Badge>
       );
     }
@@ -927,11 +910,21 @@ function ExpandableCheckItem({
       >
         <div className="flex items-start gap-2">
           {getStatusIcon()}
-          <h4 className="font-medium">{check.title}</h4>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <h4 className="font-medium">{check.title}</h4>
+              {methodTag && (
+                <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-300">
+                  {methodTag}
+                </Badge>
+              )}
+            </div>
+            {secondaryLine && <div className="text-xs text-muted-foreground">{secondaryLine}</div>}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {getStatusBadge()}
-          {(check.details || check.skipReason) &&
+          {isExpandable &&
             (isExpanded ? (
               <ChevronUpIcon className="h-4 w-4 text-muted-foreground" />
             ) : (
@@ -939,11 +932,28 @@ function ExpandableCheckItem({
             ))}
         </div>
       </button>
-      {isExpanded && (check.details || check.skipReason) && (
+      {isExpanded && isExpandable && (
         <div className="p-5 pt-0 pl-11 text-sm border-t border-muted bg-muted/10">
-          {check.status === 'skipped' && check.skipReason ? (
+          {check.checkId && (
+            <div className="mt-4 text-xs text-muted-foreground flex flex-wrap gap-4">
+              <div>
+                Check ID:{' '}
+                <span className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded">
+                  {check.checkId}
+                </span>
+              </div>
+              {coverage?.wasInferred && <div>Method: Inferred</div>}
+              {coverage?.status === 'ran' && <div>Method: Ran</div>}
+              {coverage?.status === 'failed' && <div>Method: Not run</div>}
+            </div>
+          )}
+          {outcome === 'not_applicable' && secondaryLine ? (
             <div className="mt-4">
-              <p className="text-muted-foreground italic">{check.skipReason}</p>
+              <p className="text-muted-foreground italic">{secondaryLine}</p>
+            </div>
+          ) : outcome === 'not_run' && secondaryLine ? (
+            <div className="mt-4">
+              <p className="text-muted-foreground italic">{secondaryLine}</p>
             </div>
           ) : isStateChangesCheck ? (
             <div className="mt-4">
