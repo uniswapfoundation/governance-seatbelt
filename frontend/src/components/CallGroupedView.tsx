@@ -7,7 +7,7 @@ import type {
   SimulationCheck,
   StructuredSimulationReport,
 } from '@/hooks/use-simulation-results';
-import { CheckIcon, CopyIcon } from 'lucide-react';
+import { CheckIcon, ChevronDownIcon, CopyIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -629,7 +629,7 @@ export function CallGroupedView({
                     key={`${call.target}-${call.index}`}
                     className="group border border-muted rounded-md"
                   >
-                    <summary className="cursor-pointer select-none px-3 py-2 flex flex-wrap items-center justify-between gap-2">
+                    <summary className="cursor-pointer select-none px-3 py-2 flex items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
                       <div className="min-w-0">
                         <div className="text-sm font-medium">
                           <span className="mr-2">Call {call.index + 1}</span>
@@ -644,6 +644,7 @@ export function CallGroupedView({
                           <div className="text-xs text-muted-foreground break-all">{subLabel}</div>
                         ) : null}
                       </div>
+                      <ChevronDownIcon className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
                     </summary>
 
                     {hasDetails && (
