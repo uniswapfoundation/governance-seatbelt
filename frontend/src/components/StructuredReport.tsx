@@ -824,7 +824,7 @@ function ExpandableCheckItem({
               const amount = amountMatch ? amountMatch[1] : '';
 
               return (
-                <div key={`calldata-${formattedLine.substring(0, 30)}`} className="mb-3">
+                <div key={`calldata-${index}-${formattedLine.substring(0, 30)}`} className="mb-3">
                   <code className="block font-mono text-xs bg-muted p-3 rounded whitespace-pre-wrap overflow-x-auto">
                     <span className="flex flex-wrap gap-2 items-center">
                       <a
@@ -862,7 +862,7 @@ function ExpandableCheckItem({
 
             // Fallback if we can't parse the addresses
             return (
-              <div key={`calldata-${formattedLine.substring(0, 30)}`} className="mb-3">
+              <div key={`calldata-${index}-${formattedLine.substring(0, 30)}`} className="mb-3">
                 <code className="block font-mono text-xs bg-muted p-3 rounded whitespace-pre-wrap overflow-x-auto">
                   {formattedLine}
                 </code>
@@ -933,7 +933,7 @@ function ExpandableCheckItem({
           ) {
             return (
               <div
-                key={`info-${processedLine.substring(0, 30).replace(/\s+/g, '-')}`}
+                key={`info-${index}-${processedLine.substring(0, 30).replace(/\s+/g, '-')}`}
                 className="mb-3"
               >
                 <p className="text-muted-foreground">{parts.length > 0 ? parts : processedLine}</p>
