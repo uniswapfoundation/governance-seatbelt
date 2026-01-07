@@ -357,6 +357,10 @@ function CoverageSummary({
         </div>
       </div>
 
+      <div className="text-xs text-muted-foreground mb-3">
+        Coverage tracks whether checks executed (ran/skipped/failed). It does not indicate pass/fail.
+      </div>
+
       <div className="space-y-3">
         {chainEntries.map(([chainId, chainChecks]) => {
           const chainSummary = summarize(chainChecks);
