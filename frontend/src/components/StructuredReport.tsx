@@ -238,6 +238,7 @@ function getOutcome(check: SimulationCheck, coverage?: CheckCoverage): CheckOutc
   if (check.status === 'warning') return 'warning';
   if (check.status === 'skipped') return 'not_applicable';
 
+  if (coverage?.status === 'skipped') return 'not_applicable';
   if (coverage?.status === 'failed') return 'not_run';
 
   return 'passed';
@@ -340,10 +341,19 @@ function CoverageSummary({
     <div className="border border-muted rounded-md p-4 bg-muted/30">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <h3 className="text-lg font-semibold">Coverage</h3>
-        <div className="text-sm text-muted-foreground">
-          {overallSummary.passed} passed • {overallSummary.notApplicable} not applicable •{' '}
-          {overallSummary.warning} warnings • {overallSummary.failed} failed
-          {overallSummary.notRun > 0 ? ` • ${overallSummary.notRun} not run` : ''}
+        <div className="text-sm text-muted-foreground space-y-1 text-right">
+          <div>
+            {overallSummary.passed} passed • {overallSummary.notApplicable} not applicable •{' '}
+            {overallSummary.warning} warnings • {overallSummary.failed} failed
+            {overallSummary.notRun > 0 ? ` • ${overallSummary.notRun} not run` : ''}
+          </div>
+          <div className="text-xs">
+            {coverage.summary.ran} ran • {coverage.summary.skipped} skipped •{' '}
+            {coverage.summary.failed} failed
+            {coverage.summary.inferredSkips > 0
+              ? ` • ${coverage.summary.inferredSkips} inferred`
+              : ''}
+          </div>
         </div>
       </div>
 
@@ -698,15 +708,19 @@ function ExpandableCheckItem({
       ) : null;
     }
 
+    const normalizeInfoPrefix = (text: string) =>
+      text
+        .replace(/^\*\*Info\*\*:\s*-\s*/, '')
+        .replace(/^\*\*Info\*\*:\s*/, '')
+        .replace(/^Info:\s*-\s*/, '')
+        .replace(/^Info:\s*/, '')
+        .replace(/^Info\s*-\s*/, '');
+
     return (
       <>
         {lines.map((line: string, index: number) => {
           // Final cleanup for any remaining Info prefixes
-          let processedLine = line
-            .replace(/^\*\*Info\*\*:\s*/, '')
-            .replace(/^\*\*Info\*\*:\s*-\s*/, '')
-            .replace(/^Info:\s*/, '')
-            .replace(/^Info\s*-\s*/, '');
+          const processedLine = normalizeInfoPrefix(line);
 
           const markdownLinkedLine = renderMarkdownLinks(processedLine);
           if (typeof markdownLinkedLine !== 'string') {
@@ -715,22 +729,6 @@ function ExpandableCheckItem({
                 {markdownLinkedLine}
               </p>
             );
-          }
-
-          // Remove "Info:" if it appears at the beginning of a line
-          processedLine = processedLine
-            .replace(/^\*\*Info\*\*:\s*/, '')
-            .replace(/^\*\*Info\*\*:\s*-\s*/, '');
-
-          // Special case for "**Info**: - Uni (Uniswap)"
-          if (processedLine.match(/^\*\*Info\*\*:\s*-\s*[A-Za-z0-9]+ \([A-Za-z0-9]+\)/)) {
-            processedLine = processedLine.replace(/^\*\*Info\*\*:\s*-\s*/, '');
-          }
-
-          // Direct check for the exact pattern "**Info**: - Uni (Uniswap)"
-          const uniMatch = processedLine.match(/^\*\*Info\*\*: - ([A-Za-z0-9]+ \([A-Za-z0-9]+\))/);
-          if (uniMatch) {
-            processedLine = uniMatch[1];
           }
 
           // Check if this is a contract name line (like "Uni (Uniswap) at 0x...")
