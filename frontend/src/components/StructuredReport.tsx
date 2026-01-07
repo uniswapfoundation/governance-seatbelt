@@ -242,6 +242,48 @@ function getOutcome(check: SimulationCheck, coverage?: CheckCoverage): CheckOutc
   return 'passed';
 }
 
+function renderMarkdownLinks(text: string) {
+  const regex = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  match = regex.exec(text);
+  while (match !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+
+    const label = match[1];
+    const url = match[2];
+
+    parts.push(
+      <a
+        key={`${url}-${match.index}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+      >
+        {label}
+        <ExternalLinkIcon className="h-3 w-3 ml-1" />
+      </a>,
+    );
+
+    lastIndex = match.index + match[0].length;
+    match = regex.exec(text);
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  const hasLinks = parts.some((part) => typeof part !== 'string');
+  if (!hasLinks) return text;
+
+  return <span>{parts}</span>;
+}
+
 function CoverageSummary({
   report,
   coverageByCheckId,
@@ -919,7 +961,11 @@ function ExpandableCheckItem({
                 </Badge>
               )}
             </div>
-            {secondaryLine && <div className="text-xs text-muted-foreground">{secondaryLine}</div>}
+            {secondaryLine && (
+              <div className="text-xs text-muted-foreground">
+                {renderMarkdownLinks(secondaryLine)}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
