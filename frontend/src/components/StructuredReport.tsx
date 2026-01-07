@@ -388,6 +388,16 @@ export function StructuredReport({ report }: StructuredReportProps) {
     report.metadata.simulationBlockNumber || report.metadata.blockNumber || 'unknown';
   const timestamp = report.metadata.simulationTimestamp || report.metadata.timestamp || '0';
 
+  const proposerLabel = useAddressLabel(report.metadata.proposer, report.metadata.addressLabels);
+  const executorLabel = useAddressLabel(
+    report.metadata.executor ?? '',
+    report.metadata.addressLabels,
+  );
+  const governorLabel = useAddressLabel(
+    report.metadata.governorAddress ?? '',
+    report.metadata.addressLabels,
+  );
+
   return (
     <div className="w-full">
       {/* NEW: Decision Header with key metrics */}
@@ -487,10 +497,7 @@ export function StructuredReport({ report }: StructuredReportProps) {
                   <div className="font-medium flex items-center gap-2 flex-wrap">
                     <AddressLabel
                       address={report.metadata.proposer}
-                      label={useAddressLabel(
-                        report.metadata.proposer,
-                        report.metadata.addressLabels,
-                      )}
+                      label={proposerLabel}
                       blockExplorerUrl={getExplorerUrl(report.metadata)}
                       showLink={false}
                       linkMode="inline"
@@ -508,10 +515,7 @@ export function StructuredReport({ report }: StructuredReportProps) {
                     <div className="font-medium flex items-center gap-2 flex-wrap">
                       <AddressLabel
                         address={report.metadata.executor}
-                        label={useAddressLabel(
-                          report.metadata.executor,
-                          report.metadata.addressLabels,
-                        )}
+                        label={executorLabel}
                         blockExplorerUrl={getExplorerUrl(report.metadata)}
                         showLink={false}
                         linkMode="inline"
@@ -528,10 +532,7 @@ export function StructuredReport({ report }: StructuredReportProps) {
                     <div className="font-medium">
                       <AddressLabel
                         address={report.metadata.governorAddress}
-                        label={useAddressLabel(
-                          report.metadata.governorAddress,
-                          report.metadata.addressLabels,
-                        )}
+                        label={governorLabel}
                         blockExplorerUrl={getExplorerUrl(report.metadata)}
                         showLink={false}
                         linkMode="inline"
@@ -710,7 +711,7 @@ function ExpandableCheckItem({
           const markdownLinkedLine = renderMarkdownLinks(processedLine);
           if (typeof markdownLinkedLine !== 'string') {
             return (
-              <p key={`mdlink-${index}`} className="mb-2">
+              <p key={`mdlink-${processedLine}`} className="mb-2">
                 {markdownLinkedLine}
               </p>
             );
