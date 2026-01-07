@@ -9,76 +9,64 @@ import type {
 } from '@/hooks/use-simulation-results';
 import { CheckIcon, CopyIcon, ExternalLinkIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { formatEther } from 'viem';
+import {
+  decodeFunctionData,
+  formatEther,
+  getAddress,
+  parseAbiItem,
+  toFunctionSelector,
+} from 'viem';
 
 type RiskTag = 'Upgrade' | 'Admin/Role' | 'Token Approval' | 'Token Transfer' | 'ETH Value';
-
-function abbreviateAddress(address: string): string {
-  if (address.length < 12) return address;
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
-}
-
-function abbreviateHex(value: string): string {
-  if (value.length <= 18) return value;
-  return `${value.slice(0, 10)}…${value.slice(-6)}`;
-}
 
 function isHexAddress(value: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(value);
 }
 
-function isNumberish(value: string): boolean {
-  return /^-?(?:0x[a-fA-F0-9]+|\d+(?:\.\d+)?)$/.test(value);
+function getTrustWalletChainSlug(chainId: number | undefined) {
+  if (!chainId) return null;
+  if (chainId === 1) return 'ethereum';
+  if (chainId === 42161) return 'arbitrum';
+  if (chainId === 10) return 'optimism';
+  if (chainId === 8453) return 'base';
+  return null;
 }
 
-function formatDecimalWithGrouping(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return value;
-  if (trimmed.startsWith('0x') || trimmed.startsWith('-0x')) return trimmed;
-
-  const negative = trimmed.startsWith('-');
-  const normalized = negative ? trimmed.slice(1) : trimmed;
-
-  const [intPart, fracPart] = normalized.split('.');
-  const digits = (intPart || '0').replace(/^0+(?=\d)/, '');
-  const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-
-  const result = fracPart ? `${grouped}.${fracPart}` : grouped;
-  return negative ? `-${result}` : result;
-}
-
-function formatBigIntGrouping(value: bigint) {
-  const negative = value < 0n;
-  const abs = negative ? -value : value;
-  const digits = abs.toString();
-  const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return negative ? `-${grouped}` : grouped;
-}
-
-function formatNumberish(value: string, opts?: { compact?: boolean }) {
-  const trimmed = value.trim();
-  if (!isNumberish(trimmed)) return value;
-
-  if (trimmed.includes('.')) {
-    const grouped = formatDecimalWithGrouping(trimmed);
-    if (!opts?.compact) return grouped;
-    return grouped.length > 22 ? `${grouped.slice(0, 18)}…` : grouped;
-  }
+function getTrustWalletTokenLogoUrl(chainId: number | undefined, address: string) {
+  const slug = getTrustWalletChainSlug(chainId);
+  if (!slug) return null;
 
   try {
-    const parsed = BigInt(trimmed);
-    const grouped = formatBigIntGrouping(parsed);
-    if (!opts?.compact) return grouped;
-
-    const rawDigits = parsed < 0n ? grouped.slice(1) : grouped;
-    if (rawDigits.length <= 24) return grouped;
-
-    const prefix = grouped.slice(0, parsed < 0n ? 14 : 13);
-    const suffix = grouped.slice(-8);
-    return `${prefix}…${suffix}`;
+    const checksum = getAddress(address);
+    return `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${slug}/assets/${checksum}/logo.png`;
   } catch {
-    return value;
+    return null;
   }
+}
+
+function stringifyDecodedValue(value: unknown): string {
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+  if (typeof value === 'bigint') return value.toString();
+  if (typeof value === 'string') return value;
+
+  if (Array.isArray(value)) {
+    return JSON.stringify(
+      value.map((v) => (typeof v === 'bigint' ? v.toString() : v)),
+      null,
+      0,
+    );
+  }
+
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
+    } catch {
+      return String(value);
+    }
+  }
+
+  return String(value);
 }
 
 function stableHash(input: string) {
@@ -107,70 +95,73 @@ function getAddressLabelFor(
   return undefined;
 }
 
+function TokenLogo({
+  address,
+  chainId,
+  className,
+}: {
+  address: string;
+  chainId: number | undefined;
+  className?: string;
+}) {
+  const [hidden, setHidden] = useState(false);
+  const url = getTrustWalletTokenLogoUrl(chainId, address);
+
+  if (!url || hidden) return null;
+
+  return (
+    <img
+      src={url}
+      alt=""
+      className={className ?? 'h-5 w-5 rounded-full'}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setHidden(true)}
+    />
+  );
+}
+
 function AddressValue({
   address,
   baseUrl,
   labels,
+  chainId,
 }: {
   address: string;
   baseUrl: string;
   labels?: StructuredSimulationReport['metadata']['addressLabels'];
+  chainId: number | undefined;
 }) {
   const label = getAddressLabelFor(address, labels);
 
   return (
-    <div className="flex items-center gap-1">
-      <span className="font-mono">
-        {label?.label ? (
-          <>
-            {label.label}
-            <span className="ml-1 text-muted-foreground">({abbreviateAddress(address)})</span>
-          </>
-        ) : (
-          abbreviateAddress(address)
-        )}
-      </span>
-      <CopyButton value={address} className="h-6 w-6" />
-      <ExplorerLinkButton href={`${baseUrl}/address/${address}`} className="h-6 w-6" />
+    <div className="flex items-start gap-2 min-w-0">
+      {label?.type === 'token' ? <TokenLogo address={address} chainId={chainId} /> : null}
+      <div className="min-w-0">
+        {label?.label ? <div className="text-xs text-muted-foreground">{label.label}</div> : null}
+        <div className="font-mono break-all">{address}</div>
+      </div>
+      <div className="flex items-center shrink-0">
+        <CopyButton value={address} className="h-6 w-6" />
+        <ExplorerLinkButton href={`${baseUrl}/address/${address}`} className="h-6 w-6" />
+      </div>
     </div>
   );
 }
 
 function ValueWithCopy({
   value,
-  displayValue,
   className,
 }: {
   value: string;
-  displayValue?: string;
   className?: string;
 }) {
   return (
     <div className={`flex items-center gap-1 ${className || ''}`}>
-      <span className="font-mono break-all">{displayValue ?? value}</span>
+      <span className="font-mono break-all">{value}</span>
       <CopyButton value={value} className="h-6 w-6" />
     </div>
   );
-}
-
-function stripTrailingNote(text: string) {
-  return text.replace(/\s*\((?:formatted|decoded from cache|decoded from ABI|generic)\)\s*$/i, '');
-}
-
-function parseContractIdentifier(text: string) {
-  const clean = stripTrailingNote(text).trim();
-
-  const direct = clean.match(/^`(0x[a-fA-F0-9]{40})`$/);
-  if (direct) return { target: direct[1], contractName: undefined as string | undefined };
-
-  const withAt = clean.match(/^(.+?)\s+at\s+`(0x[a-fA-F0-9]{40})`$/);
-  if (withAt) return { contractName: withAt[1].trim(), target: withAt[2] };
-
-  const backticked = Array.from(clean.matchAll(/`(0x[a-fA-F0-9]{40})`/g)).map((m) => m[1]);
-  const target = backticked.at(-1);
-  if (!target) return { contractName: clean, target: undefined as string | undefined };
-
-  return { contractName: clean.replace(/`(0x[a-fA-F0-9]{40})`/g, '`…`').trim(), target };
 }
 
 function CopyButton({ value, className }: { value: string; className?: string }) {
@@ -274,9 +265,6 @@ function parseLogsByEmitter(checks: SimulationCheck[]) {
 function parseDecodedSentence(decodedText: string) {
   // Examples:
   // `0xFROM` calls `transfer(0xTO, 123)` on Name at `0xTARGET` (decoded from ABI)
-  // `0xFROM` transfers 123.45 UNI to `0xTO` on UNI Token (UNI) at `0xTARGET` (formatted)
-  // `0xFROM` approves `0xSPENDER` to spend 123.45 UNI on UNI Token (UNI) at `0xTARGET` (formatted)
-  // `0xFROM` transfers 123.45 UNI from `0xFROM` to `0xTO` on UNI Token (UNI) at `0xTARGET` (formatted)
   // `0xFROM` transfers 0.1 ETH to `0xTARGET` (formatted)
   const callMatch = decodedText.match(
     /^`(0x[a-fA-F0-9]{40})`\s+calls\s+`(.+?)`\s+on\s+(.+?)\s+at\s+`(0x[a-fA-F0-9]{40})`/,
@@ -304,58 +292,6 @@ function parseDecodedSentence(decodedText: string) {
     };
   }
 
-  const tokenTransferFromMatch = decodedText.match(
-    /^`(0x[a-fA-F0-9]{40})`\s+transfers\s+(.+?)\s+([^\s]+)\s+from\s+`(0x[a-fA-F0-9]{40})`\s+to\s+`(0x[a-fA-F0-9]{40})`\s+on\s+(.+)$/,
-  );
-  if (tokenTransferFromMatch) {
-    const [, caller, amount, symbol, from, to, on] = tokenTransferFromMatch;
-    const { contractName, target } = parseContractIdentifier(on);
-    return {
-      kind: 'token-transferFrom' as const,
-      caller,
-      from,
-      to,
-      amount,
-      symbol: symbol === 'null' ? null : symbol,
-      contractName,
-      target,
-    };
-  }
-
-  const tokenTransferMatch = decodedText.match(
-    /^`(0x[a-fA-F0-9]{40})`\s+transfers\s+(.+?)\s+([^\s]+)\s+to\s+`(0x[a-fA-F0-9]{40})`\s+on\s+(.+)$/,
-  );
-  if (tokenTransferMatch) {
-    const [, caller, amount, symbol, to, on] = tokenTransferMatch;
-    const { contractName, target } = parseContractIdentifier(on);
-    return {
-      kind: 'token-transfer' as const,
-      caller,
-      to,
-      amount,
-      symbol: symbol === 'null' ? null : symbol,
-      contractName,
-      target,
-    };
-  }
-
-  const tokenApproveMatch = decodedText.match(
-    /^`(0x[a-fA-F0-9]{40})`\s+approves\s+`(0x[a-fA-F0-9]{40})`\s+to\s+spend\s+(.+?)\s+([^\s]+)\s+on\s+(.+)$/,
-  );
-  if (tokenApproveMatch) {
-    const [, caller, spender, amount, symbol, on] = tokenApproveMatch;
-    const { contractName, target } = parseContractIdentifier(on);
-    return {
-      kind: 'token-approve' as const,
-      caller,
-      spender,
-      amount,
-      symbol: symbol === 'null' ? null : symbol,
-      contractName,
-      target,
-    };
-  }
-
   const ethTransferMatch = decodedText.match(
     /^`(0x[a-fA-F0-9]{40})`\s+transfers\s+(.+?)\s+ETH\s+to\s+`(0x[a-fA-F0-9]{40})`/,
   );
@@ -370,52 +306,6 @@ function parseDecodedSentence(decodedText: string) {
   }
 
   return { kind: 'unknown' as const };
-}
-
-function getCallArgLabels(decoded: ReturnType<typeof parseDecodedSentence>) {
-  if (decoded.kind !== 'call') return {};
-
-  const fn = decoded.fnName?.toLowerCase();
-  if (!fn) return {};
-
-  if (fn === 'transfer') {
-    const to = decoded.args[0];
-    const amount = decoded.args[1];
-    return {
-      otherAddressLabel: 'To',
-      otherAddress: to && isHexAddress(to) ? to : undefined,
-      fromToken: undefined as string | undefined,
-      amountLabel: 'Amount',
-      amount,
-    };
-  }
-
-  if (fn === 'approve') {
-    const spender = decoded.args[0];
-    const amount = decoded.args[1];
-    return {
-      otherAddressLabel: 'Spender',
-      otherAddress: spender && isHexAddress(spender) ? spender : undefined,
-      fromToken: undefined as string | undefined,
-      amountLabel: 'Amount',
-      amount,
-    };
-  }
-
-  if (fn === 'transferfrom') {
-    const fromToken = decoded.args[0];
-    const to = decoded.args[1];
-    const amount = decoded.args[2];
-    return {
-      otherAddressLabel: 'To',
-      otherAddress: to && isHexAddress(to) ? to : undefined,
-      fromToken: fromToken && isHexAddress(fromToken) ? fromToken : undefined,
-      amountLabel: 'Amount',
-      amount,
-    };
-  }
-
-  return {};
 }
 
 function getFunctionName(signature: string | undefined, decodedText?: string) {
@@ -463,6 +353,59 @@ function formatEthValue(value: bigint) {
   return `${formatEther(value)} ETH`;
 }
 
+type DecodedSignatureCall = {
+  functionName: string;
+  inputs: Array<{ name?: string; type: string }>;
+  args: readonly unknown[];
+  fullCalldata: `0x${string}`;
+};
+
+function getFullCalldata(signature: string | undefined, calldata: `0x${string}`): `0x${string}` {
+  if (!signature) return calldata;
+
+  const trimmed = signature.trim();
+  if (!trimmed || trimmed.startsWith('0x')) return calldata;
+
+  try {
+    const selector = toFunctionSelector(trimmed);
+    if (calldata.startsWith(selector)) return calldata;
+    return `${selector}${calldata.slice(2)}` as `0x${string}`;
+  } catch {
+    return calldata;
+  }
+}
+
+function tryDecodeFromSignature(
+  signature: string | undefined,
+  calldata: `0x${string}`,
+): DecodedSignatureCall | null {
+  if (!signature) return null;
+  const trimmed = signature.trim();
+  if (!trimmed || trimmed.startsWith('0x')) return null;
+
+  try {
+    const abiItem = parseAbiItem(`function ${trimmed}`);
+    // biome-ignore lint/suspicious/noExplicitAny: viem AbiFunction typing is complex
+    const inputs = ((abiItem as any).inputs ?? []) as Array<{ name?: string; type: string }>;
+
+    const fullCalldata = getFullCalldata(trimmed, calldata);
+    const decoded = decodeFunctionData({
+      // biome-ignore lint/suspicious/noExplicitAny: viem AbiFunction typing is complex
+      abi: [abiItem as any],
+      data: fullCalldata,
+    });
+
+    return {
+      functionName: decoded.functionName,
+      args: decoded.args,
+      inputs,
+      fullCalldata,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function parseEventSignature(eventText: string) {
   const match = eventText.match(/^([a-zA-Z0-9_]+)\((.*)\)$/);
   if (!match) return null;
@@ -488,11 +431,13 @@ function EventCard({
   eventText,
   baseUrl,
   labels,
+  chainId,
   compact,
 }: {
   eventText: string;
   baseUrl: string;
   labels?: StructuredSimulationReport['metadata']['addressLabels'];
+  chainId: number | undefined;
   compact?: boolean;
 }) {
   const parsed = parseEventSignature(eventText);
@@ -509,7 +454,6 @@ function EventCard({
         {params.map((p) => {
           const raw = p.value;
           const isAddr = isHexAddress(raw);
-          const display = isAddr ? abbreviateAddress(raw) : formatNumberish(raw, { compact: true });
           return (
             <div
               key={`${parsed.name}-${p.name}-${raw}`}
@@ -517,9 +461,9 @@ function EventCard({
             >
               <span className="text-muted-foreground">{p.name}</span>
               {isAddr ? (
-                <AddressValue address={raw} baseUrl={baseUrl} labels={labels} />
+                <AddressValue address={raw} baseUrl={baseUrl} labels={labels} chainId={chainId} />
               ) : (
-                <ValueWithCopy value={raw} displayValue={display} />
+                <ValueWithCopy value={raw} />
               )}
             </div>
           );
@@ -541,6 +485,7 @@ export function CallGroupedView({
 }) {
   const decodedByIndex = getDecodeCalldataInfo(report.checks);
   const eventsByEmitter = parseLogsByEmitter(report.checks);
+  const chainId = report.metadata.chainId;
 
   const calls = proposal.targets.map((target, index) => {
     const decodedText =
@@ -551,6 +496,7 @@ export function CallGroupedView({
     const value = proposal.values[index] ?? 0n;
 
     const tags = getRiskTags({ signature, decodedText, value });
+    const decodedSignature = tryDecodeFromSignature(signature, calldata);
 
     return {
       index,
@@ -558,8 +504,10 @@ export function CallGroupedView({
       value,
       signature,
       calldata,
+      fullCalldata: decodedSignature?.fullCalldata ?? getFullCalldata(signature, calldata),
       decodedText,
       decoded: decodedText ? parseDecodedSentence(decodedText) : null,
+      decodedSignature,
       tags,
     };
   });
@@ -592,22 +540,25 @@ export function CallGroupedView({
           <div key={targetKey} className="border border-muted rounded-md p-4 bg-card space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                {label?.type && (
+                {label?.type === 'token' ? (
+                  <TokenLogo address={target} chainId={chainId} className="h-6 w-6 rounded-full" />
+                ) : null}
+                {label?.type ? (
                   <Badge variant="outline" className="text-xs px-2 py-0.5">
                     {label.type}
                   </Badge>
-                )}
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <div className="text-sm font-medium">
-                    {label?.label ?? abbreviateAddress(target)}
-                    {label?.label ? (
-                      <span className="ml-2 text-xs font-mono text-muted-foreground">
-                        ({abbreviateAddress(target)})
-                      </span>
-                    ) : null}
+                ) : null}
+                <div className="flex items-start gap-2 min-w-0">
+                  <div className="min-w-0">
+                    {label?.label ? <div className="text-sm font-medium">{label.label}</div> : null}
+                    <div className="text-xs font-mono text-muted-foreground break-all">
+                      {target}
+                    </div>
                   </div>
-                  <CopyButton value={target} />
-                  <ExplorerLinkButton href={explorerUrl} />
+                  <div className="flex items-center shrink-0">
+                    <CopyButton value={target} />
+                    <ExplorerLinkButton href={explorerUrl} />
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-1">
                   {uniqueTags.map((tag) => (
@@ -629,37 +580,22 @@ export function CallGroupedView({
               {targetCalls.map((call) => {
                 const hasDetails = Boolean(call.decodedText || call.signature || call.calldata);
                 const decoded = call.decoded;
+                const decodedSignature = call.decodedSignature;
                 const fnLabel =
-                  decoded?.kind === 'call'
+                  decodedSignature?.functionName ??
+                  (decoded?.kind === 'call'
                     ? (decoded.fnName ?? 'Call')
-                    : decoded?.kind === 'token-transfer'
-                      ? 'Transfer'
-                      : decoded?.kind === 'token-transferFrom'
-                        ? 'TransferFrom'
-                        : decoded?.kind === 'token-approve'
-                          ? 'Approve'
-                          : decoded?.kind === 'eth-transfer'
-                            ? 'ETH transfer'
-                            : (getFunctionName(call.signature, call.decodedText) ?? 'Call');
+                    : decoded?.kind === 'eth-transfer'
+                      ? 'ETH transfer'
+                      : (getFunctionName(call.signature, call.decodedText) ?? 'Call'));
 
-                const subLabel =
-                  decoded?.kind === 'call'
-                    ? `${decoded.fnName ?? 'call'}(${decoded.args
-                        .map((arg) => {
-                          if (isHexAddress(arg)) return abbreviateAddress(arg);
-                          if (arg.startsWith('0x')) return abbreviateHex(arg);
-                          return formatNumberish(arg, { compact: true });
-                        })
-                        .join(', ')})`
-                    : decoded?.kind === 'token-transfer'
-                      ? `${formatNumberish(decoded.amount)}${decoded.symbol ? ` ${decoded.symbol}` : ''} to ${abbreviateAddress(decoded.to)}`
-                      : decoded?.kind === 'token-transferFrom'
-                        ? `${formatNumberish(decoded.amount)}${decoded.symbol ? ` ${decoded.symbol}` : ''} from ${abbreviateAddress(decoded.from)} to ${abbreviateAddress(decoded.to)}`
-                        : decoded?.kind === 'token-approve'
-                          ? `${formatNumberish(decoded.amount)}${decoded.symbol ? ` ${decoded.symbol}` : ''} to ${abbreviateAddress(decoded.spender)}`
-                          : decoded?.kind === 'eth-transfer'
-                            ? `to ${abbreviateAddress(decoded.to)}`
-                            : (call.decodedText ?? null);
+                const subLabel = decodedSignature
+                  ? `${decodedSignature.functionName}(${decodedSignature.args.map(stringifyDecodedValue).join(', ')})`
+                  : decoded?.kind === 'call'
+                    ? decoded.fnCall
+                    : decoded?.kind === 'eth-transfer'
+                      ? `to ${decoded.to}`
+                      : call.signature || call.decodedText || null;
 
                 const showEth = call.value > 0n;
 
@@ -687,226 +623,69 @@ export function CallGroupedView({
 
                     {hasDetails && (
                       <div className="px-3 pb-3 pt-0 space-y-2">
-                        {decoded?.kind === 'call' ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                            <div className="flex items-center justify-between gap-2 border border-muted rounded px-2 py-1">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                          <div className="flex items-start justify-between gap-2 border border-muted rounded px-2 py-1">
+                            <span className="text-muted-foreground">Target</span>
+                            <AddressValue
+                              address={call.target}
+                              baseUrl={baseUrl}
+                              labels={labels}
+                              chainId={chainId}
+                            />
+                          </div>
+
+                          {decoded?.kind === 'call' || decoded?.kind === 'eth-transfer' ? (
+                            <div className="flex items-start justify-between gap-2 border border-muted rounded px-2 py-1">
                               <span className="text-muted-foreground">Caller</span>
                               <AddressValue
                                 address={decoded.from}
                                 baseUrl={baseUrl}
                                 labels={labels}
+                                chainId={chainId}
                               />
                             </div>
-                            {(() => {
-                              const args = getCallArgLabels(decoded);
-                              if (!('fromToken' in args) && !('otherAddress' in args)) return null;
+                          ) : null}
 
-                              const fromToken = (args as { fromToken?: string }).fromToken;
-                              const otherAddress = (args as { otherAddress?: string }).otherAddress;
-                              const otherAddressLabel = (args as { otherAddressLabel?: string })
-                                .otherAddressLabel;
+                          {call.value > 0n ? (
+                            <div className="flex items-start justify-between gap-2 border border-muted rounded px-2 py-1 md:col-span-2">
+                              <span className="text-muted-foreground">Value (wei)</span>
+                              <ValueWithCopy value={call.value.toString()} />
+                            </div>
+                          ) : null}
 
-                              return (
-                                <>
-                                  {fromToken ? (
-                                    <div className="flex items-center justify-between gap-2 border border-muted rounded px-2 py-1">
-                                      <span className="text-muted-foreground">From</span>
+                          {decodedSignature ? (
+                            <>
+                              {decodedSignature.args.map((arg, argIndex) => {
+                                const input = decodedSignature.inputs[argIndex];
+                                const labelText = input?.name?.trim()
+                                  ? input.name
+                                  : `Arg ${argIndex + 1}`;
+
+                                const raw = stringifyDecodedValue(arg);
+                                const looksLikeAddress = isHexAddress(raw);
+
+                                return (
+                                  <div
+                                    key={`${call.target}-${call.index}-arg-${argIndex}-${raw}`}
+                                    className="flex items-start justify-between gap-2 border border-muted rounded px-2 py-1 md:col-span-2"
+                                  >
+                                    <span className="text-muted-foreground">{labelText}</span>
+                                    {looksLikeAddress ? (
                                       <AddressValue
-                                        address={fromToken}
+                                        address={raw}
                                         baseUrl={baseUrl}
                                         labels={labels}
+                                        chainId={chainId}
                                       />
-                                    </div>
-                                  ) : null}
-                                  {otherAddress ? (
-                                    <div className="flex items-center justify-between gap-2 border border-muted rounded px-2 py-1">
-                                      <span className="text-muted-foreground">
-                                        {otherAddressLabel ?? 'To'}
-                                      </span>
-                                      <AddressValue
-                                        address={otherAddress}
-                                        baseUrl={baseUrl}
-                                        labels={labels}
-                                      />
-                                    </div>
-                                  ) : null}
-                                </>
-                              );
-                            })()}
-                            {(() => {
-                              const args = getCallArgLabels(decoded);
-                              if (!('amount' in args)) return null;
-                              const amount = (args as { amount?: string }).amount;
-                              const amountLabel = (args as { amountLabel?: string }).amountLabel;
-                              if (!amount) return null;
-
-                              return (
-                                <div className="flex items-center justify-between gap-2 border border-muted rounded px-2 py-1 md:col-span-2">
-                                  <span className="text-muted-foreground">
-                                    {amountLabel ?? 'Amount'}
-                                  </span>
-                                  <ValueWithCopy
-                                    value={amount}
-                                    displayValue={formatNumberish(amount)}
-                                  />
-                                </div>
-                              );
-                            })()}
-                            {decoded.args.length > 0 &&
-                            !['transfer', 'approve', 'transferfrom'].includes(
-                              (decoded.fnName ?? '').toLowerCase(),
-                            ) ? (
-                              <div className="flex items-start justify-between gap-2 border border-muted rounded px-2 py-1 md:col-span-2">
-                                <span className="text-muted-foreground">Args</span>
-                                <div className="space-y-1">
-                                  {decoded.args.map((arg, argIndex) => {
-                                    const isAddr = isHexAddress(arg);
-                                    const display = isAddr
-                                      ? abbreviateAddress(arg)
-                                      : formatNumberish(arg, { compact: true });
-
-                                    return (
-                                      <div
-                                        key={`${decoded.fnName ?? 'call'}-${argIndex}-${arg}`}
-                                        className="flex items-center justify-end gap-2"
-                                      >
-                                        <span className="text-muted-foreground">
-                                          Arg {argIndex + 1}
-                                        </span>
-                                        {isAddr ? (
-                                          <AddressValue
-                                            address={arg}
-                                            baseUrl={baseUrl}
-                                            labels={labels}
-                                          />
-                                        ) : (
-                                          <ValueWithCopy value={arg} displayValue={display} />
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            ) : null}
-                          </div>
-                        ) : null}
-
-                        {decoded?.kind === 'token-transfer' ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                            <div className="flex items-center justify-between gap-2 border border-muted rounded px-2 py-1">
-                              <span className="text-muted-foreground">Caller</span>
-                              <AddressValue
-                                address={decoded.caller}
-                                baseUrl={baseUrl}
-                                labels={labels}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between gap-2 border border-muted rounded px-2 py-1">
-                              <span className="text-muted-foreground">To</span>
-                              <AddressValue
-                                address={decoded.to}
-                                baseUrl={baseUrl}
-                                labels={labels}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between gap-2 border border-muted rounded px-2 py-1 md:col-span-2">
-                              <span className="text-muted-foreground">Amount</span>
-                              <ValueWithCopy
-                                value={decoded.amount}
-                                displayValue={`${formatNumberish(decoded.amount)}${decoded.symbol ? ` ${decoded.symbol}` : ''}`}
-                              />
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {decoded?.kind === 'token-transferFrom' ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                            <div className="flex items-center justify-between gap-2 border border-muted rounded px-2 py-1">
-                              <span className="text-muted-foreground">Caller</span>
-                              <AddressValue
-                                address={decoded.caller}
-                                baseUrl={baseUrl}
-                                labels={labels}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between gap-2 border border-muted rounded px-2 py-1">
-                              <span className="text-muted-foreground">From</span>
-                              <AddressValue
-                                address={decoded.from}
-                                baseUrl={baseUrl}
-                                labels={labels}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between gap-2 border border-muted rounded px-2 py-1">
-                              <span className="text-muted-foreground">To</span>
-                              <AddressValue
-                                address={decoded.to}
-                                baseUrl={baseUrl}
-                                labels={labels}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between gap-2 border border-muted rounded px-2 py-1 md:col-span-2">
-                              <span className="text-muted-foreground">Amount</span>
-                              <ValueWithCopy
-                                value={decoded.amount}
-                                displayValue={`${formatNumberish(decoded.amount)}${decoded.symbol ? ` ${decoded.symbol}` : ''}`}
-                              />
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {decoded?.kind === 'token-approve' ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                            <div className="flex items-center justify-between gap-2 border border-muted rounded px-2 py-1">
-                              <span className="text-muted-foreground">Caller</span>
-                              <AddressValue
-                                address={decoded.caller}
-                                baseUrl={baseUrl}
-                                labels={labels}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between gap-2 border border-muted rounded px-2 py-1">
-                              <span className="text-muted-foreground">Spender</span>
-                              <AddressValue
-                                address={decoded.spender}
-                                baseUrl={baseUrl}
-                                labels={labels}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between gap-2 border border-muted rounded px-2 py-1 md:col-span-2">
-                              <span className="text-muted-foreground">Amount</span>
-                              <ValueWithCopy
-                                value={decoded.amount}
-                                displayValue={`${formatNumberish(decoded.amount)}${decoded.symbol ? ` ${decoded.symbol}` : ''}`}
-                              />
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {decoded?.kind === 'eth-transfer' ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                            <div className="flex items-center justify-between gap-2 border border-muted rounded px-2 py-1">
-                              <span className="text-muted-foreground">Caller</span>
-                              <AddressValue
-                                address={decoded.from}
-                                baseUrl={baseUrl}
-                                labels={labels}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between gap-2 border border-muted rounded px-2 py-1">
-                              <span className="text-muted-foreground">To</span>
-                              <AddressValue
-                                address={decoded.to}
-                                baseUrl={baseUrl}
-                                labels={labels}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between gap-2 border border-muted rounded px-2 py-1 md:col-span-2">
-                              <span className="text-muted-foreground">Amount</span>
-                              <span className="font-mono">{decoded.amountEth} ETH</span>
-                            </div>
-                          </div>
-                        ) : null}
+                                    ) : (
+                                      <ValueWithCopy value={raw} />
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </>
+                          ) : null}
+                        </div>
 
                         {call.signature && (
                           <div className="text-xs">
@@ -914,12 +693,18 @@ export function CallGroupedView({
                             <span className="font-mono">{call.signature || '(empty)'}</span>
                           </div>
                         )}
-                        {call.calldata && (
+                        {call.fullCalldata && (
                           <div className="text-xs">
                             <span className="text-muted-foreground mr-2">Calldata</span>
-                            <span className="font-mono break-all">{call.calldata}</span>
+                            <span className="font-mono break-all">{call.fullCalldata}</span>
                           </div>
                         )}
+                        {call.calldata && call.calldata !== call.fullCalldata ? (
+                          <div className="text-xs">
+                            <span className="text-muted-foreground mr-2">Args Calldata</span>
+                            <span className="font-mono break-all">{call.calldata}</span>
+                          </div>
+                        ) : null}
                       </div>
                     )}
                   </details>
@@ -935,6 +720,7 @@ export function CallGroupedView({
                     eventText={emitted.events[0]}
                     baseUrl={baseUrl}
                     labels={labels}
+                    chainId={chainId}
                     compact
                   />
                 ) : null}
@@ -954,7 +740,12 @@ export function CallGroupedView({
 
                           return (
                             <div key={key} className="py-2">
-                              <EventCard eventText={evt} baseUrl={baseUrl} labels={labels} />
+                              <EventCard
+                                eventText={evt}
+                                baseUrl={baseUrl}
+                                labels={labels}
+                                chainId={chainId}
+                              />
                             </div>
                           );
                         });
