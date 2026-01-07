@@ -281,7 +281,7 @@ function renderMarkdownLinks(text: string) {
   const hasLinks = parts.some((part) => typeof part !== 'string');
   if (!hasLinks) return text;
 
-  return <span>{parts}</span>;
+  return <span className="inline-flex flex-wrap items-center gap-1">{parts}</span>;
 }
 
 function CoverageSummary({
@@ -685,6 +685,15 @@ function ExpandableCheckItem({
             .replace(/^\*\*Info\*\*:\s*-\s*/, '')
             .replace(/^Info:\s*/, '')
             .replace(/^Info\s*-\s*/, '');
+
+          const markdownLinkedLine = renderMarkdownLinks(processedLine);
+          if (typeof markdownLinkedLine !== 'string') {
+            return (
+              <p key={`mdlink-${index}`} className="mb-2">
+                {markdownLinkedLine}
+              </p>
+            );
+          }
 
           // Remove "Info:" if it appears at the beginning of a line
           processedLine = processedLine
