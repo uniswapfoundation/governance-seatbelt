@@ -7,7 +7,8 @@ import type {
   SimulationCheck,
   StructuredSimulationReport,
 } from '@/hooks/use-simulation-results';
-import { CheckIcon, CopyIcon, ExternalLinkIcon } from 'lucide-react';
+import { CheckIcon, CopyIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
   decodeFunctionData,
@@ -22,6 +23,9 @@ type RiskTag = 'Upgrade' | 'Admin/Role' | 'Token Approval' | 'Token Transfer' | 
 function isHexAddress(value: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(value);
 }
+
+const hoverCopyClasses =
+  'opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity';
 
 function getTrustWalletChainSlug(chainId: number | undefined) {
   if (!chainId) return null;
@@ -121,30 +125,88 @@ function TokenLogo({
   );
 }
 
+function ExplorerAddressLink({
+  address,
+  baseUrl,
+  className,
+  children,
+}: {
+  address: string;
+  baseUrl: string;
+  className?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <a
+      href={`${baseUrl}/address/${address}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={className ?? 'hover:underline'}
+    >
+      {children ?? address}
+    </a>
+  );
+}
+
 function AddressValue({
   address,
   baseUrl,
   labels,
   chainId,
+  variant = 'inline',
 }: {
   address: string;
   baseUrl: string;
   labels?: StructuredSimulationReport['metadata']['addressLabels'];
   chainId: number | undefined;
+  variant?: 'header' | 'inline';
 }) {
   const label = getAddressLabelFor(address, labels);
+  const isHeader = variant === 'header';
 
   return (
-    <div className="flex items-start gap-2 min-w-0">
-      {label?.type === 'token' ? <TokenLogo address={address} chainId={chainId} /> : null}
+    <div className="group flex items-start gap-2 min-w-0">
+      {label?.type === 'token' ? (
+        <TokenLogo
+          address={address}
+          chainId={chainId}
+          className={isHeader ? 'h-6 w-6 rounded-full' : undefined}
+        />
+      ) : null}
       <div className="min-w-0">
-        {label?.label ? <div className="text-xs text-muted-foreground">{label.label}</div> : null}
-        <div className="font-mono break-all">{address}</div>
+        <div className="flex items-center gap-2 min-w-0">
+          {label?.label ? (
+            <ExplorerAddressLink
+              address={address}
+              baseUrl={baseUrl}
+              className={
+                isHeader
+                  ? 'text-sm font-medium hover:underline truncate'
+                  : 'text-xs text-muted-foreground hover:underline truncate'
+              }
+            >
+              {label.label}
+            </ExplorerAddressLink>
+          ) : null}
+          {label?.type && label.type !== 'token' ? (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+              {label.type}
+            </Badge>
+          ) : null}
+        </div>
+        <div
+          className={
+            isHeader
+              ? 'text-xs font-mono text-muted-foreground break-all'
+              : 'text-xs font-mono text-muted-foreground break-all'
+          }
+        >
+          <ExplorerAddressLink address={address} baseUrl={baseUrl}>
+            {address}
+          </ExplorerAddressLink>
+        </div>
       </div>
-      <div className="flex items-center shrink-0">
-        <CopyButton value={address} className="h-6 w-6" />
-        <ExplorerLinkButton href={`${baseUrl}/address/${address}`} className="h-6 w-6" />
-      </div>
+      <CopyButton value={address} className={`h-6 w-6 ${hoverCopyClasses}`} />
     </div>
   );
 }
@@ -157,9 +219,9 @@ function ValueWithCopy({
   className?: string;
 }) {
   return (
-    <div className={`flex items-center gap-1 ${className || ''}`}>
+    <div className={`group flex items-center gap-1 ${className || ''}`}>
       <span className="font-mono break-all">{value}</span>
-      <CopyButton value={value} className="h-6 w-6" />
+      <CopyButton value={value} className={`h-6 w-6 ${hoverCopyClasses}`} />
     </div>
   );
 }
@@ -203,27 +265,6 @@ function CopyButton({ value, className }: { value: string; className?: string })
       ) : (
         <CopyIcon className="h-3.5 w-3.5" />
       )}
-    </Button>
-  );
-}
-
-function ExplorerLinkButton({
-  href,
-  className,
-}: {
-  href: string;
-  className?: string;
-}) {
-  return (
-    <Button
-      asChild
-      variant="ghost"
-      size="sm"
-      className={`h-7 w-7 p-0 cursor-pointer ${className || ''}`}
-    >
-      <a href={href} target="_blank" rel="noopener noreferrer" aria-label="Open in explorer">
-        <ExternalLinkIcon className="h-3.5 w-3.5" />
-      </a>
     </Button>
   );
 }
@@ -526,7 +567,6 @@ export function CallGroupedView({
     <div className="space-y-4">
       {Object.entries(byTarget).map(([targetKey, targetCalls]) => {
         const target = targetCalls[0]?.target ?? targetKey;
-        const label = getAddressLabelFor(target, labels);
 
         const totalEth = targetCalls.reduce((sum, c) => sum + c.value, 0n);
         const uniqueTags = Array.from(new Set(targetCalls.flatMap((c) => c.tags)));
@@ -534,32 +574,17 @@ export function CallGroupedView({
         const emitted = eventsByEmitter.get(target.toLowerCase());
         const eventCount = emitted?.events.length ?? 0;
 
-        const explorerUrl = `${baseUrl}/address/${target}`;
-
         return (
           <div key={targetKey} className="border border-muted rounded-md p-4 bg-card space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                {label?.type === 'token' ? (
-                  <TokenLogo address={target} chainId={chainId} className="h-6 w-6 rounded-full" />
-                ) : null}
-                {label?.type ? (
-                  <Badge variant="outline" className="text-xs px-2 py-0.5">
-                    {label.type}
-                  </Badge>
-                ) : null}
-                <div className="flex items-start gap-2 min-w-0">
-                  <div className="min-w-0">
-                    {label?.label ? <div className="text-sm font-medium">{label.label}</div> : null}
-                    <div className="text-xs font-mono text-muted-foreground break-all">
-                      {target}
-                    </div>
-                  </div>
-                  <div className="flex items-center shrink-0">
-                    <CopyButton value={target} />
-                    <ExplorerLinkButton href={explorerUrl} />
-                  </div>
-                </div>
+              <div className="flex flex-wrap items-start gap-2 min-w-0">
+                <AddressValue
+                  address={target}
+                  baseUrl={baseUrl}
+                  labels={labels}
+                  chainId={chainId}
+                  variant="header"
+                />
                 <div className="flex flex-wrap items-center gap-1">
                   {uniqueTags.map((tag) => (
                     <Badge key={tag} variant="secondary" className="text-xs">
