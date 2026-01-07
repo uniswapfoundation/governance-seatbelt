@@ -2,6 +2,7 @@
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type {
   CheckCoverage,
@@ -336,7 +337,7 @@ function CoverageSummary({
   const overallSummary = summarize(report.checks);
 
   return (
-    <div className="border border-muted rounded-md p-4 bg-card">
+    <div className="border border-muted rounded-md p-4 bg-muted/30">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <h3 className="text-lg font-semibold">Coverage</h3>
         <div className="text-sm text-muted-foreground">
@@ -419,13 +420,15 @@ export function StructuredReport({ report }: StructuredReportProps) {
             <div className="space-y-2">
               <CoverageSummary report={report} coverageByCheckId={coverageByCheckId} />
               <div className="flex justify-end">
-                <button
+                <Button
                   type="button"
-                  className="text-xs text-muted-foreground hover:underline"
+                  variant="link"
+                  size="sm"
+                  className="h-auto px-0 text-xs cursor-pointer"
                   onClick={() => setActiveTab('checks')}
                 >
                   View checks
-                </button>
+                </Button>
               </div>
             </div>
 
