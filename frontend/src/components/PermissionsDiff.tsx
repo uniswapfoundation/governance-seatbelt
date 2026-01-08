@@ -213,12 +213,16 @@ function TimelockAdminCard({
         )}
       </div>
       <ContractHeader contractName={item.contractName} contractAddress={item.contractAddress} />
-      <AddressTransition
-        from={item.previous}
-        to={item.next}
-        fromLabel={isPending ? 'Previous Pending Admin' : 'Previous Admin'}
-        toLabel={isPending ? 'New Pending Admin' : 'New Admin'}
-      />
+      {isPending && !item.previous ? (
+        <AddressDisplay address={item.next} label="Pending Admin Set" />
+      ) : (
+        <AddressTransition
+          from={item.previous}
+          to={item.next}
+          fromLabel={isPending ? 'Previous Pending Admin' : 'Previous Admin'}
+          toLabel={isPending ? 'New Pending Admin' : 'New Admin'}
+        />
+      )}
     </div>
   );
 }
@@ -245,12 +249,16 @@ function TimelockAdminTransferCard({
       />
 
       <div className="space-y-4">
-        <AddressTransition
-          from={pending.previous}
-          to={pending.next}
-          fromLabel="Previous Pending Admin"
-          toLabel="New Pending Admin"
-        />
+        {pending.previous ? (
+          <AddressTransition
+            from={pending.previous}
+            to={pending.next}
+            fromLabel="Previous Pending Admin"
+            toLabel="New Pending Admin"
+          />
+        ) : (
+          <AddressDisplay address={pending.next} label="Pending Admin Set" />
+        )}
         <AddressTransition
           from={admin.previous}
           to={admin.next}
