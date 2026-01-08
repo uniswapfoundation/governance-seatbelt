@@ -215,6 +215,15 @@ export async function runChecksForChain(
     name: ALL_CHECKS.checkLogs.name,
     result: await ALL_CHECKS.checkLogs.checkProposal(proposal, sim, depsWithConfig, l2Simulations),
   };
+  results.checkProxyResolution = {
+    name: ALL_CHECKS.checkProxyResolution.name,
+    result: await ALL_CHECKS.checkProxyResolution.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
+  };
   results.checkEthBalanceChanges = {
     name: ALL_CHECKS.checkEthBalanceChanges.name,
     result: await ALL_CHECKS.checkEthBalanceChanges.checkProposal(

@@ -16,7 +16,7 @@ import type {
   SimulationResult,
 } from './types';
 import { cacheProposal, getCachedProposal, needsSimulation } from './utils/cache/proposalCache';
-import { getChainConfig, publicClient } from './utils/clients/client';
+import { getChainConfig, getClientForChain, publicClient } from './utils/clients/client';
 import { handleCrossChainSimulations, simulate } from './utils/clients/tenderly';
 import { DAO_NAME, GOVERNOR_ADDRESS, REPORTS_OUTPUT_DIRECTORY, SIM_NAME } from './utils/constants';
 import {
@@ -74,6 +74,7 @@ async function processDestinationSimulations(
       if (destSim.sim) {
         const l2Deps = {
           ...deps,
+          publicClient: getClientForChain(destSim.chainId),
           chainConfig: getChainConfig(destSim.chainId),
         };
         destinationChecks[destSim.chainId] = await runChecksForChain(

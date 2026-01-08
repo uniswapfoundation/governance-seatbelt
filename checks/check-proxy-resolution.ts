@@ -43,11 +43,16 @@ export const checkProxyResolution: ProposalCheck = {
     const publicClient = deps.publicClient as PublicClient;
     const blockNumber = BigInt(sim.transaction.block_number);
 
-    // For mainnet, we use proposal targets.
-    // For destination chains, this check should only analyze the destination tx target (not every subcall).
-    const targets =
+    // Always include proposal targets (or destination tx target on L2).
+    // Additionally, include any touched contracts that look like proxies based on Tenderly metadata.
+    const baseTargets =
       chainId === 1 ? proposal.targets : sim.transaction.to ? [sim.transaction.to] : [];
-    const uniqueTargets = Array.from(new Set(targets.map((t) => getAddress(t))));
+    const touchedProxyCandidates = sim.contracts
+      .filter((c) => (c.contract_name ? /proxy/i.test(c.contract_name) : false))
+      .map((c) => c.address);
+
+    const candidates = [...baseTargets, ...touchedProxyCandidates];
+    const uniqueTargets = Array.from(new Set(candidates.map((t) => getAddress(t))));
 
     for (const target of uniqueTargets) {
       const detection = await detectProxy(target, publicClient, blockNumber);
