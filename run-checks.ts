@@ -224,6 +224,15 @@ export async function runChecksForChain(
       l2Simulations,
     ),
   };
+  results.checkTreasuryMovement = {
+    name: ALL_CHECKS.checkTreasuryMovement.name,
+    result: await ALL_CHECKS.checkTreasuryMovement.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
+  };
   results.checkDecodeCalldata = {
     name: ALL_CHECKS.checkDecodeCalldata.name,
     result: await ALL_CHECKS.checkDecodeCalldata.checkProposal(
