@@ -216,9 +216,48 @@ function TimelockAdminCard({
       <AddressTransition
         from={item.previous}
         to={item.next}
-        fromLabel="Previous Admin"
-        toLabel="New Admin"
+        fromLabel={isPending ? 'Previous Pending Admin' : 'Previous Admin'}
+        toLabel={isPending ? 'New Pending Admin' : 'New Admin'}
       />
+    </div>
+  );
+}
+
+function TimelockAdminTransferCard({
+  pending,
+  admin,
+}: {
+  pending: Extract<PermissionsDiffItem, { kind: 'timelock_pending_admin_changed' }>;
+  admin: Extract<PermissionsDiffItem, { kind: 'timelock_admin_changed' }>;
+}) {
+  return (
+    <div className="border border-muted rounded-lg p-4 bg-card">
+      <div className="flex items-center gap-2 mb-3">
+        <KeyIcon className="h-4 w-4 text-yellow-600" />
+        <span className="font-medium">Admin Transfer</span>
+        <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
+          2-step
+        </Badge>
+      </div>
+      <ContractHeader
+        contractName={pending.contractName || admin.contractName}
+        contractAddress={admin.contractAddress}
+      />
+
+      <div className="space-y-4">
+        <AddressTransition
+          from={pending.previous}
+          to={pending.next}
+          fromLabel="Previous Pending Admin"
+          toLabel="New Pending Admin"
+        />
+        <AddressTransition
+          from={admin.previous}
+          to={admin.next}
+          fromLabel="Previous Admin"
+          toLabel="New Admin"
+        />
+      </div>
     </div>
   );
 }
@@ -246,17 +285,101 @@ export function PermissionsDiff({ items }: PermissionsDiffProps) {
     > => item.kind === 'timelock_admin_changed' || item.kind === 'timelock_pending_admin_changed',
   );
 
+  const timelockDisplayItems = (() => {
+    type Pending = Extract<PermissionsDiffItem, { kind: 'timelock_pending_admin_changed' }>;
+    type Admin = Extract<PermissionsDiffItem, { kind: 'timelock_admin_changed' }>;
+    type DisplayItem =
+      | { kind: 'timelock_admin_transfer'; pending: Pending; admin: Admin }
+      | { kind: 'single'; item: Pending | Admin };
+
+    const keyFor = (item: Pending | Admin) => `${item.contractAddress}:${item.next}`;
+    const used = new Set<number>();
+    const pendingIndicesByKey = new Map<string, number[]>();
+    const adminIndicesByKey = new Map<string, number[]>();
+
+    timelockChanges.forEach((item, index) => {
+      const key = keyFor(item);
+      if (item.kind === 'timelock_pending_admin_changed') {
+        pendingIndicesByKey.set(key, [...(pendingIndicesByKey.get(key) ?? []), index]);
+      } else {
+        adminIndicesByKey.set(key, [...(adminIndicesByKey.get(key) ?? []), index]);
+      }
+    });
+
+    const takeFirstUnused = (indices: number[], preferAfterIndex: number) => {
+      const after = indices.find((idx) => idx > preferAfterIndex && !used.has(idx));
+      if (after !== undefined) return after;
+      return indices.find((idx) => !used.has(idx));
+    };
+
+    const result: DisplayItem[] = [];
+    for (let i = 0; i < timelockChanges.length; i++) {
+      if (used.has(i)) continue;
+      const item = timelockChanges[i];
+      const key = keyFor(item);
+
+      if (item.kind === 'timelock_pending_admin_changed') {
+        const adminIndex = takeFirstUnused(adminIndicesByKey.get(key) ?? [], i);
+        if (adminIndex !== undefined) {
+          used.add(i);
+          used.add(adminIndex);
+          result.push({
+            kind: 'timelock_admin_transfer',
+            pending: item,
+            admin: timelockChanges[adminIndex] as Admin,
+          });
+          continue;
+        }
+      } else {
+        const pendingIndex = takeFirstUnused(pendingIndicesByKey.get(key) ?? [], i);
+        if (pendingIndex !== undefined) {
+          used.add(i);
+          used.add(pendingIndex);
+          result.push({
+            kind: 'timelock_admin_transfer',
+            pending: timelockChanges[pendingIndex] as Pending,
+            admin: item,
+          });
+          continue;
+        }
+      }
+
+      used.add(i);
+      result.push({
+        kind: 'single',
+        item: item as Pending | Admin,
+      });
+    }
+
+    return result;
+  })();
+
   return (
     <div className="space-y-6 mt-4">
-      {timelockChanges.length > 0 && (
+      {timelockDisplayItems.length > 0 && (
         <div>
           <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
             Timelock Admin Changes
           </h4>
           <div className="space-y-3">
-            {timelockChanges.map((item, index) => (
-              <TimelockAdminCard key={`timelock-${item.contractAddress}-${index}`} item={item} />
-            ))}
+            {timelockDisplayItems.map((displayItem, index) => {
+              if (displayItem.kind === 'timelock_admin_transfer') {
+                return (
+                  <TimelockAdminTransferCard
+                    key={`timelock-transfer-${displayItem.admin.contractAddress}-${displayItem.admin.next}-${index}`}
+                    pending={displayItem.pending}
+                    admin={displayItem.admin}
+                  />
+                );
+              }
+
+              return (
+                <TimelockAdminCard
+                  key={`timelock-${displayItem.item.contractAddress}-${index}`}
+                  item={displayItem.item}
+                />
+              );
+            })}
           </div>
         </div>
       )}
