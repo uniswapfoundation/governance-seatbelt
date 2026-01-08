@@ -5,9 +5,7 @@ function eventTopic(signature: string): `0x${string}` {
   return keccak256(toBytes(signature));
 }
 
-const OWNERSHIP_TRANSFERRED_TOPIC = eventTopic(
-  'OwnershipTransferred(address,address)',
-);
+const OWNERSHIP_TRANSFERRED_TOPIC = eventTopic('OwnershipTransferred(address,address)');
 const ROLE_GRANTED_TOPIC = eventTopic('RoleGranted(bytes32,address,address)');
 const ROLE_REVOKED_TOPIC = eventTopic('RoleRevoked(bytes32,address,address)');
 const NEW_ADMIN_TOPIC = eventTopic('NewAdmin(address)');
@@ -27,7 +25,7 @@ function decodeRoleName(roleId: string): string | null {
 }
 
 function toRole(role: unknown): { id: `0x${string}`; name: string | null } {
-  const roleId = (typeof role === 'string' && isHex(role)) ? (role as `0x${string}`) : zeroHash;
+  const roleId = typeof role === 'string' && isHex(role) ? (role as `0x${string}`) : zeroHash;
   return { id: roleId, name: decodeRoleName(roleId) };
 }
 
@@ -65,10 +63,7 @@ function mergeTimelockAdminChanges(items: PermissionsDiffItem[]): PermissionsDif
   const index = new Map<string, number>();
 
   for (const item of items) {
-    if (
-      item.kind !== 'timelock_admin_changed' &&
-      item.kind !== 'timelock_pending_admin_changed'
-    ) {
+    if (item.kind !== 'timelock_admin_changed' && item.kind !== 'timelock_pending_admin_changed') {
       merged.push(item);
       continue;
     }
@@ -91,10 +86,7 @@ function mergeTimelockAdminChanges(items: PermissionsDiffItem[]): PermissionsDif
         ...existing,
         previous: existing.previous ?? item.previous,
         next: existing.next ?? item.next,
-        via:
-          existing.via === item.via
-            ? existing.via
-            : 'event+state_diff',
+        via: existing.via === item.via ? existing.via : 'event+state_diff',
       };
     }
   }
@@ -156,8 +148,7 @@ export const checkPermissionDiff: ProposalCheck = {
                 },
               ],
               data: log.raw.data as `0x${string}`,
-              topics:
-                log.raw.topics as unknown as [] | [`0x${string}`, ...`0x${string}`[]],
+              topics: log.raw.topics as unknown as [] | [`0x${string}`, ...`0x${string}`[]],
             });
 
             const previousOwner = maybeAddress(decoded.args.previousOwner);
@@ -186,8 +177,7 @@ export const checkPermissionDiff: ProposalCheck = {
                 },
               ],
               data: log.raw.data as `0x${string}`,
-              topics:
-                log.raw.topics as unknown as [] | [`0x${string}`, ...`0x${string}`[]],
+              topics: log.raw.topics as unknown as [] | [`0x${string}`, ...`0x${string}`[]],
             });
 
             const role = toRole(decoded.args.role);
@@ -217,8 +207,7 @@ export const checkPermissionDiff: ProposalCheck = {
                 },
               ],
               data: log.raw.data as `0x${string}`,
-              topics:
-                log.raw.topics as unknown as [] | [`0x${string}`, ...`0x${string}`[]],
+              topics: log.raw.topics as unknown as [] | [`0x${string}`, ...`0x${string}`[]],
             });
 
             const role = toRole(decoded.args.role);
@@ -244,8 +233,7 @@ export const checkPermissionDiff: ProposalCheck = {
                 },
               ],
               data: log.raw.data as `0x${string}`,
-              topics:
-                log.raw.topics as unknown as [] | [`0x${string}`, ...`0x${string}`[]],
+              topics: log.raw.topics as unknown as [] | [`0x${string}`, ...`0x${string}`[]],
             });
 
             const next = maybeAddress(decoded.args.newAdmin);
@@ -269,8 +257,7 @@ export const checkPermissionDiff: ProposalCheck = {
                 },
               ],
               data: log.raw.data as `0x${string}`,
-              topics:
-                log.raw.topics as unknown as [] | [`0x${string}`, ...`0x${string}`[]],
+              topics: log.raw.topics as unknown as [] | [`0x${string}`, ...`0x${string}`[]],
             });
 
             const next = maybeAddress(decoded.args.newPendingAdmin);

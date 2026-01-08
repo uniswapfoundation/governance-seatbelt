@@ -503,7 +503,9 @@ async function simulateExecuted(config: SimulationConfigExecuted): Promise<Simul
     const proposal = proposalCreatedEvent.args;
 
     if (!proposal.description) {
-      throw new Error(`Missing description in ProposalCreated event for proposal ${proposalIdBigInt}`);
+      throw new Error(
+        `Missing description in ProposalCreated event for proposal ${proposalIdBigInt}`,
+      );
     }
 
     const { targets, signatures, calldatas, values } = proposal;
@@ -586,7 +588,9 @@ async function simulateExecuted(config: SimulationConfigExecuted): Promise<Simul
 
     const [proposalCreatedBlock, proposalExecutedBlock] = await Promise.all([
       publicClient.getBlock({ blockNumber: proposalCreatedEvent.blockNumber }),
-      tx.blockNumber ? publicClient.getBlock({ blockNumber: tx.blockNumber }) : Promise.resolve(undefined),
+      tx.blockNumber
+        ? publicClient.getBlock({ blockNumber: tx.blockNumber })
+        : Promise.resolve(undefined),
     ]);
 
     return {
@@ -662,7 +666,9 @@ async function simulateExecuted(config: SimulationConfigExecuted): Promise<Simul
     throw new Error(`Missing proposer in ProposalCreated event for proposal ${proposalIdBigInt}`);
   }
   if (!proposal.description) {
-    throw new Error(`Missing description in ProposalCreated event for proposal ${proposalIdBigInt}`);
+    throw new Error(
+      `Missing description in ProposalCreated event for proposal ${proposalIdBigInt}`,
+    );
   }
 
   const formattedProposal: ProposalEvent = {

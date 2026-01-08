@@ -11,4 +11,3 @@ export const config: SimulationConfigExecuted = {
   governorType: 'bravo',
   proposalId: 393,
 };
-

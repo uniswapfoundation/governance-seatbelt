@@ -1,11 +1,5 @@
 import { Badge } from '@/components/ui/badge';
-import {
-  ArrowRightIcon,
-  ExternalLinkIcon,
-  KeyIcon,
-  ShieldIcon,
-  UserIcon,
-} from 'lucide-react';
+import { ArrowRightIcon, ExternalLinkIcon, KeyIcon, ShieldIcon, UserIcon } from 'lucide-react';
 import type { Address } from 'viem';
 
 type PermissionsDiffItem =
@@ -154,7 +148,12 @@ function OwnershipTransferredCard({
         <span className="font-medium">Ownership Transferred</span>
       </div>
       <ContractHeader contractName={item.contractName} contractAddress={item.contractAddress} />
-      <AddressTransition from={item.previous} to={item.next} fromLabel="Previous Owner" toLabel="New Owner" />
+      <AddressTransition
+        from={item.previous}
+        to={item.next}
+        fromLabel="Previous Owner"
+        toLabel="New Owner"
+      />
     </div>
   );
 }
@@ -195,7 +194,10 @@ function RoleChangeCard({
 function TimelockAdminCard({
   item,
 }: {
-  item: Extract<PermissionsDiffItem, { kind: 'timelock_admin_changed' | 'timelock_pending_admin_changed' }>;
+  item: Extract<
+    PermissionsDiffItem,
+    { kind: 'timelock_admin_changed' | 'timelock_pending_admin_changed' }
+  >;
 }) {
   const isPending = item.kind === 'timelock_pending_admin_changed';
 
@@ -203,9 +205,7 @@ function TimelockAdminCard({
     <div className="border border-muted rounded-lg p-4 bg-card">
       <div className="flex items-center gap-2 mb-3">
         <KeyIcon className="h-4 w-4 text-yellow-600" />
-        <span className="font-medium">
-          {isPending ? 'Pending Admin Changed' : 'Admin Changed'}
-        </span>
+        <span className="font-medium">{isPending ? 'Pending Admin Changed' : 'Admin Changed'}</span>
         {isPending && (
           <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
             Pending
@@ -225,11 +225,7 @@ function TimelockAdminCard({
 
 export function PermissionsDiff({ items }: PermissionsDiffProps) {
   if (!items || items.length === 0) {
-    return (
-      <div className="text-muted-foreground text-sm p-4">
-        No permission changes detected.
-      </div>
-    );
+    return <div className="text-muted-foreground text-sm p-4">No permission changes detected.</div>;
   }
 
   // Group items by type
@@ -247,8 +243,7 @@ export function PermissionsDiff({ items }: PermissionsDiffProps) {
     ): item is Extract<
       PermissionsDiffItem,
       { kind: 'timelock_admin_changed' | 'timelock_pending_admin_changed' }
-    > =>
-      item.kind === 'timelock_admin_changed' || item.kind === 'timelock_pending_admin_changed',
+    > => item.kind === 'timelock_admin_changed' || item.kind === 'timelock_pending_admin_changed',
   );
 
   return (
@@ -289,7 +284,10 @@ export function PermissionsDiff({ items }: PermissionsDiffProps) {
           </h4>
           <div className="space-y-3">
             {roleChanges.map((item, index) => (
-              <RoleChangeCard key={`role-${item.contractAddress}-${item.account}-${index}`} item={item} />
+              <RoleChangeCard
+                key={`role-${item.contractAddress}-${item.account}-${index}`}
+                item={item}
+              />
             ))}
           </div>
         </div>

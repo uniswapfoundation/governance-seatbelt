@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { getAddress, keccak256, toBytes, zeroHash } from 'viem';
+import type { ProposalData, ProposalEvent, TenderlySimulation } from '../../types';
 import { checkPermissionDiff } from '../check-permission-diff';
 
 function eventTopic(signature: string): `0x${string}` {
@@ -46,11 +47,7 @@ describe('checkPermissionDiff', () => {
               inputs: [],
               raw: {
                 address: contractOwnable,
-                topics: [
-                  ownershipTopic0,
-                  topicAddress(prevOwner),
-                  topicAddress(nextOwner),
-                ],
+                topics: [ownershipTopic0, topicAddress(prevOwner), topicAddress(nextOwner)],
                 data: '0x',
               },
             },
@@ -94,36 +91,42 @@ describe('checkPermissionDiff', () => {
               },
               original: prevAdmin,
               dirty: nextAdmin,
-              raw: [{ address: contractTimelock, key: zeroHash, original: prevAdmin, dirty: nextAdmin }],
+              raw: [
+                { address: contractTimelock, key: zeroHash, original: prevAdmin, dirty: nextAdmin },
+              ],
             },
           ],
         },
       },
-    } as any;
+    } as unknown as TenderlySimulation;
 
-    const deps = { chainConfig: { chainId: 1 } } as any;
+    const deps = { chainConfig: { chainId: 1 } } as unknown as ProposalData;
 
-    const result = await checkPermissionDiff.checkProposal({} as any, sim, deps);
+    const result = await checkPermissionDiff.checkProposal(
+      {} as unknown as ProposalEvent,
+      sim,
+      deps,
+    );
 
     expect(result.errors).toHaveLength(0);
     expect(result.permissionsDiff?.length).toBe(3);
     expect(result.warnings.length).toBeGreaterThan(0);
 
-    const ownership = result.permissionsDiff?.find((d: any) => d.kind === 'ownership_transferred');
+    const ownership = result.permissionsDiff?.find((d) => d.kind === 'ownership_transferred');
     expect(ownership).toMatchObject({
       previous: getAddress(prevOwner),
       next: getAddress(nextOwner),
       via: 'event',
     });
 
-    const role = result.permissionsDiff?.find((d: any) => d.kind === 'role_granted');
+    const role = result.permissionsDiff?.find((d) => d.kind === 'role_granted');
     expect(role).toMatchObject({
       role: { name: 'PROPOSER_ROLE' },
       account: getAddress(roleAccount),
       sender: getAddress(roleSender),
     });
 
-    const admin = result.permissionsDiff?.find((d: any) => d.kind === 'timelock_admin_changed');
+    const admin = result.permissionsDiff?.find((d) => d.kind === 'timelock_admin_changed');
     expect(admin).toMatchObject({
       previous: getAddress(prevAdmin),
       next: getAddress(nextAdmin),
@@ -135,10 +138,14 @@ describe('checkPermissionDiff', () => {
     const sim = {
       contracts: [],
       transaction: { status: true, transaction_info: { logs: [], state_diff: [] } },
-    } as any;
-    const deps = { chainConfig: { chainId: 1 } } as any;
+    } as unknown as TenderlySimulation;
+    const deps = { chainConfig: { chainId: 1 } } as unknown as ProposalData;
 
-    const result = await checkPermissionDiff.checkProposal({} as any, sim, deps);
+    const result = await checkPermissionDiff.checkProposal(
+      {} as unknown as ProposalEvent,
+      sim,
+      deps,
+    );
 
     expect(result.errors).toHaveLength(0);
     expect(result.warnings).toHaveLength(0);

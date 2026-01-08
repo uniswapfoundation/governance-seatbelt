@@ -18,6 +18,7 @@ import type {
   CoverageData,
   GenerateReportsParams,
   GovernorType,
+  PermissionsDiffItem,
   ProposalEvent,
   SimulationBlock,
   SimulationBlocks,
@@ -26,7 +27,6 @@ import type {
   SimulationEvent,
   SimulationResult,
   SimulationStateChange,
-  PermissionsDiffItem,
   StructuredSimulationReport,
   WriteSimulationResultsJsonParams,
 } from '../types';
