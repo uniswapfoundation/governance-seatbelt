@@ -104,7 +104,7 @@ export function StructuredReport({ report }: StructuredReportProps) {
   return (
     <div className="w-full border border-muted rounded-md p-6">
       <div className="mb-6">
-        <h2 className="text-2xl font-bold">{report.title}</h2>
+        <h2 className="text-2xl font-bold break-words [overflow-wrap:anywhere]">{report.title}</h2>
         <div className="flex items-center mt-2">
           <span className="text-muted-foreground mr-2">Status:</span>
           <Badge
@@ -130,7 +130,9 @@ export function StructuredReport({ report }: StructuredReportProps) {
                 : 'Failed'}
           </Badge>
         </div>
-        <p className="text-muted-foreground mt-2">{report.summary}</p>
+        <p className="text-muted-foreground mt-2 break-words [overflow-wrap:anywhere]">
+          {report.summary}
+        </p>
       </div>
 
       <Tabs defaultValue="overview" className="w-full">

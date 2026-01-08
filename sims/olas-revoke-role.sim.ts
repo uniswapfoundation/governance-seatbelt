@@ -11,4 +11,3 @@ export const config: SimulationConfigExecuted = {
   governorType: 'oz',
   proposalId: 79620632494603959991831966498278269118176151937959839188081036473771718518508n,
 };
-

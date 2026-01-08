@@ -105,7 +105,7 @@ function ProposalSection({ isConnected }: { isConnected: boolean }) {
     <div className="w-full space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
         {/* Proposal Card - Right on desktop, Top on mobile */}
-        <div className="md:col-span-2 md:order-2 order-1 flex flex-col h-fit">
+        <div className="md:col-span-2 md:order-2 order-1 flex flex-col h-fit min-w-0">
           <ProposalCard
             proposal={proposalData}
             onPropose={handlePropose}
@@ -117,7 +117,7 @@ function ProposalSection({ isConnected }: { isConnected: boolean }) {
         </div>
 
         {/* Report Card - Left on desktop, Bottom on mobile */}
-        <div className="md:col-span-3 md:order-1 order-2 md:sticky md:top-4 h-fit">
+        <div className="md:col-span-3 md:order-1 order-2 md:sticky md:top-4 h-fit min-w-0">
           {report.structuredReport ? (
             <StructuredReport report={report.structuredReport} />
           ) : (
