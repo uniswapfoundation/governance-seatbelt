@@ -54,6 +54,32 @@ export interface StructuredSimulationReport {
   checks: SimulationCheck[];
   stateChanges: SimulationStateChange[];
   events: SimulationEvent[];
+  permissionsDiff?: Array<
+    | {
+        kind: 'ownership_transferred';
+        contractAddress: Address;
+        contractName?: string;
+        previous?: Address;
+        next: Address;
+        via: 'event' | 'state_diff' | 'event+state_diff';
+      }
+    | {
+        kind: 'role_granted' | 'role_revoked';
+        contractAddress: Address;
+        contractName?: string;
+        role: { id: `0x${string}`; name: string | null };
+        account: Address;
+        sender: Address;
+      }
+    | {
+        kind: 'timelock_admin_changed' | 'timelock_pending_admin_changed';
+        contractAddress: Address;
+        contractName?: string;
+        previous?: Address;
+        next: Address;
+        via: 'event' | 'state_diff' | 'event+state_diff';
+      }
+  >;
   calldata?: SimulationCalldata;
   metadata: {
     blockNumber: string;
@@ -97,10 +123,13 @@ export function useSimulationResults() {
         throw new Error(errorData.error || 'Failed to fetch simulation results');
       }
 
-      const data = (await response.json()) as SimulationResponse[];
+      const raw = (await response.json()) as unknown;
+
+      // API normalizes to an array, but keep this defensive in case of older responses
+      const data = (Array.isArray(raw) ? raw : [raw]) as SimulationResponse[];
 
       // Validate the data structure
-      if (!data || !Array.isArray(data) || data.length === 0) {
+      if (!data || data.length === 0) {
         throw new Error('Invalid simulation results: no results found');
       }
 

@@ -19,12 +19,20 @@ export async function GET() {
     // Read the simulation results file
     const results = readSimulationResults();
 
-    if (!results || !results.length) {
+    if (!results) {
+      return NextResponse.json({ error: 'No simulation results found' }, { status: 404 });
+    }
+
+    // Backwards/forwards compatibility:
+    // - some writers emit a single object
+    // - the frontend expects an array
+    const normalized = Array.isArray(results) ? results : [results];
+    if (normalized.length === 0) {
       return NextResponse.json({ error: 'No simulation results found' }, { status: 404 });
     }
 
     // Return the results directly
-    return NextResponse.json(results);
+    return NextResponse.json(normalized);
   } catch (error) {
     console.error('Error in simulation results API:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

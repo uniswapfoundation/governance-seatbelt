@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useMemo, useState } from 'react';
+import { PermissionsDiff } from './PermissionsDiff';
 
 // Create a new StateChanges component for reuse
 interface StateChangesProps {
@@ -216,6 +217,7 @@ export function StructuredReport({ report }: StructuredReportProps) {
                     key={`check-${check.title}-${index}`}
                     check={check}
                     stateChanges={report.stateChanges}
+                    permissionsDiff={report.permissionsDiff}
                   />
                 ))
               )}
@@ -236,11 +238,19 @@ export function StructuredReport({ report }: StructuredReportProps) {
   );
 }
 
+// Import PermissionsDiffItem type for the component props
+type PermissionsDiffItem = NonNullable<StructuredSimulationReport['permissionsDiff']>[number];
+
 // Helper components
 function ExpandableCheckItem({
   check,
   stateChanges,
-}: { check: SimulationCheck; stateChanges?: SimulationStateChange[] }) {
+  permissionsDiff,
+}: {
+  check: SimulationCheck;
+  stateChanges?: SimulationStateChange[];
+  permissionsDiff?: PermissionsDiffItem[];
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const getStatusIcon = () => {
@@ -287,6 +297,9 @@ function ExpandableCheckItem({
 
   // Check if this is a state changes check
   const isStateChangesCheck = check.title.toLowerCase().includes('state changes');
+
+  // Check if this is a permission changes check
+  const isPermissionChangesCheck = check.title.toLowerCase().includes('permission changes');
 
   // Format the details content as React components
   const FormattedDetails = useMemo(() => {
@@ -595,11 +608,22 @@ function ExpandableCheckItem({
             ))}
         </div>
       </button>
-      {isExpanded && (check.details || check.skipReason) && (
+      {isExpanded && (check.details || check.skipReason || isPermissionChangesCheck) && (
         <div className="p-5 pt-0 pl-11 text-sm border-t border-muted bg-muted/10">
           {check.status === 'skipped' && check.skipReason ? (
             <div className="mt-4">
               <p className="text-muted-foreground italic">{check.skipReason}</p>
+            </div>
+          ) : isPermissionChangesCheck ? (
+            <div className="mt-4">
+              {permissionsDiff && permissionsDiff.length > 0 ? (
+                <PermissionsDiff items={permissionsDiff} />
+              ) : (
+                <div className="flex items-center justify-center p-6 text-muted-foreground">
+                  <InfoIcon className="h-4 w-4 mr-2" />
+                  <span>No permission changes detected</span>
+                </div>
+              )}
             </div>
           ) : isStateChangesCheck ? (
             <div className="mt-4">
