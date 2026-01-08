@@ -196,7 +196,9 @@ export function StructuredReport({ report }: StructuredReportProps) {
                 </div>
                 <div className="bg-muted p-3 rounded-md">
                   <div className="text-sm text-muted-foreground">Proposal ID</div>
-                  <div className="font-medium">{report.metadata.proposalId}</div>
+                  <div className="font-medium font-mono text-xs break-all">
+                    {report.metadata.proposalId}
+                  </div>
                 </div>
                 <div className="bg-muted p-3 rounded-md">
                   <div className="text-sm text-muted-foreground">Network</div>
