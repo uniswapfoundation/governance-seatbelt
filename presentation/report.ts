@@ -26,6 +26,7 @@ import type {
   SimulationEvent,
   SimulationResult,
   SimulationStateChange,
+  PermissionsDiffItem,
   StructuredSimulationReport,
   WriteSimulationResultsJsonParams,
 } from '../types';
@@ -272,6 +273,30 @@ function extractEvents(checks: AllCheckResults): SimulationEvent[] {
 }
 
 /**
+ * Extract permissions diff data from check results
+ */
+function extractPermissionsDiff(checks: AllCheckResults): PermissionsDiffItem[] {
+  const items: PermissionsDiffItem[] = [];
+
+  for (const checkId in checks) {
+    const { result } = checks[checkId];
+    if (result.permissionsDiff?.length) items.push(...result.permissionsDiff);
+  }
+
+  // Deduplicate (stable ordering) in case multiple sources emit the same item
+  const seen = new Set<string>();
+  const deduped: PermissionsDiffItem[] = [];
+  for (const item of items) {
+    const key = JSON.stringify(item, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(item);
+  }
+
+  return deduped;
+}
+
+/**
  * Extract calldata from check results
  */
 function extractCalldata(
@@ -376,6 +401,7 @@ function generateStructuredReport(
     checks: formattedChecks,
     stateChanges: extractStateChanges(checks),
     events: extractEvents(checks),
+    permissionsDiff: extractPermissionsDiff(checks),
     calldata: extractCalldata(checks, proposal),
     metadata: {
       proposalId: formatProposalId(governorType, proposal.id!),
