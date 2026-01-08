@@ -19,12 +19,14 @@ export async function GET() {
     // Read the simulation results file
     const results = readSimulationResults();
 
-    if (!results || !results.length) {
+    const normalized = Array.isArray(results) ? results : results ? [results] : null;
+
+    if (!normalized || normalized.length === 0) {
       return NextResponse.json({ error: 'No simulation results found' }, { status: 404 });
     }
 
     // Return the results directly
-    return NextResponse.json(results);
+    return NextResponse.json(normalized);
   } catch (error) {
     console.error('Error in simulation results API:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
