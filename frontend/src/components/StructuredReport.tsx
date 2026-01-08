@@ -1,3 +1,7 @@
+import {
+  TreasuryMovementCheck,
+  parseTreasuryMovementDetails,
+} from '@/components/TreasuryMovementCheck';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type {
@@ -287,6 +291,15 @@ function ExpandableCheckItem({
 
   // Check if this is a state changes check
   const isStateChangesCheck = check.title.toLowerCase().includes('state changes');
+
+  // Check if this is a treasury movement check
+  const isTreasuryMovementCheck = check.title.toLowerCase().includes('treasury movement');
+
+  // Parse treasury movement data if applicable
+  const treasuryData = useMemo(() => {
+    if (!isTreasuryMovementCheck || !check.details) return null;
+    return parseTreasuryMovementDetails(check.details);
+  }, [isTreasuryMovementCheck, check.details]);
 
   // Format the details content as React components
   const FormattedDetails = useMemo(() => {
@@ -611,6 +624,17 @@ function ExpandableCheckItem({
                   <span>No state changes available</span>
                 </div>
               )}
+            </div>
+          ) : isTreasuryMovementCheck && treasuryData ? (
+            <div className="mt-4">
+              <TreasuryMovementCheck
+                warnings={treasuryData.warnings}
+                treasuryAddresses={treasuryData.treasuryAddresses}
+                transfers={treasuryData.transfers}
+                totalOutgoing={treasuryData.totalOutgoing}
+                transferCount={treasuryData.transferCount}
+                thresholds={treasuryData.thresholds}
+              />
             </div>
           ) : (
             <div className="mt-4 whitespace-pre-wrap">{FormattedDetails}</div>
