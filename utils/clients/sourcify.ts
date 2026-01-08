@@ -73,7 +73,11 @@ export async function getSourcifyVerification(
     return file;
   }
 
-  const res = await fetch(`${SOURCIFY_BASE_URL}/contract/${chainId}/${normalized}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  const res = await fetch(`${SOURCIFY_BASE_URL}/contract/${chainId}/${normalized}`, {
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timeout));
   let match: 'exact_match' | 'partial_match' | null = null;
 
   try {
