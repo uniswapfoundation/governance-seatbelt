@@ -15,6 +15,10 @@ export interface SimulationCheck {
   status: 'passed' | 'warning' | 'failed' | 'skipped';
   details?: string;
   skipReason?: string;
+  info?: string[];
+  warnings?: string[];
+  errors?: string[];
+  data?: unknown;
 }
 
 export interface SimulationStateChange {

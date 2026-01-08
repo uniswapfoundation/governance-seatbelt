@@ -202,46 +202,20 @@ export async function runChecksForChain(
       : undefined;
 
   // Chain-agnostic checks
-  results.checkStateChanges = {
-    name: ALL_CHECKS.checkStateChanges.name,
-    result: await ALL_CHECKS.checkStateChanges.checkProposal(
-      proposal,
-      sim,
-      depsWithConfig,
-      l2Simulations,
-    ),
-  };
-  results.checkLogs = {
-    name: ALL_CHECKS.checkLogs.name,
-    result: await ALL_CHECKS.checkLogs.checkProposal(proposal, sim, depsWithConfig, l2Simulations),
-  };
-  results.checkEthBalanceChanges = {
-    name: ALL_CHECKS.checkEthBalanceChanges.name,
-    result: await ALL_CHECKS.checkEthBalanceChanges.checkProposal(
-      proposal,
-      sim,
-      depsWithConfig,
-      l2Simulations,
-    ),
-  };
-  results.checkTreasuryMovement = {
-    name: ALL_CHECKS.checkTreasuryMovement.name,
-    result: await ALL_CHECKS.checkTreasuryMovement.checkProposal(
-      proposal,
-      sim,
-      depsWithConfig,
-      l2Simulations,
-    ),
-  };
-  results.checkDecodeCalldata = {
-    name: ALL_CHECKS.checkDecodeCalldata.name,
-    result: await ALL_CHECKS.checkDecodeCalldata.checkProposal(
-      proposal,
-      sim,
-      depsWithConfig,
-      l2Simulations,
-    ),
-  };
+  const CHAIN_AGNOSTIC_CHECK_IDS = [
+    'checkStateChanges',
+    'checkLogs',
+    'checkEthBalanceChanges',
+    'checkTreasuryMovement',
+    'checkDecodeCalldata',
+  ] as const;
+
+  for (const checkId of CHAIN_AGNOSTIC_CHECK_IDS) {
+    results[checkId] = {
+      name: ALL_CHECKS[checkId].name,
+      result: await ALL_CHECKS[checkId].checkProposal(proposal, sim, depsWithConfig, l2Simulations),
+    };
+  }
 
   // Chain-specific checks
   results.checkTargetsVerifiedOnBlockExplorer = {

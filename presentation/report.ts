@@ -364,6 +364,9 @@ function generateStructuredReport(
       skipReason,
       details,
       info,
+      warnings,
+      errors,
+      data: result.data,
     };
   });
 

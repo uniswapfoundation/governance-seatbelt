@@ -63,6 +63,15 @@ type TenderlyAssetChange = NonNullable<
   NonNullable<TenderlySimulation['transaction']['transaction_info']['asset_changes']>[number]
 >;
 
+function safeGetAddress(value: unknown): Address | null {
+  if (typeof value !== 'string') return null;
+  try {
+    return getAddress(value) as Address;
+  } catch {
+    return null;
+  }
+}
+
 export function getOutgoingTreasuryAssetChanges({
   sim,
   treasuryAddresses,
@@ -76,8 +85,9 @@ export function getOutgoingTreasuryAssetChanges({
   const treasury = new Set(treasuryAddresses.map((a) => getAddress(a)));
 
   return assetChanges.filter((change): change is TenderlyAssetChange => {
-    const from = getAddress(change.from);
-    const to = getAddress(change.to);
+    const from = safeGetAddress((change as { from?: unknown }).from);
+    const to = safeGetAddress((change as { to?: unknown }).to);
+    if (!from || !to) return false;
 
     const isFromTreasury = treasury.has(from);
     const isToTreasury = treasury.has(to);
@@ -85,7 +95,8 @@ export function getOutgoingTreasuryAssetChanges({
     if (!isFromTreasury) return false;
     if (isToTreasury) return false;
 
-    const standard = change.token_info.standard;
-    return standard === 'NativeCurrency' || standard === 'ERC20';
+    // Include all outgoing asset changes; some standards may not have pricing, which is
+    // handled by the check layer (so we can warn about under-reporting).
+    return true;
   });
 }

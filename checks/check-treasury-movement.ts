@@ -9,6 +9,32 @@ type TenderlyAssetChange = NonNullable<
   NonNullable<TenderlySimulation['transaction']['transaction_info']['asset_changes']>[number]
 >;
 
+type TreasuryMovementCheckDataV1 = {
+  type: 'treasuryMovement/v1';
+  blockExplorerBaseUrl: string;
+  treasuryAddresses: string[];
+  thresholds: {
+    totalUsdWarning: number;
+    recipientUsdWarning: number;
+    topRecipients: number;
+  };
+  totalOutgoingUsd: number;
+  transferCount: number;
+  topRecipients: Array<{
+    recipient: string;
+    totalUsd: number;
+    tokens: Array<{
+      standard: string;
+      symbol: string;
+      decimals: number;
+      amount: number;
+      usd: number;
+      usdPriced: boolean;
+    }>;
+  }>;
+  unpricedTransferCount: number;
+};
+
 function formatUsd(amount: number) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -17,8 +43,11 @@ function formatUsd(amount: number) {
   }).format(amount);
 }
 
-function sumUsd(changes: TenderlyAssetChange[]) {
-  return changes.reduce((sum, c) => sum + (Number.parseFloat(c.dollar_value) || 0), 0);
+function safeParseFloat(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function tokenKey(change: TenderlyAssetChange) {
@@ -58,7 +87,23 @@ export const checkTreasuryMovement: ProposalCheck = {
       };
     }
 
-    const totalUsd = sumUsd(outgoing);
+    let unpricedTransferCount = 0;
+    const totalUsd = outgoing.reduce((sum, c) => {
+      const usd = safeParseFloat((c as { dollar_value?: unknown }).dollar_value);
+      if (usd == null) {
+        unpricedTransferCount += 1;
+        return sum;
+      }
+      return sum + usd;
+    }, 0);
+
+    if (unpricedTransferCount > 0) {
+      warnings.push(
+        `Some outgoing transfers were missing USD pricing; totals may be under-reported (${unpricedTransferCount} transfer${
+          unpricedTransferCount === 1 ? '' : 's'
+        })`,
+      );
+    }
 
     info.push('Treasury addresses considered:');
     for (const addr of treasuryAddresses) info.push(`• \`${getAddress(addr)}\``);
@@ -90,6 +135,7 @@ export const checkTreasuryMovement: ProposalCheck = {
       amount: number;
       usd: number;
       standard: string;
+      usdPriced: boolean;
     };
 
     type RecipientSummary = {
@@ -115,7 +161,8 @@ export const checkTreasuryMovement: ProposalCheck = {
       }
 
       entry.changes.push(change);
-      entry.totalUsd += Number.parseFloat(change.dollar_value) || 0;
+      const usd = safeParseFloat((change as { dollar_value?: unknown }).dollar_value);
+      if (usd != null) entry.totalUsd += usd;
 
       const key = tokenKey(change);
       const label =
@@ -126,10 +173,17 @@ export const checkTreasuryMovement: ProposalCheck = {
         amount: 0,
         usd: 0,
         standard: change.token_info.standard,
+        usdPriced: true,
       };
 
-      tokenEntry.amount += Number.parseFloat(change.amount) || 0;
-      tokenEntry.usd += Number.parseFloat(change.dollar_value) || 0;
+      const amount = safeParseFloat((change as { amount?: unknown }).amount);
+      if (amount != null) tokenEntry.amount += amount;
+
+      if (usd == null) {
+        tokenEntry.usdPriced = false;
+      } else {
+        tokenEntry.usd += usd;
+      }
       entry.byToken.set(key, tokenEntry);
     }
 
@@ -161,6 +215,30 @@ export const checkTreasuryMovement: ProposalCheck = {
       info.push(`• \`${entry.recipient}\`: ${formatUsd(entry.totalUsd)} (${tokenParts})`);
     }
 
-    return { info, warnings, errors };
+    const data: TreasuryMovementCheckDataV1 = {
+      type: 'treasuryMovement/v1',
+      blockExplorerBaseUrl: deps.chainConfig.blockExplorer.baseUrl,
+      treasuryAddresses: treasuryAddresses.map((a) => getAddress(a)),
+      thresholds,
+      totalOutgoingUsd: totalUsd,
+      transferCount: outgoing.length,
+      topRecipients: recipients.slice(0, thresholds.topRecipients).map((entry) => ({
+        recipient: entry.recipient,
+        totalUsd: entry.totalUsd,
+        tokens: [...entry.byToken.values()]
+          .sort((a, b) => b.usd - a.usd)
+          .map((t) => ({
+            standard: t.standard,
+            symbol: t.label,
+            decimals: t.decimals,
+            amount: t.amount,
+            usd: t.usd,
+            usdPriced: t.usdPriced,
+          })),
+      })),
+      unpricedTransferCount,
+    };
+
+    return { info, warnings, errors, data };
   },
 };

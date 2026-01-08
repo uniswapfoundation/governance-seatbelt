@@ -1,6 +1,8 @@
 import {
   TreasuryMovementCheck,
+  isTreasuryMovementCheckDataV1,
   parseTreasuryMovementDetails,
+  treasuryMovementDataToViewModel,
 } from '@/components/TreasuryMovementCheck';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -297,9 +299,15 @@ function ExpandableCheckItem({
 
   // Parse treasury movement data if applicable
   const treasuryData = useMemo(() => {
-    if (!isTreasuryMovementCheck || !check.details) return null;
+    if (!isTreasuryMovementCheck) return null;
+
+    if (isTreasuryMovementCheckDataV1(check.data)) {
+      return treasuryMovementDataToViewModel(check.data, check.warnings ?? []);
+    }
+
+    if (!check.details) return null;
     return parseTreasuryMovementDetails(check.details);
-  }, [isTreasuryMovementCheck, check.details]);
+  }, [isTreasuryMovementCheck, check.data, check.details, check.warnings]);
 
   // Format the details content as React components
   const FormattedDetails = useMemo(() => {
@@ -627,14 +635,7 @@ function ExpandableCheckItem({
             </div>
           ) : isTreasuryMovementCheck && treasuryData ? (
             <div className="mt-4">
-              <TreasuryMovementCheck
-                warnings={treasuryData.warnings}
-                treasuryAddresses={treasuryData.treasuryAddresses}
-                transfers={treasuryData.transfers}
-                totalOutgoing={treasuryData.totalOutgoing}
-                transferCount={treasuryData.transferCount}
-                thresholds={treasuryData.thresholds}
-              />
+              <TreasuryMovementCheck {...treasuryData} />
             </div>
           ) : (
             <div className="mt-4 whitespace-pre-wrap">{FormattedDetails}</div>

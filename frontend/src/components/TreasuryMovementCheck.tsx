@@ -1,5 +1,70 @@
 import { ExternalLinkIcon } from 'lucide-react';
+import Image from 'next/image';
 import { useState } from 'react';
+
+export type TreasuryMovementCheckDataV1 = {
+  type: 'treasuryMovement/v1';
+  blockExplorerBaseUrl: string;
+  treasuryAddresses: string[];
+  thresholds: {
+    totalUsdWarning: number;
+    recipientUsdWarning: number;
+    topRecipients: number;
+  };
+  totalOutgoingUsd: number;
+  transferCount: number;
+  topRecipients: Array<{
+    recipient: string;
+    totalUsd: number;
+    tokens: Array<{
+      standard: string;
+      symbol: string;
+      decimals: number;
+      amount: number;
+      usd: number;
+      usdPriced: boolean;
+    }>;
+  }>;
+  unpricedTransferCount?: number;
+};
+
+export function isTreasuryMovementCheckDataV1(data: unknown): data is TreasuryMovementCheckDataV1 {
+  if (!data || typeof data !== 'object') return false;
+  const d = data as Partial<TreasuryMovementCheckDataV1>;
+  return (
+    d.type === 'treasuryMovement/v1' &&
+    typeof d.blockExplorerBaseUrl === 'string' &&
+    Array.isArray(d.treasuryAddresses) &&
+    typeof d.totalOutgoingUsd === 'number' &&
+    typeof d.transferCount === 'number' &&
+    Array.isArray(d.topRecipients)
+  );
+}
+
+type TreasuryToken = {
+  symbol: string;
+  amount: number;
+  decimals: number;
+};
+
+type TreasuryRecipientRow = {
+  recipient: string;
+  totalUsd: number;
+  tokens: TreasuryToken[];
+};
+
+export type TreasuryMovementCheckViewModel = {
+  warnings: string[];
+  treasuryAddresses: string[];
+  transfers: TreasuryRecipientRow[];
+  totalOutgoingUsd: number;
+  transferCount: number;
+  thresholds: {
+    totalUsdWarning: number;
+    recipientUsdWarning: number;
+  };
+  blockExplorerBaseUrl?: string;
+};
 
 // Token address mapping for logo lookups (checksummed addresses)
 const TOKEN_ADDRESSES: Record<string, string> = {
@@ -30,6 +95,10 @@ const TOKEN_ADDRESSES: Record<string, string> = {
   rETH: '0xae78736Cd615f374D3085123A210448E74Fc6393',
 };
 
+function normalizeBaseUrl(baseUrl: string) {
+  return baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+}
+
 // Get token logo URL from Trust Wallet assets or fallback
 function getTokenLogoUrl(symbol: string): string | null {
   const address = TOKEN_ADDRESSES[symbol.toUpperCase()];
@@ -49,7 +118,6 @@ function TokenLogo({ symbol }: { symbol: string }) {
   const logoUrl = getTokenLogoUrl(symbol);
 
   if (!logoUrl || hasError) {
-    // Fallback: show first letter in a circle
     return (
       <div className="w-4 h-4 rounded-full bg-muted flex items-center justify-center text-[9px] font-medium text-muted-foreground shrink-0">
         {symbol.charAt(0).toUpperCase()}
@@ -58,7 +126,7 @@ function TokenLogo({ symbol }: { symbol: string }) {
   }
 
   return (
-    <img
+    <Image
       src={logoUrl}
       alt={symbol}
       width={16}
@@ -69,117 +137,65 @@ function TokenLogo({ symbol }: { symbol: string }) {
   );
 }
 
-// Parse tokens from breakdown string like "UNI: 40,000,000 ($542,000,008), ETH: 1.5 ($3,000)"
-interface ParsedToken {
-  symbol: string;
-  amount: string;
-  usdValue: string;
-}
-
-function parseTokenBreakdown(breakdown: string): ParsedToken[] {
-  const tokens: ParsedToken[] = [];
-  // Match patterns like "UNI: 40,000,000 ($542,000,008)" or "uni: 100,000,000 ($542,000,008"
-  // The closing paren may be cut off, so make it optional
-  const tokenPattern = /([A-Za-z0-9]+):\s*([\d,.]+)\s*\(\$?([\d,]+(?:\.\d+)?)\)?/gi;
-  const matches = breakdown.matchAll(tokenPattern);
-
-  for (const match of matches) {
-    tokens.push({
-      symbol: match[1].toUpperCase(), // Normalize to uppercase for logo lookup
-      amount: match[2],
-      usdValue: `$${match[3]}`,
-    });
-  }
-
-  return tokens;
-}
-
-interface TreasuryTransfer {
-  recipient: string;
-  tokenBreakdown: string;
-  usdValue: string;
-}
-
-interface TreasuryMovementCheckProps {
-  warnings: string[];
-  treasuryAddresses: string[];
-  transfers: TreasuryTransfer[];
-  totalOutgoing: string;
-  transferCount: number;
-  thresholds: {
-    total: string;
-    perRecipient: string;
-  };
-}
-
-// Format address for display (truncate middle)
 function formatAddress(address: string): string {
   if (address.length <= 12) return address;
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-// Format USD value for cleaner display
-function formatUSD(value: string): string {
-  const num = Number.parseFloat(value.replace(/[$,]/g, ''));
-  if (Number.isNaN(num)) return value;
-
-  if (num >= 1_000_000) {
-    return `$${(num / 1_000_000).toFixed(1)}M`;
-  }
-  if (num >= 1_000) {
-    return `$${(num / 1_000).toFixed(0)}K`;
-  }
-  return `$${num.toFixed(0)}`;
+function formatUsdCompact(value: number): string {
+  if (!Number.isFinite(value)) return '$0';
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
+  return `$${value.toFixed(0)}`;
 }
 
-// Format large numbers compactly (e.g., 40,000,000 -> 40M)
-function formatCompactNumber(value: string): string {
-  const num = Number.parseFloat(value.replace(/,/g, ''));
-  if (Number.isNaN(num)) return value;
-
-  if (num >= 1_000_000) {
-    return `${(num / 1_000_000).toFixed(1)}M`;
-  }
-  if (num >= 1_000) {
-    return `${(num / 1_000).toFixed(1)}K`;
-  }
-  return num.toFixed(2);
+function formatCompactNumberWithUnits(value: number): string {
+  if (!Number.isFinite(value)) return '0';
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return value.toFixed(2);
 }
 
 export function TreasuryMovementCheck({
   warnings,
   treasuryAddresses,
   transfers,
-  totalOutgoing,
+  totalOutgoingUsd,
   transferCount,
+  blockExplorerBaseUrl,
   thresholds,
-}: TreasuryMovementCheckProps) {
+}: TreasuryMovementCheckViewModel) {
   const hasWarnings = warnings.length > 0;
+  const explorerBaseUrl = normalizeBaseUrl(blockExplorerBaseUrl ?? 'https://etherscan.io');
+  const warningKeyCounts = new Map<string, number>();
 
   return (
     <div className="space-y-5">
-      {/* Warnings */}
       {hasWarnings && (
         <div className="space-y-2">
-          {warnings.map((warning) => (
-            <div
-              key={warning}
-              className="px-3 py-2 rounded-md bg-amber-500/10 border-l-2 border-amber-500 text-sm text-amber-700 dark:text-amber-300"
-            >
-              {warning}
-            </div>
-          ))}
+          {warnings.map((warning) => {
+            const count = warningKeyCounts.get(warning) ?? 0;
+            warningKeyCounts.set(warning, count + 1);
+
+            return (
+              <div
+                key={`${warning}-${count}`}
+                className="px-3 py-2 rounded-md bg-amber-500/10 border-l-2 border-amber-500 text-sm text-amber-700 dark:text-amber-300"
+              >
+                {warning}
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* Summary Stats */}
       <div className="flex gap-6">
         <div>
           <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-0.5">
             Total Outgoing
           </p>
           <p className="text-xl font-semibold tabular-nums tracking-tight">
-            {formatUSD(totalOutgoing)}
+            {formatUsdCompact(totalOutgoingUsd)}
           </p>
         </div>
         <div>
@@ -190,7 +206,6 @@ export function TreasuryMovementCheck({
         </div>
       </div>
 
-      {/* Recipients Table */}
       {transfers.length > 0 && (
         <div>
           <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2">
@@ -212,58 +227,49 @@ export function TreasuryMovementCheck({
                 </tr>
               </thead>
               <tbody>
-                {transfers.map((transfer, idx) => {
-                  const tokens = parseTokenBreakdown(transfer.tokenBreakdown);
-                  return (
-                    <tr
-                      key={`${transfer.recipient}-${idx}`}
-                      className="border-b border-border/40 last:border-0 hover:bg-muted/20 transition-colors"
-                    >
-                      <td className="py-2.5 px-3">
-                        <a
-                          href={`https://etherscan.io/address/${transfer.recipient}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 font-mono text-xs hover:text-primary transition-colors group"
-                        >
-                          {formatAddress(transfer.recipient)}
-                          <ExternalLinkIcon className="h-3 w-3 opacity-0 group-hover:opacity-70 transition-opacity" />
-                        </a>
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-medium tabular-nums">
-                        {formatUSD(transfer.usdValue)}
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <div className="flex flex-wrap items-center justify-end gap-2">
-                          {tokens.map((token, tokenIdx) => (
-                            <div
-                              key={`${token.symbol}-${tokenIdx}`}
-                              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted/50 text-xs"
-                            >
-                              <TokenLogo symbol={token.symbol} />
-                              <span className="font-medium">{token.symbol}</span>
-                              <span className="text-muted-foreground tabular-nums">
-                                {formatCompactNumber(token.amount)}
-                              </span>
-                            </div>
-                          ))}
-                          {tokens.length === 0 && (
-                            <span className="text-muted-foreground text-xs">
-                              {transfer.tokenBreakdown}
+                {transfers.map((transfer, idx) => (
+                  <tr
+                    key={`${transfer.recipient}-${idx}`}
+                    className="border-b border-border/40 last:border-0 hover:bg-muted/20 transition-colors"
+                  >
+                    <td className="py-2.5 px-3">
+                      <a
+                        href={`${explorerBaseUrl}/address/${transfer.recipient}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 font-mono text-xs hover:text-primary transition-colors group"
+                      >
+                        {formatAddress(transfer.recipient)}
+                        <ExternalLinkIcon className="h-3 w-3 opacity-0 group-hover:opacity-70 transition-opacity" />
+                      </a>
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-medium tabular-nums">
+                      {formatUsdCompact(transfer.totalUsd)}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        {transfer.tokens.map((token, tokenIdx) => (
+                          <div
+                            key={`${token.symbol}-${tokenIdx}`}
+                            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted/50 text-xs"
+                          >
+                            <TokenLogo symbol={token.symbol} />
+                            <span className="font-medium">{token.symbol}</span>
+                            <span className="text-muted-foreground tabular-nums">
+                              {formatCompactNumberWithUnits(token.amount)}
                             </span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* Treasury Sources & Thresholds */}
       <div className="flex flex-wrap items-start justify-between gap-4 pt-3 border-t border-border/40">
         <div>
           <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5">
@@ -273,7 +279,7 @@ export function TreasuryMovementCheck({
             {treasuryAddresses.map((address) => (
               <a
                 key={address}
-                href={`https://etherscan.io/address/${address}`}
+                href={`${explorerBaseUrl}/address/${address}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 px-2 py-1 rounded bg-muted/60 hover:bg-muted transition-colors text-[11px] font-mono"
@@ -289,7 +295,8 @@ export function TreasuryMovementCheck({
             Thresholds
           </p>
           <p className="text-xs text-muted-foreground">
-            {formatUSD(thresholds.total)} total / {formatUSD(thresholds.perRecipient)} per recipient
+            {formatUsdCompact(thresholds.totalUsdWarning)} total /{' '}
+            {formatUsdCompact(thresholds.recipientUsdWarning)} per recipient
           </p>
         </div>
       </div>
@@ -297,47 +304,36 @@ export function TreasuryMovementCheck({
   );
 }
 
-// Parser function to extract treasury movement data from check details
-export function parseTreasuryMovementDetails(details: string): {
-  warnings: string[];
-  treasuryAddresses: string[];
-  transfers: TreasuryTransfer[];
-  totalOutgoing: string;
-  transferCount: number;
-  thresholds: { total: string; perRecipient: string };
-} | null {
+// Legacy parser: extracts treasury movement data from check details text for backwards compatibility.
+export function parseTreasuryMovementDetails(
+  details: string,
+): TreasuryMovementCheckViewModel | null {
   if (!details) return null;
 
-  const result = {
-    warnings: [] as string[],
-    treasuryAddresses: [] as string[],
-    transfers: [] as TreasuryTransfer[],
-    totalOutgoing: '$0',
+  const result: TreasuryMovementCheckViewModel = {
+    warnings: [],
+    treasuryAddresses: [],
+    transfers: [],
+    totalOutgoingUsd: 0,
     transferCount: 0,
-    thresholds: { total: '$1,000,000', perRecipient: '$250,000' },
+    thresholds: { totalUsdWarning: 1_000_000, recipientUsdWarning: 250_000 },
   };
 
-  // Split into lines for easier parsing
   const lines = details.split('\n');
 
-  // Extract warnings (lines that mention threshold exceeded or warning patterns)
   for (const line of lines) {
     if (
       line.includes('exceeded threshold') ||
       (line.includes('received') && line.includes('from treasury'))
     ) {
-      // Clean up the warning text - remove markdown backticks
       const cleanedWarning = line
         .replace(/`/g, '')
         .replace(/^[-•]\s*/, '')
         .trim();
-      if (cleanedWarning) {
-        result.warnings.push(cleanedWarning);
-      }
+      if (cleanedWarning) result.warnings.push(cleanedWarning);
     }
   }
 
-  // Extract treasury addresses from "Treasury addresses considered:" section
   let inTreasurySection = false;
   for (const line of lines) {
     if (line.includes('Treasury addresses considered:')) {
@@ -346,40 +342,33 @@ export function parseTreasuryMovementDetails(details: string): {
     }
     if (inTreasurySection) {
       if (line.includes('Outgoing') || line.includes('Warning') || line.trim() === '') {
-        if (line.includes('Outgoing') || line.includes('Warning')) {
-          inTreasurySection = false;
-        }
+        if (line.includes('Outgoing') || line.includes('Warning')) inTreasurySection = false;
         continue;
       }
       const addrMatch = line.match(/`?(0x[a-fA-F0-9]{40})`?/);
-      if (addrMatch) {
-        result.treasuryAddresses.push(addrMatch[1]);
-      }
+      if (addrMatch) result.treasuryAddresses.push(addrMatch[1]);
     }
   }
 
-  // Extract total outgoing and transfer count
-  // Format: "Outgoing transfers (excluding treasury-to-treasury): $542,000,008 across 1 transfers"
   const outgoingMatch = details.match(
     /Outgoing transfers[^:]*:\s*\$?([\d,]+(?:\.\d+)?)\s*across\s*(\d+)\s*transfers?/i,
   );
   if (outgoingMatch) {
-    result.totalOutgoing = `$${outgoingMatch[1]}`;
+    result.totalOutgoingUsd = Number.parseFloat(outgoingMatch[1].replace(/,/g, '')) || 0;
     result.transferCount = Number.parseInt(outgoingMatch[2], 10);
   }
 
-  // Extract thresholds
-  // Format: "Warning thresholds: $1,000,000 total, $250,000 per recipient"
   const thresholdMatch = details.match(
     /thresholds?:\s*\$?([\d,]+(?:\.\d+)?)\s*total,\s*\$?([\d,]+(?:\.\d+)?)\s*per/i,
   );
   if (thresholdMatch) {
-    result.thresholds.total = `$${thresholdMatch[1]}`;
-    result.thresholds.perRecipient = `$${thresholdMatch[2]}`;
+    result.thresholds.totalUsdWarning =
+      Number.parseFloat(thresholdMatch[1].replace(/,/g, '')) || result.thresholds.totalUsdWarning;
+    result.thresholds.recipientUsdWarning =
+      Number.parseFloat(thresholdMatch[2].replace(/,/g, '')) ||
+      result.thresholds.recipientUsdWarning;
   }
 
-  // Extract top recipients
-  // Format: "• `0x...`: $542,000,008 (UNI: 40,000,000 ($542,000,008))"
   let inRecipientsSection = false;
   for (const line of lines) {
     if (line.includes('Top recipients by USD')) {
@@ -387,19 +376,53 @@ export function parseTreasuryMovementDetails(details: string): {
       continue;
     }
     if (inRecipientsSection && line.trim()) {
-      // Match: `address`: $amount (token breakdown)
       const recipientMatch = line.match(
         /[•-]\s*`?(0x[a-fA-F0-9]{40})`?:\s*\$?([\d,]+(?:\.\d+)?)\s*\(([^)]+)\)/,
       );
-      if (recipientMatch) {
-        result.transfers.push({
-          recipient: recipientMatch[1],
-          usdValue: `$${recipientMatch[2]}`,
-          tokenBreakdown: recipientMatch[3],
-        });
+      if (!recipientMatch) continue;
+
+      const tokenBreakdown = recipientMatch[3];
+      const tokens: TreasuryToken[] = [];
+      const tokenPattern = /([^:]+):\s*([\d,.]+)\s*\(\$?([\d,]+(?:\.\d+)?)\)?/g;
+      for (const match of tokenBreakdown.matchAll(tokenPattern)) {
+        const symbol = match[1].trim().toUpperCase();
+        const amount = Number.parseFloat(match[2].replace(/,/g, '')) || 0;
+        tokens.push({ symbol, amount, decimals: 4 });
       }
+
+      result.transfers.push({
+        recipient: recipientMatch[1],
+        totalUsd: Number.parseFloat(recipientMatch[2].replace(/,/g, '')) || 0,
+        tokens,
+      });
     }
   }
 
   return result;
+}
+
+export function treasuryMovementDataToViewModel(
+  data: TreasuryMovementCheckDataV1,
+  warnings: string[],
+): TreasuryMovementCheckViewModel {
+  return {
+    warnings,
+    treasuryAddresses: data.treasuryAddresses,
+    transfers: data.topRecipients.map((r) => ({
+      recipient: r.recipient,
+      totalUsd: r.totalUsd,
+      tokens: r.tokens.map((t) => ({
+        symbol: t.symbol.toUpperCase(),
+        amount: t.amount,
+        decimals: t.decimals,
+      })),
+    })),
+    totalOutgoingUsd: data.totalOutgoingUsd,
+    transferCount: data.transferCount,
+    thresholds: {
+      totalUsdWarning: data.thresholds.totalUsdWarning,
+      recipientUsdWarning: data.thresholds.recipientUsdWarning,
+    },
+    blockExplorerBaseUrl: data.blockExplorerBaseUrl,
+  };
 }
