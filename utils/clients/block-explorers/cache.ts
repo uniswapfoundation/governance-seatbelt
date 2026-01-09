@@ -36,6 +36,11 @@ const verificationCache: Record<string, VerificationCacheEntry> = {};
 
 // biome-ignore lint/complexity/noStaticOnlyClass: Cache manager with static methods
 export class CacheManager {
+  static clearMemory(): void {
+    for (const key of Object.keys(abiCache)) delete abiCache[key];
+    for (const key of Object.keys(verificationCache)) delete verificationCache[key];
+  }
+
   static getAbiCacheKey(chainId: number, address: string): string {
     return `${chainId}:${getAddress(address)}`;
   }

@@ -71,7 +71,9 @@ export class BlockExplorerFactory {
       }
 
       const explorer = BlockExplorerFactory.getExplorer(chainId);
-      const isVerified = await explorer.isContractVerified(normalizedAddress, chainId);
+      const isVerified = await explorer.isContractVerified(normalizedAddress, chainId, {
+        skipCache: true,
+      });
       const source = isVerified ? ('block-explorer' as const) : ('none' as const);
       const cacheMeta = {
         source,
@@ -128,5 +130,6 @@ export class BlockExplorerFactory {
    */
   static clear(): void {
     BlockExplorerFactory.explorers = {};
+    CacheManager.clearMemory();
   }
 }

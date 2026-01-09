@@ -4,6 +4,14 @@ import { CacheManager } from './cache';
 /**
  * Base interface for block explorer implementations
  */
+export interface VerificationOptions {
+  /**
+   * Skip CacheManager reads/writes inside the explorer implementation.
+   * Useful when the caller (e.g. a factory) handles caching centrally.
+   */
+  skipCache?: boolean;
+}
+
 export interface BlockExplorer {
   /**
    * Fetch the ABI for a contract
@@ -17,9 +25,14 @@ export interface BlockExplorer {
    * Check if a contract is verified
    * @param address The contract address
    * @param chainId The chain ID
+   * @param options Optional behavior flags
    * @returns True if verified, false otherwise
    */
-  isContractVerified(address: string, chainId: number): Promise<boolean>;
+  isContractVerified(
+    address: string,
+    chainId: number,
+    options?: VerificationOptions,
+  ): Promise<boolean>;
 
   /**
    * Get the name of the block explorer
@@ -32,7 +45,11 @@ export interface BlockExplorer {
  */
 export abstract class BaseBlockExplorer implements BlockExplorer {
   abstract fetchContractAbi(address: string, chainId: number): Promise<Abi | null>;
-  abstract isContractVerified(address: string, chainId: number): Promise<boolean>;
+  abstract isContractVerified(
+    address: string,
+    chainId: number,
+    options?: VerificationOptions,
+  ): Promise<boolean>;
   abstract getName(): string;
 
   /**

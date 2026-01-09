@@ -1,6 +1,6 @@
 import { type Abi, getAddress } from 'viem';
 import { CacheManager } from './cache';
-import { BaseBlockExplorer } from './index';
+import { BaseBlockExplorer, type VerificationOptions } from './index';
 
 interface EtherscanApiResponse {
   status: string;
@@ -123,58 +123,78 @@ export class EtherscanExplorer extends BaseBlockExplorer {
     }
   }
 
-  async isContractVerified(address: string, chainId: number): Promise<boolean> {
+  private async fetchVerificationStatus(
+    normalizedAddress: string,
+    chainId: number,
+  ): Promise<boolean> {
+    // Use Etherscan v2 API with chainid parameter for unified multichain support
+    const url = `https://api.etherscan.io/v2/api?chainid=${chainId}&module=contract&action=getsourcecode&address=${normalizedAddress}&apikey=${this.apiKey}`;
+    const response = await fetch(url);
+    const data = (await response.json()) as EtherscanApiResponse;
+
+    // For verification, Etherscan returns an array with contract info
+    return (
+      data.status === '1' &&
+      Array.isArray(data.result) &&
+      data.result.length > 0 &&
+      Boolean(data.result[0].SourceCode) &&
+      data.result[0].SourceCode!.trim() !== ''
+    );
+  }
+
+  async isContractVerified(
+    address: string,
+    chainId: number,
+    options?: VerificationOptions,
+  ): Promise<boolean> {
     const normalizedAddress = getAddress(address);
+    const skipCache = options?.skipCache === true;
 
-    // Check in-memory cache first
-    const memoryCached = CacheManager.getVerificationFromMemory(chainId, address);
-    if (memoryCached !== undefined) {
-      return memoryCached;
-    }
+    if (!skipCache) {
+      // Check in-memory cache first
+      const memoryCached = CacheManager.getVerificationFromMemory(chainId, address);
+      if (memoryCached !== undefined) {
+        return memoryCached;
+      }
 
-    // Check file cache
-    const fileCached = CacheManager.getVerificationFromFile(chainId, address);
-    if (fileCached !== null) {
-      CacheManager.setVerificationInMemory(chainId, address, fileCached);
-      return fileCached;
+      // Check file cache
+      const fileCached = CacheManager.getVerificationFromFile(chainId, address);
+      if (fileCached !== null) {
+        CacheManager.setVerificationInMemory(chainId, address, fileCached);
+        return fileCached;
+      }
     }
 
     this.log(`Fetching verification status for ${normalizedAddress} from chain ${chainId}`);
 
     try {
-      // Use Etherscan v2 API with chainid parameter for unified multichain support
-      const url = `https://api.etherscan.io/v2/api?chainid=${chainId}&module=contract&action=getsourcecode&address=${normalizedAddress}&apikey=${this.apiKey}`;
-      const response = await fetch(url);
-      const data = (await response.json()) as EtherscanApiResponse;
-
-      // For verification, Etherscan returns an array with contract info
-      const isVerified: boolean =
-        data.status === '1' &&
-        Array.isArray(data.result) &&
-        data.result.length > 0 &&
-        Boolean(data.result[0].SourceCode) &&
-        data.result[0].SourceCode!.trim() !== '';
+      const isVerified = await this.fetchVerificationStatus(normalizedAddress, chainId);
 
       this.log(`Verification result for ${normalizedAddress}: ${isVerified}`);
 
-      // Cache the result
-      const cacheMeta = {
-        source: 'block-explorer' as const,
-        blockExplorer: { name: this.getName(), verified: isVerified },
-      };
-      CacheManager.setVerificationInMemory(chainId, address, isVerified, cacheMeta);
-      CacheManager.setVerificationInFile(chainId, address, isVerified, cacheMeta);
+      if (!skipCache) {
+        // Cache the result
+        const cacheMeta = {
+          source: 'block-explorer' as const,
+          blockExplorer: { name: this.getName(), verified: isVerified },
+        };
+        CacheManager.setVerificationInMemory(chainId, address, isVerified, cacheMeta);
+        CacheManager.setVerificationInFile(chainId, address, isVerified, cacheMeta);
+      }
 
       return isVerified;
     } catch (error) {
       this.error(`Error fetching verification status for ${address} on chain ${chainId}:`, error);
       const result = false;
-      const cacheMeta = {
-        source: 'block-explorer' as const,
-        blockExplorer: { name: this.getName(), verified: result },
-      };
-      CacheManager.setVerificationInMemory(chainId, address, result, cacheMeta);
-      CacheManager.setVerificationInFile(chainId, address, result, cacheMeta);
+
+      if (!skipCache) {
+        const cacheMeta = {
+          source: 'block-explorer' as const,
+          blockExplorer: { name: this.getName(), verified: result },
+        };
+        CacheManager.setVerificationInMemory(chainId, address, result, cacheMeta);
+        CacheManager.setVerificationInFile(chainId, address, result, cacheMeta);
+      }
       return result;
     }
   }

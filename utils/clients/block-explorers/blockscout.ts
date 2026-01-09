@@ -1,6 +1,6 @@
 import { type Abi, getAddress } from 'viem';
 import { CacheManager } from './cache';
-import { BaseBlockExplorer } from './index';
+import { BaseBlockExplorer, type VerificationOptions } from './index';
 
 interface BlockscoutContractResponse {
   status: string;
@@ -115,24 +115,10 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
     }
   }
 
-  async isContractVerified(address: string, chainId: number): Promise<boolean> {
-    const normalizedAddress = getAddress(address);
-
-    // Check in-memory cache first
-    const memoryCached = CacheManager.getVerificationFromMemory(chainId, address);
-    if (memoryCached !== undefined) {
-      return memoryCached;
-    }
-
-    // Check file cache
-    const fileCached = CacheManager.getVerificationFromFile(chainId, address);
-    if (fileCached !== null) {
-      CacheManager.setVerificationInMemory(chainId, address, fileCached);
-      return fileCached;
-    }
-
-    this.log(`Fetching verification status for ${normalizedAddress} from chain ${chainId}`);
-
+  private async fetchVerificationStatus(
+    normalizedAddress: string,
+    chainId: number,
+  ): Promise<boolean> {
     // Use shared fetch method with properly normalized address
     const url = `${this.apiUrl}/smart-contracts/${normalizedAddress}`;
     const data = await this.fetchWithRetry<BlockscoutContractResponse>(
@@ -143,29 +129,49 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
     );
 
     if (!data) {
-      const result = false;
-      const cacheMeta = {
-        source: 'block-explorer' as const,
-        blockExplorer: { name: this.getName(), verified: result },
-      };
-      CacheManager.setVerificationInMemory(chainId, address, result, cacheMeta);
-      CacheManager.setVerificationInFile(chainId, address, result, cacheMeta);
-      return result;
+      return false;
     }
 
     // Consider both fully verified and partially verified contracts as verified
-    const isVerified = data.is_verified || data.is_partially_verified === true;
-    this.log(
-      `Verification result for ${normalizedAddress}: ${isVerified} (fully: ${data.is_verified}, partially: ${data.is_partially_verified})`,
-    );
+    return data.is_verified || data.is_partially_verified === true;
+  }
 
-    // Cache the result
-    const cacheMeta = {
-      source: 'block-explorer' as const,
-      blockExplorer: { name: this.getName(), verified: isVerified },
-    };
-    CacheManager.setVerificationInMemory(chainId, address, isVerified, cacheMeta);
-    CacheManager.setVerificationInFile(chainId, address, isVerified, cacheMeta);
+  async isContractVerified(
+    address: string,
+    chainId: number,
+    options?: VerificationOptions,
+  ): Promise<boolean> {
+    const normalizedAddress = getAddress(address);
+    const skipCache = options?.skipCache === true;
+
+    if (!skipCache) {
+      // Check in-memory cache first
+      const memoryCached = CacheManager.getVerificationFromMemory(chainId, address);
+      if (memoryCached !== undefined) {
+        return memoryCached;
+      }
+
+      // Check file cache
+      const fileCached = CacheManager.getVerificationFromFile(chainId, address);
+      if (fileCached !== null) {
+        CacheManager.setVerificationInMemory(chainId, address, fileCached);
+        return fileCached;
+      }
+    }
+
+    this.log(`Fetching verification status for ${normalizedAddress} from chain ${chainId}`);
+
+    const isVerified = await this.fetchVerificationStatus(normalizedAddress, chainId);
+    this.log(`Verification result for ${normalizedAddress}: ${isVerified}`);
+
+    if (!skipCache) {
+      const cacheMeta = {
+        source: 'block-explorer' as const,
+        blockExplorer: { name: this.getName(), verified: isVerified },
+      };
+      CacheManager.setVerificationInMemory(chainId, address, isVerified, cacheMeta);
+      CacheManager.setVerificationInFile(chainId, address, isVerified, cacheMeta);
+    }
 
     return isVerified;
   }
