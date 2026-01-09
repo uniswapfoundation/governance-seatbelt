@@ -1,6 +1,9 @@
 import type { Abi } from 'viem';
+import { getAddress } from 'viem';
 import { BlockExplorerSource, getChainConfig } from '../client';
+import { getSourcifyMatch } from '../sourcify';
 import { BlockscoutExplorer } from './blockscout';
+import { CacheManager } from './cache';
 import { EtherscanExplorer } from './etherscan';
 import type { BlockExplorer } from './index';
 
@@ -46,8 +49,38 @@ export class BlockExplorerFactory {
    */
   static async isContractVerified(address: string, chainId: number): Promise<boolean> {
     try {
+      const normalizedAddress = getAddress(address);
+
+      const memoryCached = CacheManager.getVerificationFromMemory(chainId, normalizedAddress);
+      if (memoryCached !== undefined) {
+        return memoryCached;
+      }
+
+      const fileCached = CacheManager.getVerificationFromFile(chainId, normalizedAddress);
+      if (fileCached !== null) {
+        CacheManager.setVerificationInMemory(chainId, normalizedAddress, fileCached);
+        return fileCached;
+      }
+
+      const sourcifyMatch = await getSourcifyMatch(normalizedAddress, chainId);
+      if (sourcifyMatch === 'exact_match') {
+        const cacheMeta = { source: 'sourcify' as const, sourcifyMatch };
+        CacheManager.setVerificationInMemory(chainId, normalizedAddress, true, cacheMeta);
+        CacheManager.setVerificationInFile(chainId, normalizedAddress, true, cacheMeta);
+        return true;
+      }
+
       const explorer = BlockExplorerFactory.getExplorer(chainId);
-      return await explorer.isContractVerified(address, chainId);
+      const isVerified = await explorer.isContractVerified(normalizedAddress, chainId);
+      const source = isVerified ? ('block-explorer' as const) : ('none' as const);
+      const cacheMeta = {
+        source,
+        sourcifyMatch,
+        blockExplorer: { name: explorer.getName(), verified: isVerified },
+      };
+      CacheManager.setVerificationInMemory(chainId, normalizedAddress, isVerified, cacheMeta);
+      CacheManager.setVerificationInFile(chainId, normalizedAddress, isVerified, cacheMeta);
+      return isVerified;
     } catch (error) {
       console.warn(`Failed to check verification for ${address} on chain ${chainId}:`, error);
       return false;

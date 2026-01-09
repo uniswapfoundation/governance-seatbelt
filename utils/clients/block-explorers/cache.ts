@@ -17,7 +17,22 @@ if (!existsSync(VERIFICATION_CACHE_DIR)) {
 
 // In-memory cache
 const abiCache: Record<string, Abi> = {};
-const verificationCache: Record<string, boolean> = {};
+
+export type VerificationSource = 'sourcify' | 'block-explorer' | 'none';
+
+export interface VerificationCacheEntry {
+  schemaVersion: 2;
+  verified: boolean;
+  source: VerificationSource;
+  timestamp: number;
+  sourcifyMatch?: string;
+  blockExplorer?: {
+    name: string;
+    verified: boolean;
+  };
+}
+
+const verificationCache: Record<string, VerificationCacheEntry> = {};
 
 // biome-ignore lint/complexity/noStaticOnlyClass: Cache manager with static methods
 export class CacheManager {
@@ -54,20 +69,102 @@ export class CacheManager {
 
   static getVerificationFromMemory(chainId: number, address: string): boolean | undefined {
     const cacheKey = CacheManager.getAbiCacheKey(chainId, address);
+    return verificationCache[cacheKey]?.verified;
+  }
+
+  static getVerificationEntryFromMemory(
+    chainId: number,
+    address: string,
+  ): VerificationCacheEntry | undefined {
+    const cacheKey = CacheManager.getAbiCacheKey(chainId, address);
     return verificationCache[cacheKey];
   }
 
-  static setVerificationInMemory(chainId: number, address: string, verified: boolean): void {
+  static setVerificationEntryInMemory(
+    chainId: number,
+    address: string,
+    entry: VerificationCacheEntry,
+  ): void {
     const cacheKey = CacheManager.getAbiCacheKey(chainId, address);
-    verificationCache[cacheKey] = verified;
+    verificationCache[cacheKey] = entry;
+  }
+
+  static setVerificationInMemory(
+    chainId: number,
+    address: string,
+    verified: boolean,
+    options?: Omit<VerificationCacheEntry, 'schemaVersion' | 'verified' | 'timestamp'>,
+  ): void {
+    CacheManager.setVerificationEntryInMemory(chainId, address, {
+      schemaVersion: 2,
+      verified,
+      source: options?.source ?? 'block-explorer',
+      sourcifyMatch: options?.sourcifyMatch,
+      blockExplorer: options?.blockExplorer,
+      timestamp: Date.now(),
+    });
   }
 
   static getVerificationFromFile(chainId: number, address: string): boolean | null {
+    const entry = CacheManager.getVerificationEntryFromFile(chainId, address);
+    return entry ? entry.verified : null;
+  }
+
+  static getVerificationEntryFromFile(
+    chainId: number,
+    address: string,
+  ): VerificationCacheEntry | null {
     const cachePath = CacheManager.getVerificationCacheFilePath(chainId, address);
     if (existsSync(cachePath)) {
       try {
-        const cached = JSON.parse(readFileSync(cachePath, 'utf8'));
-        return cached.verified;
+        const cached = JSON.parse(readFileSync(cachePath, 'utf8')) as unknown;
+
+        if (!cached || typeof cached !== 'object') {
+          return null;
+        }
+
+        const cachedObj = cached as Record<string, unknown>;
+
+        if (cachedObj.schemaVersion === 2) {
+          const verified = cachedObj.verified;
+          const timestamp = cachedObj.timestamp;
+          const source = cachedObj.source;
+
+          if (typeof verified !== 'boolean') return null;
+          if (typeof timestamp !== 'number') return null;
+          if (source !== 'sourcify' && source !== 'block-explorer' && source !== 'none') {
+            return null;
+          }
+
+          const sourcifyMatch =
+            typeof cachedObj.sourcifyMatch === 'string' ? cachedObj.sourcifyMatch : undefined;
+
+          let blockExplorer: VerificationCacheEntry['blockExplorer'];
+          const be = cachedObj.blockExplorer;
+          if (be && typeof be === 'object') {
+            const beObj = be as Record<string, unknown>;
+            if (typeof beObj.name === 'string' && typeof beObj.verified === 'boolean') {
+              blockExplorer = { name: beObj.name, verified: beObj.verified };
+            }
+          }
+
+          return { schemaVersion: 2, verified, source, timestamp, sourcifyMatch, blockExplorer };
+        }
+
+        // Legacy schema: { verified: boolean, timestamp: number }
+        // Treat legacy "verified: false" as stale so new verification sources (e.g. Sourcify) can re-check.
+        if (typeof cachedObj.verified === 'boolean') {
+          if (cachedObj.verified === true) {
+            return {
+              schemaVersion: 2,
+              verified: true,
+              source: 'block-explorer',
+              timestamp: typeof cachedObj.timestamp === 'number' ? cachedObj.timestamp : Date.now(),
+            };
+          }
+
+          return null;
+        }
       } catch {
         return null;
       }
@@ -75,9 +172,22 @@ export class CacheManager {
     return null;
   }
 
-  static setVerificationInFile(chainId: number, address: string, verified: boolean): void {
+  static setVerificationInFile(
+    chainId: number,
+    address: string,
+    verified: boolean,
+    options?: Omit<VerificationCacheEntry, 'schemaVersion' | 'verified' | 'timestamp'>,
+  ): void {
     const cachePath = CacheManager.getVerificationCacheFilePath(chainId, address);
-    writeFileSync(cachePath, JSON.stringify({ verified, timestamp: Date.now() }));
+    const entry: VerificationCacheEntry = {
+      schemaVersion: 2,
+      verified,
+      source: options?.source ?? 'block-explorer',
+      sourcifyMatch: options?.sourcifyMatch,
+      blockExplorer: options?.blockExplorer,
+      timestamp: Date.now(),
+    };
+    writeFileSync(cachePath, JSON.stringify(entry));
   }
 
   private static getAbiCacheFilePath(chainId: number, address: string): string {

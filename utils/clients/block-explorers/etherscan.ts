@@ -158,15 +158,23 @@ export class EtherscanExplorer extends BaseBlockExplorer {
       this.log(`Verification result for ${normalizedAddress}: ${isVerified}`);
 
       // Cache the result
-      CacheManager.setVerificationInMemory(chainId, address, isVerified);
-      CacheManager.setVerificationInFile(chainId, address, isVerified);
+      const cacheMeta = {
+        source: 'block-explorer' as const,
+        blockExplorer: { name: this.getName(), verified: isVerified },
+      };
+      CacheManager.setVerificationInMemory(chainId, address, isVerified, cacheMeta);
+      CacheManager.setVerificationInFile(chainId, address, isVerified, cacheMeta);
 
       return isVerified;
     } catch (error) {
       this.error(`Error fetching verification status for ${address} on chain ${chainId}:`, error);
       const result = false;
-      CacheManager.setVerificationInMemory(chainId, address, result);
-      CacheManager.setVerificationInFile(chainId, address, result);
+      const cacheMeta = {
+        source: 'block-explorer' as const,
+        blockExplorer: { name: this.getName(), verified: result },
+      };
+      CacheManager.setVerificationInMemory(chainId, address, result, cacheMeta);
+      CacheManager.setVerificationInFile(chainId, address, result, cacheMeta);
       return result;
     }
   }

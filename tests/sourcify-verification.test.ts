@@ -1,0 +1,50 @@
+import { describe, expect, it } from 'bun:test';
+import { existsSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { getAddress } from 'viem';
+import { BlockExplorerFactory } from '../utils/clients/block-explorers/factory';
+
+describe('Sourcify-first verification', () => {
+  it('prefers Sourcify exact_match over block explorer', async () => {
+    BlockExplorerFactory.clear();
+
+    const chainId = 1;
+    const address = getAddress('0x0000000000000000000000000000000000000007');
+
+    const cachePath = join(process.cwd(), 'cache', 'verification', `${chainId}-${address}.json`);
+    if (existsSync(cachePath)) unlinkSync(cachePath);
+
+    const originalFetch = globalThis.fetch;
+    let etherscanCalled = false;
+
+    globalThis.fetch = (async (input: RequestInfo | URL, _init?: RequestInit) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+
+      if (url.startsWith('https://sourcify.dev/server/v2/contract/')) {
+        return new Response(JSON.stringify({ match: 'exact_match' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      if (url.includes('api.etherscan.io')) {
+        etherscanCalled = true;
+        return new Response(JSON.stringify({ status: '0', result: 'NOTOK' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+
+      throw new Error(`Unexpected fetch in test: ${url}`);
+    }) as typeof fetch;
+
+    try {
+      const verified = await BlockExplorerFactory.isContractVerified(address, chainId);
+      expect(verified).toBe(true);
+      expect(etherscanCalled).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});

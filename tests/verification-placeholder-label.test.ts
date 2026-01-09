@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { getAddress } from 'viem';
 import { checkTargetsVerifiedOnBlockExplorer } from '../checks/check-targets-verified-etherscan';
-import type { ProposalData, ProposalEvent } from '../types';
+import type { ProposalData, ProposalEvent, TenderlySimulation } from '../types';
 import { BlockExplorerFactory } from '../utils/clients/block-explorers/factory';
 import { DEFAULT_SIMULATION_ADDRESS } from '../utils/clients/tenderly';
 
@@ -54,14 +54,14 @@ describe('Verification checks - placeholder labeling', () => {
       const proposal = makeProposal([placeholder, realContract]);
       const res = await checkTargetsVerifiedOnBlockExplorer.checkProposal(
         proposal,
-        {} as any,
+        undefined as unknown as TenderlySimulation,
         deps,
       );
 
       const output = res.info.join('\n');
       expect(output).toContain('(simulation placeholder)');
       expect(output).toMatch(/Contract \(verified\)/); // placeholder
-      expect(output).toMatch(/Contract \(not verified\)/); // realContract
+      expect(output).toMatch(/Contract \(unverified\)/); // realContract
     } finally {
       BlockExplorerFactory.isContractVerified = original;
     }

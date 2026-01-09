@@ -144,8 +144,12 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
 
     if (!data) {
       const result = false;
-      CacheManager.setVerificationInMemory(chainId, address, result);
-      CacheManager.setVerificationInFile(chainId, address, result);
+      const cacheMeta = {
+        source: 'block-explorer' as const,
+        blockExplorer: { name: this.getName(), verified: result },
+      };
+      CacheManager.setVerificationInMemory(chainId, address, result, cacheMeta);
+      CacheManager.setVerificationInFile(chainId, address, result, cacheMeta);
       return result;
     }
 
@@ -156,8 +160,12 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
     );
 
     // Cache the result
-    CacheManager.setVerificationInMemory(chainId, address, isVerified);
-    CacheManager.setVerificationInFile(chainId, address, isVerified);
+    const cacheMeta = {
+      source: 'block-explorer' as const,
+      blockExplorer: { name: this.getName(), verified: isVerified },
+    };
+    CacheManager.setVerificationInMemory(chainId, address, isVerified, cacheMeta);
+    CacheManager.setVerificationInFile(chainId, address, isVerified, cacheMeta);
 
     return isVerified;
   }

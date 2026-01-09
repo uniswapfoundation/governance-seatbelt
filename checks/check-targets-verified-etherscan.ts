@@ -85,7 +85,7 @@ async function checkVerificationStatuses(
     else if (status === 'empty')
       info.push(`${address}${suffix}: EOA (may have code later, verification not applicable)`);
     else if (status === 'verified') info.push(`${address}${suffix}: Contract (verified)`);
-    else info.push(`${address}${suffix}: Contract (not verified)`);
+    else info.push(`${address}${suffix}: Contract (unverified)`);
   }
   return info;
 }
