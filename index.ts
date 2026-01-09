@@ -183,6 +183,8 @@ async function processSimulation(
     simulationType: config.type,
     simulation: sim,
     coverage,
+    chainId: finalDeps.chainConfig.chainId,
+    simulationType: config.type,
   });
 
   // Prepare simulation data

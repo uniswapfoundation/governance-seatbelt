@@ -105,6 +105,23 @@ function getTenderlyUrl(simulationId?: string): string | undefined {
   return `https://dashboard.tenderly.co/${process.env.TENDERLY_USER}/${process.env.TENDERLY_PROJECT_SLUG}/simulator/${simulationId}`;
 }
 
+// --- Chain name utility ---
+
+const CHAIN_NAMES: Record<number, string> = {
+  1: 'Ethereum',
+  42161: 'Arbitrum One',
+  10: 'Optimism',
+  8453: 'Base',
+  1301: 'Unichain',
+  57073: 'Ink',
+  1868: 'Soneium',
+  60808: 'BOB',
+};
+
+function getChainName(chainId: number): string {
+  return CHAIN_NAMES[chainId] || `Chain ${chainId}`;
+}
+
 // --- Markdown helpers ---
 
 export function bullet(text: string, level = 0) {
@@ -658,6 +675,8 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     simulationType,
     simulation,
     coverage,
+    chainId,
+    simulationType,
   } = params;
   console.log(`[Report] Generating report for proposal ${proposal.id} (${proposal.proposalId})`);
   console.log(`[Report] Output directory: ${outputDir}`);
