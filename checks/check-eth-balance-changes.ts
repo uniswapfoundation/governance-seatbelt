@@ -15,11 +15,11 @@ export const checkEthBalanceChanges: ProposalCheck = {
     const blockExplorerUrl = deps.chainConfig.blockExplorer.baseUrl;
 
     if (!sim.transaction.transaction_info.asset_changes) {
+      // No asset changes data available - check ran but found nothing to report
       return {
-        info: [],
+        info: ['No ETH balance changes detected in this proposal.'],
         warnings,
         errors,
-        skipped: { reason: 'No ETH transfers detected' },
       };
     }
 
@@ -29,11 +29,11 @@ export const checkEthBalanceChanges: ProposalCheck = {
     );
 
     if (ethTransfers.length === 0) {
+      // Check ran successfully - no ETH transfers to report
       return {
-        info: [],
+        info: ['No ETH balance changes detected in this proposal.'],
         warnings,
         errors,
-        skipped: { reason: 'No ETH transfers detected' },
       };
     }
 

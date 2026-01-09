@@ -63,10 +63,9 @@ describe('checkEthBalanceChanges', () => {
       simResult.deps,
     );
 
-    // Check is now skipped when no ETH transfers detected
-    expect(result.skipped).toBeDefined();
-    expect(result.skipped?.reason).toBe('No ETH transfers detected');
-    expect(result.info).toHaveLength(0);
+    // Check passes with info message when no ETH transfers detected
+    expect(result.skipped).toBeUndefined();
+    expect(result.info).toContain('No ETH balance changes detected in this proposal.');
     expect(result.warnings).toHaveLength(0);
     expect(result.errors).toHaveLength(0);
   });
