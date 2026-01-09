@@ -452,8 +452,6 @@ async function main() {
     simulationType: simType,
     simulation: finalResult.sim,
     coverage,
-    chainId: proposalData.chainConfig.chainId,
-    simulationType: simType,
   });
 }
 
