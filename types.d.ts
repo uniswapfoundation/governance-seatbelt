@@ -1,6 +1,9 @@
 import type { Address, Block, Hex } from 'viem';
 import type { ChainConfig } from './utils/clients/client';
 
+// Type alias for From - represents an Ethereum address
+type From = Address;
+
 // --- Call Trace Types ---
 export interface CallTrace {
   from: string;
@@ -134,6 +137,7 @@ export type CheckResult = {
   info: Message[];
   warnings: Message[];
   errors: Message[];
+  skipped?: { reason: string };
 };
 
 export interface ProposalData {
@@ -534,11 +538,45 @@ interface RawElement {
 }
 
 /**
+ * Coverage tracking types for check execution status
+ */
+export interface CheckCoverage {
+  checkId: string;
+  checkName: string;
+  status: 'ran' | 'skipped' | 'failed';
+  skipReason?: string;
+  executionTimeMs?: number;
+  wasInferred?: boolean;
+  chainId?: number;
+}
+
+export interface CoverageMetadata {
+  gitCommitHash: string;
+  gitBranch: string;
+  timestamp: string;
+  solcVersion?: string;
+  slitherVersion?: string;
+}
+
+export interface CoverageData {
+  metadata: CoverageMetadata;
+  checks: CheckCoverage[];
+  summary: {
+    total: number;
+    ran: number;
+    skipped: number;
+    failed: number;
+    inferredSkips: number;
+  };
+}
+
+/**
  * Structured simulation report types
  */
 export interface SimulationCheck {
   title: string;
-  status: 'passed' | 'warning' | 'failed';
+  status: 'passed' | 'warning' | 'failed' | 'skipped';
+  skipReason?: string;
   details?: string;
   info?: string[];
   infoItems?: Array<{
@@ -582,23 +620,37 @@ export interface SimulationCalldata {
 export interface StructuredSimulationReport {
   title: string;
   proposalText: string;
-  status: 'success' | 'warning' | 'error';
+  status: 'success' | 'warning' | 'error' | 'inconclusive';
   summary: string;
   checks: SimulationCheck[];
   stateChanges: SimulationStateChange[];
   events: SimulationEvent[];
   calldata?: SimulationCalldata;
+  coverage?: CoverageData;
   metadata: {
     proposalId: string;
     proposer: string;
+    proposerIsPlaceholder?: boolean;
     governorAddress: string;
     executor?: string;
+    executorIsPlaceholder?: boolean;
     simulationBlockNumber: string;
     simulationTimestamp: string;
     proposalCreatedAtBlockNumber: string;
     proposalCreatedAtTimestamp: string;
     proposalExecutedAtBlockNumber?: string;
     proposalExecutedAtTimestamp?: string;
+    // Extended metadata for Tally integration
+    schemaVersion?: number;
+    chainId?: number;
+    chainName?: string;
+    blockExplorerBaseUrl?: string;
+    simulationType?: 'executed' | 'proposed' | 'new';
+    placeholderAddresses?: string[];
+    // Repository and simulation links for Issue #92
+    repoCommit?: string;
+    repoUrl?: string;
+    tenderlyUrl?: string;
   };
 }
 
@@ -614,6 +666,10 @@ export interface GenerateReportsParams {
   executor?: string;
   proposalCreatedBlock?: SimulationBlock;
   proposalExecutedBlock?: SimulationBlock;
+  chainId?: number;
+  simulationType?: 'executed' | 'proposed' | 'new';
+  simulation?: TenderlySimulation;
+  coverage?: CoverageData;
 }
 
 export interface WriteSimulationResultsJsonParams {
@@ -629,6 +685,9 @@ export interface WriteSimulationResultsJsonParams {
   executor?: string;
   proposalCreatedBlock?: SimulationBlock;
   proposalExecutedBlock?: SimulationBlock;
+  chainId?: number;
+  simulationType?: 'executed' | 'proposed' | 'new';
+  simulation?: TenderlySimulation;
 }
 
 export interface FrontendData {

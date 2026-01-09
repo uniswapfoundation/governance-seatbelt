@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { existsSync, promises as fsp, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { mdToPdf } from 'md-to-pdf';
@@ -15,6 +16,7 @@ import type { Visitor } from 'unist-util-visit';
 import { getAddress } from 'viem';
 import type {
   AllCheckResults,
+  CoverageData,
   GenerateReportsParams,
   GovernorType,
   ProposalEvent,
@@ -26,11 +28,82 @@ import type {
   SimulationResult,
   SimulationStateChange,
   StructuredSimulationReport,
+  TenderlySimulation,
   WriteSimulationResultsJsonParams,
 } from '../types';
 import { getChainConfig } from '../utils/clients/client';
-import { getContractName } from '../utils/clients/tenderly';
+import { DEFAULT_SIMULATION_ADDRESS, getContractName } from '../utils/clients/tenderly';
 import { formatProposalId } from '../utils/contracts/governor';
+import { generateProposalSummary } from '../utils/proposal-summary';
+
+// --- Chain name utility ---
+
+const CHAIN_NAMES: Record<number, string> = {
+  1: 'Ethereum',
+  42161: 'Arbitrum One',
+  10: 'Optimism',
+  8453: 'Base',
+  1301: 'Unichain',
+  57073: 'Ink',
+  1868: 'Soneium',
+  60808: 'BOB',
+};
+
+function getChainName(chainId: number): string {
+  return CHAIN_NAMES[chainId] || `Chain ${chainId}`;
+}
+
+// --- Repository and Tenderly utilities ---
+
+/**
+ * Get repository information from CI environment or git
+ */
+function getRepoInfo(): { repoCommit?: string; repoUrl?: string } {
+  try {
+    // Prefer CI environment variables
+    if (process.env.GITHUB_SHA && process.env.GITHUB_REPOSITORY) {
+      return {
+        repoCommit: process.env.GITHUB_SHA,
+        repoUrl: `https://github.com/${process.env.GITHUB_REPOSITORY}`,
+      };
+    }
+
+    // Fallback to git commands for local development
+    const commit = execSync('git rev-parse HEAD', {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+    }).trim();
+
+    const remoteUrl = execSync('git config --get remote.origin.url', {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+    }).trim();
+
+    // Convert git SSH URL to HTTPS if needed
+    const httpsUrl = remoteUrl
+      .replace(/^git@github\.com:/, 'https://github.com/')
+      .replace(/\.git$/, '');
+
+    return {
+      repoCommit: commit,
+      repoUrl: httpsUrl,
+    };
+  } catch {
+    // Git not available or not in a git repository
+    return {};
+  }
+}
+
+/**
+ * Get Tenderly simulation URL if available
+ */
+function getTenderlyUrl(simulationId?: string): string | undefined {
+  if (!simulationId || !process.env.TENDERLY_USER || !process.env.TENDERLY_PROJECT_SLUG) {
+    return undefined;
+  }
+
+  return `https://dashboard.tenderly.co/${process.env.TENDERLY_USER}/${process.env.TENDERLY_PROJECT_SLUG}/simulator/${simulationId}`;
+}
 
 // --- Markdown helpers ---
 
@@ -96,24 +169,33 @@ function toMessageList(header: string, text: string[]): string {
  * @param name the descriptive name of the check
  */
 function toCheckSummary({
-  result: { errors, warnings, info },
+  result: { errors, warnings, info, skipped },
   name,
 }: AllCheckResults[string]): string {
-  const status =
-    errors.length === 0
-      ? warnings.length === 0
-        ? '✅ Passed'
-        : '❗❗ **Passed with warnings**'
-      : '❌ **Failed**';
+  let status: string;
 
-  return `### ${name} ${status}
+  if (skipped) {
+    status = '⏭️ **Skipped**';
+  } else if (errors.length === 0) {
+    status = warnings.length === 0 ? '✅ Passed' : '❗❗ **Passed with warnings**';
+  } else {
+    status = '❌ **Failed**';
+  }
 
-${toMessageList('Errors', errors)}
+  let report = `### ${name} ${status}\n\n`;
 
-${toMessageList('Warnings', warnings)}
+  if (skipped) {
+    report += `${bold('Skip Reason')}: ${skipped.reason}\n\n`;
+  }
 
-${toMessageList('Info', info)}
-`;
+  report += toMessageList('Errors', errors);
+  report += '\n\n';
+  report += toMessageList('Warnings', warnings);
+  report += '\n\n';
+  report += toMessageList('Info', info);
+  report += '\n';
+
+  return report;
 }
 
 /**
@@ -297,6 +379,11 @@ function generateStructuredReport(
   executor?: string,
   proposalCreatedBlock?: SimulationBlock,
   proposalExecutedBlock?: SimulationBlock,
+  chainId?: number,
+  simulationType?: 'executed' | 'proposed' | 'new',
+  simulationId?: string,
+  simulation?: TenderlySimulation,
+  destinationChecks?: Record<number, AllCheckResults>,
 ): StructuredSimulationReport {
   // Validate required fields
   if (!proposal.proposer) {
@@ -311,25 +398,53 @@ function generateStructuredReport(
   const proposalText = proposal.description.trim();
 
   // Determine overall status
-  let status: 'success' | 'warning' | 'error' = 'success';
+  let status: 'success' | 'warning' | 'error' | 'inconclusive' = 'success';
+
+  // Check for inconclusive conditions first
+  let hasSkippedChecks = false;
+  let hasErrors = false;
+  let hasWarnings = false;
+
   for (const checkId in checks) {
     const { result } = checks[checkId];
+
+    // Check if this check was skipped (indicates partial execution)
+    if ('skipped' in result && result.skipped) {
+      hasSkippedChecks = true;
+    }
+
     if (result.errors.length > 0) {
-      status = 'error';
-      break;
+      hasErrors = true;
     }
     if (result.warnings.length > 0) {
-      status = 'warning';
+      hasWarnings = true;
     }
+  }
+
+  // Set status based on conditions
+  if (hasErrors) {
+    status = 'error';
+  } else if (hasSkippedChecks) {
+    // If some checks were skipped, the result is inconclusive
+    status = 'inconclusive';
+  } else if (hasWarnings) {
+    status = 'warning';
+  } else {
+    status = 'success';
   }
 
   // Format checks
   const formattedChecks: SimulationCheck[] = Object.entries(checks).map(([_, check]) => {
     const { name, result } = check;
-    const { errors, warnings, info } = result;
+    const { errors, warnings, info, skipped } = result;
 
-    let checkStatus: 'passed' | 'warning' | 'failed' = 'passed';
-    if (errors.length > 0) {
+    let checkStatus: 'passed' | 'warning' | 'failed' | 'skipped' = 'passed';
+    let skipReason: string | undefined;
+
+    if (skipped) {
+      checkStatus = 'skipped';
+      skipReason = skipped.reason;
+    } else if (errors.length > 0) {
       checkStatus = 'failed';
     } else if (warnings.length > 0) {
       checkStatus = 'warning';
@@ -337,6 +452,7 @@ function generateStructuredReport(
 
     // Combine all messages into details
     const details = [
+      ...(skipped ? [`**Skipped**: ${skipped.reason}`] : []),
       ...errors.map((msg) => `**Error**: ${msg}`),
       ...warnings.map((msg) => `**Warning**: ${msg}`),
       ...info.map((msg) => `**Info**: ${msg}`),
@@ -345,17 +461,60 @@ function generateStructuredReport(
     return {
       title: name,
       status: checkStatus,
+      skipReason,
       details,
       info,
     };
   });
 
+  // Get chain configuration for explorer URL
+  const targetChainId = chainId ?? 1; // Default to mainnet
+  let blockExplorerBaseUrl = 'https://etherscan.io';
+  try {
+    const chainConfig = getChainConfig(targetChainId);
+    blockExplorerBaseUrl = chainConfig.blockExplorer.baseUrl;
+  } catch {
+    // Fallback to etherscan if chain config not found
+  }
+
+  // Always include the standard placeholder address so Tally/seatbelt can badge any occurrence
+  const placeholderAddresses: string[] = [DEFAULT_SIMULATION_ADDRESS];
+
+  const proposerIsPlaceholder =
+    getAddress(proposal.proposer) === getAddress(DEFAULT_SIMULATION_ADDRESS);
+  const executorIsPlaceholder = executor
+    ? getAddress(executor) === getAddress(DEFAULT_SIMULATION_ADDRESS)
+    : undefined;
+
+  // Get repository and Tenderly information
+  const { repoCommit, repoUrl } = getRepoInfo();
+  const tenderlyUrl = getTenderlyUrl(simulationId);
+
   // Create the structured report
+  // Generate plain-language summary using the new summary generator
+  // Pass L2 checks to enable detailed cross-chain summaries
+  const plainLanguageSummary = generateProposalSummary(
+    proposal,
+    checks,
+    simulation,
+    destinationChecks,
+  );
+
+  // Combine with simulation status for complete summary
+  const statusText =
+    status === 'success'
+      ? 'completed successfully'
+      : status === 'warning'
+        ? 'completed with warnings'
+        : status === 'inconclusive'
+          ? 'completed with inconclusive results'
+          : 'completed with errors';
+
   return {
     title,
     proposalText,
     status,
-    summary: `Simulation ${status === 'success' ? 'completed successfully' : status === 'warning' ? 'completed with warnings' : 'completed with errors'} for proposal: "${title}".`,
+    summary: `${plainLanguageSummary}. Simulation ${statusText}.`,
     checks: formattedChecks,
     stateChanges: extractStateChanges(checks),
     events: extractEvents(checks),
@@ -363,14 +522,27 @@ function generateStructuredReport(
     metadata: {
       proposalId: formatProposalId(governorType, proposal.id!),
       proposer: proposal.proposer,
+      proposerIsPlaceholder,
       governorAddress,
       executor,
+      executorIsPlaceholder,
       simulationBlockNumber: blocks.current.number?.toString() ?? 'unknown',
       simulationTimestamp: blocks.current.timestamp.toString(),
       proposalCreatedAtBlockNumber: proposalCreatedBlock?.number?.toString() ?? 'unknown',
       proposalCreatedAtTimestamp: proposalCreatedBlock?.timestamp?.toString() ?? 'unknown',
       proposalExecutedAtBlockNumber: proposalExecutedBlock?.number?.toString(),
       proposalExecutedAtTimestamp: proposalExecutedBlock?.timestamp?.toString(),
+      // Extended metadata for Tally integration
+      schemaVersion: 1,
+      chainId: targetChainId,
+      chainName: getChainName(targetChainId),
+      blockExplorerBaseUrl,
+      simulationType,
+      placeholderAddresses,
+      // Repository and simulation links for Issue #92
+      repoCommit,
+      repoUrl,
+      tenderlyUrl,
     },
   };
 }
@@ -392,6 +564,9 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
+    chainId,
+    simulationType,
+    simulation,
   } = params;
 
   try {
@@ -406,7 +581,8 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
       description: proposal.description,
     };
 
-    // Generate the structured report for main chain
+    // Generate the structured report with simulation ID and L2 checks for cross-chain summaries
+    const simulationId = simulation?.simulation?.id;
     const structuredReport = generateStructuredReport(
       governorType,
       blocks,
@@ -416,6 +592,11 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
       executor,
       proposalCreatedBlock,
       proposalExecutedBlock,
+      chainId,
+      simulationType,
+      simulationId,
+      simulation,
+      destinationChecks,
     );
 
     // Add cross-chain slither results to the structured report
@@ -494,6 +675,10 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
+    chainId,
+    simulationType,
+    simulation,
+    coverage,
   } = params;
   console.log(`[Report] Generating report for proposal ${proposal.id} (${proposal.proposalId})`);
   console.log(`[Report] Output directory: ${outputDir}`);
@@ -529,7 +714,7 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
       .process(baseReport),
   );
 
-  // Generate the structured report for JSON output
+  // Generate the structured report for JSON output with L2 checks for cross-chain summaries
   const structuredReport = generateStructuredReport(
     governorType,
     blocks,
@@ -539,7 +724,17 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
+    chainId,
+    simulationType,
+    simulation?.simulation?.id,
+    simulation,
+    destinationChecks,
   );
+
+  // Add coverage data to the structured report if available
+  if (coverage) {
+    structuredReport.coverage = coverage;
+  }
 
   // Save off all reports. The Markdown and PDF reports use the `markdownReport`.
   await Promise.all([
@@ -564,6 +759,11 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     ),
   ]);
 
+  // Write standalone coverage JSON file if coverage data is available
+  if (coverage) {
+    writeCoverageJson(coverage, outputDir, id);
+  }
+
   // Write simulation results JSON for both SIM_NAME and bulk modes
   const simulationResultsPath = process.env.SIM_NAME
     ? join(dirname(__dirname), 'frontend', 'public', 'simulation-results.json') // SIM_NAME mode: frontend directory
@@ -582,7 +782,19 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
+    chainId,
+    simulationType,
+    simulation,
   });
+}
+
+/**
+ * Write standalone coverage JSON file
+ */
+function writeCoverageJson(coverage: CoverageData, outputDir: string, proposalId: string): void {
+  const coveragePath = `${outputDir}/${proposalId}-coverage.json`;
+  writeFileSync(coveragePath, JSON.stringify(coverage, null, 2));
+  console.log(`[Report] Coverage JSON written to: ${coveragePath}`);
 }
 
 /**
@@ -605,6 +817,8 @@ async function toMarkdownProposalReport(
   if (!blocks.current.number) throw new Error('Current block number is null');
 
   // Generate the report. We insert an empty table of contents header which is populated later using remark-toc.
+  const isPlaceholderProposer = getAddress(proposer) === getAddress(DEFAULT_SIMULATION_ADDRESS);
+
   const report = `
 # ${getProposalTitle(description.trim())}
 
@@ -613,7 +827,7 @@ _Updated as of block [${blocks.current.number}](https://etherscan.io/block/${blo
   )}_
 
 - ID: ${formatProposalId(governorType, id!)}
-- Proposer: ${toAddressLink(proposer)}
+- Proposer: ${toAddressLink(proposer)}${isPlaceholderProposer ? ' (placeholder simulation address)' : ''}
 - Start Block: ${startBlock} (${
     blocks.start
       ? formatTime(blocks.start.timestamp)
@@ -764,20 +978,6 @@ ${errors ? `- Errors:\n${errors}` : ''}${l2Events}${checkResults}`;
 }
 
 /**
- * Get human-readable chain name from chain ID
- */
-function getChainName(chainId: number): string {
-  const chainNames: Record<number, string> = {
-    42161: 'Arbitrum One',
-    10: 'Optimism',
-    137: 'Polygon',
-    100: 'Gnosis Chain',
-    1: 'Ethereum Mainnet',
-  };
-  return chainNames[chainId] || `Chain ${chainId}`;
-}
-
-/**
  * Intra-doc links are broken if the header has emojis, so we fix that here.
  * @dev This is a remark plugin, see the remark docs for more info on how it works.
  */
@@ -792,6 +992,8 @@ function remarkFixEmojiLinks() {
           node.url = node.url.replace('--passed', '-✅-passed');
         } else if (isInternalLink && node.url.endsWith('--failed')) {
           node.url = node.url.replace('--failed', '-❌-failed');
+        } else if (isInternalLink && node.url.endsWith('--skipped')) {
+          node.url = node.url.replace('--skipped', '-⏭️-skipped');
         }
       }
     }) as Visitor<Link>);

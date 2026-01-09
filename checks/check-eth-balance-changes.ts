@@ -1,6 +1,6 @@
 import { getAddress } from 'viem';
 import type { AssetChange, BalanceChange, ProposalCheck, TenderlyContract } from '../types';
-import { getContractNameFromTenderly } from '../utils/clients/tenderly';
+import { DEFAULT_SIMULATION_ADDRESS, getContractNameFromTenderly } from '../utils/clients/tenderly';
 
 /**
  * Reports all ETH balance changes from the proposal
@@ -11,10 +11,16 @@ export const checkEthBalanceChanges: ProposalCheck = {
     const info: string[] = [];
     const warnings: string[] = [];
     const errors: string[] = [];
+
     const blockExplorerUrl = deps.chainConfig.blockExplorer.baseUrl;
 
     if (!sim.transaction.transaction_info.asset_changes) {
-      return { info: ['No ETH transfers detected'], warnings, errors };
+      // No asset changes data available - check ran but found nothing to report
+      return {
+        info: ['No ETH balance changes detected in this proposal.'],
+        warnings,
+        errors,
+      };
     }
 
     // Filter for ETH transfers
@@ -23,7 +29,12 @@ export const checkEthBalanceChanges: ProposalCheck = {
     );
 
     if (ethTransfers.length === 0) {
-      return { info: ['No ETH transfers detected'], warnings, errors };
+      // Check ran successfully - no ETH transfers to report
+      return {
+        info: ['No ETH balance changes detected in this proposal.'],
+        warnings,
+        errors,
+      };
     }
 
     // Process ETH transfers
@@ -111,13 +122,20 @@ function generateTransferMessages(
     const toContract = findContractByAddress(to);
 
     // Format the from/to descriptions more clearly with block explorer links
-    const fromName = fromContract
+    let fromName = fromContract
       ? `[${getContractNameFromTenderly(fromContract).split(' at ')[0]}](${blockExplorerUrl}/address/${from})`
       : `[EOA (${from})](${blockExplorerUrl}/address/${from})`;
-
-    const toName = toContract
+    let toName = toContract
       ? `[${getContractNameFromTenderly(toContract).split(' at ')[0]}](${blockExplorerUrl}/address/${to})`
       : `[EOA (${to})](${blockExplorerUrl}/address/${to})`;
+
+    // Annotate simulation placeholder EOA clearly
+    if (getAddress(from) === getAddress(DEFAULT_SIMULATION_ADDRESS)) {
+      fromName += ' (simulation placeholder)';
+    }
+    if (getAddress(to) === getAddress(DEFAULT_SIMULATION_ADDRESS)) {
+      toName += ' (simulation placeholder)';
+    }
 
     // Create appropriate message based on the transfer context
     let message = '';
@@ -188,7 +206,10 @@ function addBalanceChangesTable(
       const contract = findContractByAddress(address);
 
       // Format description based on whether it's a contract or EOA
-      const description = contract ? getContractNameFromTenderly(contract).split(' at ')[0] : 'EOA';
+      let description = contract ? getContractNameFromTenderly(contract).split(' at ')[0] : 'EOA';
+      if (getAddress(address) === getAddress(DEFAULT_SIMULATION_ADDRESS)) {
+        description += ' (simulation placeholder)';
+      }
 
       // Get the net ETH change for this address
       const netChange = netEthChanges.get(addressLower) || 0;

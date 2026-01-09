@@ -79,7 +79,9 @@ All three simulations should complete successfully without failures for the syst
 ## Pull Request Guidelines
 
 **Repository Setup:**
-- This is a fork of the main Uniswap governance-seatbelt repository
-- Always create PRs against this fork: https://github.com/uniswapfoundation/governance-seatbelt/pulls
-- Do NOT create PRs against the upstream Uniswap repository unless specifically requested
+- **IMPORTANT**: This repository (uniswapfoundation/governance-seatbelt) is a FORK of the upstream Uniswap repository
+- **Upstream**: https://github.com/Uniswap/governance-seatbelt (original)
+- **Fork (THIS REPO)**: https://github.com/uniswapfoundation/governance-seatbelt (our working copy)
+- **Always create PRs against THIS FORK**: https://github.com/uniswapfoundation/governance-seatbelt/pulls
+- **Do NOT create PRs against the upstream Uniswap repository** unless specifically requested
 - The fork serves as the primary development repository for this project

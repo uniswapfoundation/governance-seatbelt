@@ -55,7 +55,10 @@ const TENDERLY_FETCH_OPTIONS = {
   headers: { 'X-Access-Key': TENDERLY_ACCESS_TOKEN },
 };
 
-const DEFAULT_FROM = '0xD73a92Be73EfbFcF3854433A5FcbAbF9c1316073' as Address;
+// Placeholder sender for simulations.
+// IMPORTANT: This MUST remain an empty EOA on mainnet (no code, nonce = 0).
+// The test at tests/placeholder-constant.test.ts enforces this invariant.
+export const DEFAULT_SIMULATION_ADDRESS = '0x0000000000000000000000000000000000001234' as Address;
 
 type TenderlyError = {
   statusCode?: number;
@@ -140,7 +143,7 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
   const proposal: ProposalEvent = {
     id: proposalId, // Bravo governor
     proposalId, // OZ governor (for simplicity we just include both ID formats)
-    proposer: DEFAULT_FROM,
+    proposer: DEFAULT_SIMULATION_ADDRESS,
     startBlock,
     endBlock: startBlock + 1n,
     description,
@@ -156,7 +159,7 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
   const votingTokenSupply = await votingToken.read.totalSupply(); // used to manipulate vote count
 
   // Set `from` arbitrarily.
-  const from = DEFAULT_FROM;
+  const from = DEFAULT_SIMULATION_ADDRESS;
 
   // Run simulation at a recent block rather than using artificial proposal.endBlock
   // This ensures we use current contract state and avoid potential cross-chain conflicts
@@ -250,7 +253,7 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
     simTimestamp,
     storageObj,
     executeInputs,
-    saveIfFails: false,
+    saveIfFails: true,
   });
 
   // Handle ETH transfers if needed
@@ -333,7 +336,7 @@ async function simulateProposed(config: SimulationConfigProposed): Promise<Simul
   const votingTokenSupply = await votingToken.read.totalSupply(); // used to manipulate vote count
 
   // Set `from` arbitrarily.
-  const from = DEFAULT_FROM;
+  const from = DEFAULT_SIMULATION_ADDRESS;
 
   // For Bravo governors, we use the block right after the proposal ends, and for OZ
   // governors we arbitrarily use the next block number.
@@ -427,7 +430,7 @@ async function simulateProposed(config: SimulationConfigProposed): Promise<Simul
   const formattedProposal: ProposalEvent = {
     id: proposalId,
     proposalId,
-    proposer: proposalCreatedEvent.args.proposer ?? DEFAULT_FROM,
+    proposer: proposalCreatedEvent.args.proposer ?? DEFAULT_SIMULATION_ADDRESS,
     startBlock: proposalCreatedEvent.args.startBlock ?? 0n,
     endBlock: proposalCreatedEvent.args.endBlock ?? 0n,
     description: proposalCreatedEvent.args.description ?? '',
@@ -525,8 +528,8 @@ async function simulateExecuted(config: SimulationConfigExecuted): Promise<Simul
     gas: Number(tx.gas),
     gas_price: tx.gasPrice?.toString(),
     value: tx.value.toString(),
-    save_if_fails: false, // Set to true to save the simulation to your Tenderly dashboard if it fails.
-    save: false, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
+    save_if_fails: true, // Set to true to save the simulation to your Tenderly dashboard if it fails.
+    save: true, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
     generate_access_list: true,
   };
   const sim = await sendSimulation(simulationPayload);
@@ -622,14 +625,14 @@ export async function handleCrossChainSimulations(
       try {
         const destinationPayload: TenderlyPayload = {
           network_id: message.destinationChainId.toString() as TenderlyPayload['network_id'],
-          from: message.l2FromAddress ?? DEFAULT_FROM,
+          from: message.l2FromAddress ?? DEFAULT_SIMULATION_ADDRESS,
           to: message.l2TargetAddress,
           input: message.l2InputData,
           gas: BLOCK_GAS_LIMIT,
           gas_price: '0',
           value: message.l2Value,
           save_if_fails: true,
-          save: false,
+          save: true,
         };
 
         // Log the payload before sending
@@ -756,7 +759,7 @@ function buildSimulationPayload(params: SimulationPayloadParams): TenderlyPayloa
     gas_price: '0',
     value: '0', // Will be updated by handleETHValueRequirements if needed
     save_if_fails: saveIfFails, // Set to true to save the simulation to your Tenderly dashboard if it fails.
-    save: false, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
+    save: true, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
     generate_access_list: true, // not required, but useful as a sanity check to ensure consistency in the simulation response
     block_header: {
       // this data represents what block.number and block.timestamp should return in the EVM during the simulation
@@ -813,7 +816,7 @@ function buildGovernorStateOverrides(params: GovernorOverrideParams): Record<str
     // Add full proposal data for new proposals
     if (targets && values && signatures && calldatas && proposal) {
       overrides[`${proposalKey}.id`] = proposalId.toString();
-      overrides[`${proposalKey}.proposer`] = DEFAULT_FROM;
+      overrides[`${proposalKey}.proposer`] = DEFAULT_SIMULATION_ADDRESS;
       overrides[`${proposalKey}.startBlock`] = proposal.startBlock.toString();
       overrides[`${proposalKey}.endBlock`] = proposal.endBlock.toString();
       overrides[`${proposalKey}.targets.length`] = targets.length.toString();
