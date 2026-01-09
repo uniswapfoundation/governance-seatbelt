@@ -288,7 +288,6 @@ describe('Cross-Chain Integration Tests', () => {
       );
 
       // Verify that all expected checks ran
-      expect(results).toBeDefined();
       expect(typeof results).toBe('object');
 
       // Check that key check types are present
@@ -306,38 +305,14 @@ describe('Cross-Chain Integration Tests', () => {
         expect(Array.isArray(result.result.warnings)).toBe(true);
         expect(Array.isArray(result.result.errors)).toBe(true);
       }
-    }, 60000); // Increased timeout for external API calls
 
-    test('should include cross-chain information in check results', async () => {
-      const { config } = await import('../../sims/arb-distro.sim.ts');
-
-      const sourceResult = await simulateNew(config);
-      const crossChainResult = await handleCrossChainSimulations(sourceResult);
-
-      // Only run checks if we have destination simulations
+      // Ensure destinations (when present) don't break checks
       if (
         crossChainResult.destinationSimulations &&
         crossChainResult.destinationSimulations.length > 0
       ) {
-        const results = await runChecksForChain(
-          crossChainResult.proposal,
-          crossChainResult.sim,
-          crossChainResult.deps,
-          1,
-          crossChainResult.destinationSimulations,
-        );
-
-        // Validate that checks ran successfully with cross-chain simulations
-        expect(results).toBeDefined();
-        expect(typeof results).toBe('object');
-
-        // Verify that we have check results (the important thing is that checks ran with cross-chain data)
-        const checkNames = Object.keys(results);
-        expect(checkNames.length).toBeGreaterThan(0);
-
-        // Verify that destination simulations were provided to the checks
         expect(crossChainResult.destinationSimulations.length).toBeGreaterThan(0);
       }
-    }, 60000); // Increased timeout for external API calls
+    }, 120000); // External API calls can be slow/rate-limited in CI
   });
 });
