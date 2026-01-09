@@ -1,23 +1,15 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import type { SimulationConfigNew } from '../../types';
-import { simulateNew } from '../../utils/clients/tenderly';
-import { handleCrossChainSimulations } from '../../utils/clients/tenderly';
+import { handleCrossChainSimulations, simulateNew } from '../../utils/clients/tenderly';
+import {
+  getArbDistroCrossChainResult,
+  getOptimismBridgeCrossChainResult,
+} from './cross-chain-fixtures';
 
 describe('Cross-Chain Simulation Metadata Tests', () => {
   describe('Simulation Result Structure Validation', () => {
-    let arbConfig: SimulationConfigNew;
-    let opConfig: SimulationConfigNew;
-
-    beforeAll(async () => {
-      const { config: arbDistroConfig } = await import('../../sims/arb-distro.sim.ts');
-      const { config: opBridgeConfig } = await import('../../sims/optimism-bridge-test.sim.ts');
-      arbConfig = arbDistroConfig;
-      opConfig = opBridgeConfig;
-    });
-
     test('should contain valid metadata for Arbitrum cross-chain simulations', async () => {
-      const sourceResult = await simulateNew(arbConfig);
-      const crossChainResult = await handleCrossChainSimulations(sourceResult);
+      const crossChainResult = await getArbDistroCrossChainResult();
 
       // Validate main simulation metadata
       expect(crossChainResult.sim).toBeDefined();
@@ -61,8 +53,7 @@ describe('Cross-Chain Simulation Metadata Tests', () => {
     }, 90000); // Increased timeout for external API calls
 
     test('should contain valid metadata for Optimism cross-chain simulations', async () => {
-      const sourceResult = await simulateNew(opConfig);
-      const crossChainResult = await handleCrossChainSimulations(sourceResult);
+      const crossChainResult = await getOptimismBridgeCrossChainResult();
 
       // Validate main simulation metadata
       expect(crossChainResult.sim).toBeDefined();
@@ -97,8 +88,7 @@ describe('Cross-Chain Simulation Metadata Tests', () => {
     }, 90000); // Increased timeout for external API calls
 
     test('should validate simulation timing and block metadata', async () => {
-      const sourceResult = await simulateNew(arbConfig);
-      const crossChainResult = await handleCrossChainSimulations(sourceResult);
+      const crossChainResult = await getArbDistroCrossChainResult();
 
       // Validate block metadata
       expect(crossChainResult.latestBlock).toBeDefined();
@@ -117,10 +107,7 @@ describe('Cross-Chain Simulation Metadata Tests', () => {
 
   describe('Cross-Chain Simulation State Validation', () => {
     test('should track simulation success/failure states', async () => {
-      const { config } = await import('../../sims/arb-distro.sim.ts');
-
-      const sourceResult = await simulateNew(config);
-      const crossChainResult = await handleCrossChainSimulations(sourceResult);
+      const crossChainResult = await getArbDistroCrossChainResult();
 
       // Validate main simulation state
       expect(crossChainResult.sim.transaction.status).toBeDefined();
@@ -177,11 +164,8 @@ describe('Cross-Chain Simulation Metadata Tests', () => {
 
   describe('Cross-Chain Dependencies Validation', () => {
     test('should validate dependency tracking in cross-chain simulations', async () => {
-      const { config } = await import('../../sims/arb-distro.sim.ts');
-
       try {
-        const sourceResult = await simulateNew(config);
-        const crossChainResult = await handleCrossChainSimulations(sourceResult);
+        const crossChainResult = await getArbDistroCrossChainResult();
 
         // Validate deps structure - this should always exist
         expect(crossChainResult.deps).toBeDefined();
@@ -210,10 +194,7 @@ describe('Cross-Chain Simulation Metadata Tests', () => {
 
   describe('Cross-Chain Message Integrity', () => {
     test('should maintain message integrity across simulation phases', async () => {
-      const { config } = await import('../../sims/arb-distro.sim.ts');
-
-      const sourceResult = await simulateNew(config);
-      const crossChainResult = await handleCrossChainSimulations(sourceResult);
+      const crossChainResult = await getArbDistroCrossChainResult();
 
       if (
         crossChainResult.destinationSimulations &&
@@ -246,10 +227,7 @@ describe('Cross-Chain Simulation Metadata Tests', () => {
     }, 90000); // Increased timeout for external API calls
 
     test('should validate L2 address aliasing for Arbitrum', async () => {
-      const { config } = await import('../../sims/arb-distro.sim.ts');
-
-      const sourceResult = await simulateNew(config);
-      const crossChainResult = await handleCrossChainSimulations(sourceResult);
+      const crossChainResult = await getArbDistroCrossChainResult();
 
       if (
         crossChainResult.destinationSimulations &&
@@ -276,10 +254,7 @@ describe('Cross-Chain Simulation Metadata Tests', () => {
     }, 90000); // Increased timeout for external API calls
 
     test('should validate L2 address preservation for Optimism', async () => {
-      const { config } = await import('../../sims/optimism-bridge-test.sim.ts');
-
-      const sourceResult = await simulateNew(config);
-      const crossChainResult = await handleCrossChainSimulations(sourceResult);
+      const crossChainResult = await getOptimismBridgeCrossChainResult();
 
       if (
         crossChainResult.destinationSimulations &&
