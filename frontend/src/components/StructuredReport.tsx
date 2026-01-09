@@ -7,15 +7,149 @@ import type {
 } from '@/hooks/use-simulation-results';
 import {
   AlertTriangleIcon,
+  ArrowRightIcon,
   CheckCircleIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   ExternalLinkIcon,
   InfoIcon,
+  ShieldCheckIcon,
   SkipForwardIcon,
 } from 'lucide-react';
 import type React from 'react';
 import { useMemo, useState } from 'react';
+
+// --- Proxy Resolution Display Component ---
+interface ProxyItem {
+  type: 'eip1967' | 'beacon';
+  proxy: string;
+  beacon?: string;
+  implementation: string;
+  verification: string;
+}
+
+function parseProxyDetails(details: string): ProxyItem[] {
+  const items: ProxyItem[] = [];
+  const lines = details.split('\n').filter((l) => l.trim());
+
+  for (const line of lines) {
+    // Parse markdown links: [address](url)
+    const linkRegex = /\[([^\]]+)\]\([^)]+\)/g;
+    const addresses: string[] = [];
+    let match: RegExpExecArray | null;
+    match = linkRegex.exec(line);
+    while (match !== null) {
+      addresses.push(match[1]);
+      match = linkRegex.exec(line);
+    }
+
+    // Extract verification status from parentheses at end
+    const verificationMatch = line.match(/\(([^)]+)\)$/);
+    const verification = verificationMatch ? verificationMatch[1] : '';
+
+    if (line.includes('EIP-1967 proxy') && addresses.length >= 2) {
+      items.push({
+        type: 'eip1967',
+        proxy: addresses[0],
+        implementation: addresses[1],
+        verification,
+      });
+    } else if (line.includes('Beacon proxy') && addresses.length >= 3) {
+      items.push({
+        type: 'beacon',
+        proxy: addresses[0],
+        beacon: addresses[1],
+        implementation: addresses[2],
+        verification,
+      });
+    }
+  }
+
+  return items;
+}
+
+function ProxyResolutionDetails({ details }: { details: string }) {
+  const items = useMemo(() => parseProxyDetails(details), [details]);
+
+  if (items.length === 0) {
+    return (
+      <div className="text-sm text-muted-foreground py-2">
+        {details.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {items.map((item, idx) => (
+        <div
+          key={`${item.proxy}-${idx}`}
+          className="border border-border/50 rounded-lg bg-card/50 overflow-hidden"
+        >
+          {/* Header */}
+          <div className="px-4 py-2.5 border-b border-border/30 bg-muted/30">
+            <span className="text-[11px] font-medium tracking-wide uppercase text-muted-foreground">
+              {item.type === 'eip1967' ? 'EIP-1967 Proxy' : 'Beacon Proxy'}
+            </span>
+          </div>
+
+          {/* Content */}
+          <div className="px-4 py-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Proxy */}
+              <AddressChip address={item.proxy} label="Proxy" />
+
+              <ArrowRightIcon className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
+
+              {/* Beacon (if present) */}
+              {item.beacon && (
+                <>
+                  <AddressChip address={item.beacon} label="Beacon" />
+                  <ArrowRightIcon className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
+                </>
+              )}
+
+              {/* Implementation */}
+              <AddressChip address={item.implementation} label="Impl" />
+            </div>
+
+            {/* Verification Badge */}
+            {item.verification && (
+              <div className="mt-2.5 flex items-center gap-1.5">
+                <ShieldCheckIcon className="h-3.5 w-3.5 text-emerald-500" />
+                <span className="text-xs text-muted-foreground">{item.verification}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AddressChip({ address, label }: { address: string; label?: string }) {
+  const truncated = `${address.slice(0, 6)}...${address.slice(-4)}`;
+
+  return (
+    <a
+      href={`https://etherscan.io/address/${address}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/60 hover:bg-muted transition-colors"
+      title={address}
+    >
+      {label && (
+        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+          {label}
+        </span>
+      )}
+      <code className="text-xs font-mono text-foreground/80 group-hover:text-foreground">
+        {truncated}
+      </code>
+      <ExternalLinkIcon className="h-3 w-3 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
+    </a>
+  );
+}
 
 // Create a new StateChanges component for reuse
 interface StateChangesProps {
@@ -287,6 +421,9 @@ function ExpandableCheckItem({
 
   // Check if this is a state changes check
   const isStateChangesCheck = check.title.toLowerCase().includes('state changes');
+
+  // Check if this is a proxy resolution check
+  const isProxyResolutionCheck = check.title.toLowerCase().includes('proxy implementation');
 
   // Format the details content as React components
   const FormattedDetails = useMemo(() => {
@@ -611,6 +748,10 @@ function ExpandableCheckItem({
                   <span>No state changes available</span>
                 </div>
               )}
+            </div>
+          ) : isProxyResolutionCheck && check.details ? (
+            <div className="mt-4">
+              <ProxyResolutionDetails details={check.details} />
             </div>
           ) : (
             <div className="mt-4 whitespace-pre-wrap">{FormattedDetails}</div>
