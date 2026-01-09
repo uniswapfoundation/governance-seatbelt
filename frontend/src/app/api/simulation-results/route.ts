@@ -7,7 +7,7 @@ function readSimulationResults() {
   try {
     const filePath = path.join(process.cwd(), 'public', 'simulation-results.json');
     const fileContents = fs.readFileSync(filePath, 'utf8');
-    return JSON.parse(fileContents);
+    return JSON.parse(fileContents) as unknown;
   } catch (error) {
     console.error('Error reading simulation results:', error);
     return null;
@@ -19,12 +19,14 @@ export async function GET() {
     // Read the simulation results file
     const results = readSimulationResults();
 
-    if (!results || !results.length) {
+    const normalizedResults = Array.isArray(results) ? results : results ? [results] : null;
+
+    if (!normalizedResults?.length) {
       return NextResponse.json({ error: 'No simulation results found' }, { status: 404 });
     }
 
     // Return the results directly
-    return NextResponse.json(results);
+    return NextResponse.json(normalizedResults);
   } catch (error) {
     console.error('Error in simulation results API:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
