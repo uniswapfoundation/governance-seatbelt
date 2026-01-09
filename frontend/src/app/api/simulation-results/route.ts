@@ -23,16 +23,16 @@ export async function GET() {
       return NextResponse.json({ error: 'No simulation results found' }, { status: 404 });
     }
 
-    // Backwards/forwards compatibility:
-    // - some writers emit a single object
-    // - the frontend expects an array
-    const normalized = Array.isArray(results) ? results : [results];
-    if (normalized.length === 0) {
+    // Handle both array and single object formats
+    // Return as array for consistency with frontend expectations
+    const resultsArray = Array.isArray(results) ? results : [results];
+
+    if (resultsArray.length === 0) {
       return NextResponse.json({ error: 'No simulation results found' }, { status: 404 });
     }
 
     // Return the results directly
-    return NextResponse.json(normalized);
+    return NextResponse.json(resultsArray);
   } catch (error) {
     console.error('Error in simulation results API:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

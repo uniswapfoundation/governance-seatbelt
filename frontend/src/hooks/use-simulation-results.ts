@@ -49,7 +49,7 @@ export interface SimulationCalldata {
 export interface StructuredSimulationReport {
   title: string;
   proposalText: string;
-  status: 'success' | 'warning' | 'error';
+  status: 'success' | 'warning' | 'error' | 'inconclusive';
   summary: string;
   checks: SimulationCheck[];
   stateChanges: SimulationStateChange[];
@@ -82,10 +82,33 @@ export interface StructuredSimulationReport {
   >;
   calldata?: SimulationCalldata;
   metadata: {
-    blockNumber: string;
-    timestamp: string;
+    // Legacy fields for backwards compatibility
+    blockNumber?: string;
+    timestamp?: string;
+    // Core fields
     proposalId: string;
     proposer: Address;
+    proposerIsPlaceholder?: boolean;
+    governorAddress?: string;
+    executor?: Address;
+    executorIsPlaceholder?: boolean;
+    simulationBlockNumber?: string;
+    simulationTimestamp?: string;
+    proposalCreatedAtBlockNumber?: string;
+    proposalCreatedAtTimestamp?: string;
+    proposalExecutedAtBlockNumber?: string;
+    proposalExecutedAtTimestamp?: string;
+    // Extended metadata for Tally integration
+    schemaVersion?: number;
+    chainId?: number;
+    chainName?: string;
+    blockExplorerBaseUrl?: string;
+    simulationType?: 'executed' | 'proposed' | 'new';
+    placeholderAddresses?: string[];
+    // Repository and simulation links for Issue #92
+    repoCommit?: string;
+    repoUrl?: string;
+    tenderlyUrl?: string;
   };
 }
 
