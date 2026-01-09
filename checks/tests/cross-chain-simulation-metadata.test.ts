@@ -310,27 +310,31 @@ describe('Cross-Chain Simulation Metadata Tests', () => {
   describe('Simulation Performance Metrics', () => {
     const perfTest = process.env.CI ? test.skip : test;
 
-    perfTest('should track simulation execution times', async () => {
-      const { config } = await import('../../sims/arb-distro.sim.ts');
+    perfTest(
+      'should track simulation execution times',
+      async () => {
+        const { config } = await import('../../sims/arb-distro.sim.ts');
 
-      const startTime = performance.now();
-      const sourceResult = await simulateNew(config);
-      const sourceTime = performance.now() - startTime;
+        const startTime = performance.now();
+        const sourceResult = await simulateNew(config);
+        const sourceTime = performance.now() - startTime;
 
-      const crossChainStartTime = performance.now();
-      const _crossChainResult = await handleCrossChainSimulations(sourceResult);
-      const crossChainTime = performance.now() - crossChainStartTime;
+        const crossChainStartTime = performance.now();
+        const _crossChainResult = await handleCrossChainSimulations(sourceResult);
+        const crossChainTime = performance.now() - crossChainStartTime;
 
-      // Validate timing metrics
-      expect(sourceTime).toBeGreaterThan(0);
-      expect(crossChainTime).toBeGreaterThan(0);
+        // Validate timing metrics
+        expect(sourceTime).toBeGreaterThan(0);
+        expect(crossChainTime).toBeGreaterThan(0);
 
-      // Cross-chain handling should complete in reasonable time
-      expect(crossChainTime).toBeLessThan(60000); // 60 seconds max
+        // Cross-chain handling should complete in reasonable time
+        expect(crossChainTime).toBeLessThan(60000); // 60 seconds max
 
-      // Performance validation - ensure both operations complete in reasonable time
-      expect(sourceTime).toBeLessThan(30000); // 30 seconds max for source simulation
-      expect(crossChainTime).toBeLessThan(60000); // 60 seconds max for cross-chain handling
-    }, 120000); // Increased timeout for performance tests
+        // Performance validation - ensure both operations complete in reasonable time
+        expect(sourceTime).toBeLessThan(30000); // 30 seconds max for source simulation
+        expect(crossChainTime).toBeLessThan(60000); // 60 seconds max for cross-chain handling
+      },
+      120000,
+    ); // Increased timeout for performance tests
   });
 });
