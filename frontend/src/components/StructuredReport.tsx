@@ -1,5 +1,3 @@
-'use client';
-
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -237,14 +235,10 @@ export function StructuredReport({ report }: StructuredReportProps) {
 
   return (
     <div className="w-full">
-      {/* NEW: Decision Header with key metrics */}
       <DecisionHeader report={report} />
 
       <div className="border border-muted rounded-md p-6">
-        {/* KEPT: Simulation warning banner */}
         <SimulationWarningBanner metadata={report.metadata} />
-
-        {/* REMOVED: Old header section - now in DecisionHeader */}
 
         <Tabs defaultValue="overview" className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-4">
@@ -313,7 +307,6 @@ export function StructuredReport({ report }: StructuredReportProps) {
                     <div className="text-sm text-muted-foreground">Network</div>
                     <div className="font-medium">{report.metadata.chainName || 'Ethereum'}</div>
                   </div>
-                  {/* Proposer with placeholder badge */}
                   <div className="bg-muted p-3 rounded-md col-span-2">
                     <div className="text-sm text-muted-foreground">Proposer</div>
                     <div className="font-medium flex items-center gap-2 flex-wrap">
@@ -324,14 +317,12 @@ export function StructuredReport({ report }: StructuredReportProps) {
                           report.metadata.addressLabels,
                         )}
                         blockExplorerUrl={getExplorerUrl(report.metadata)}
-                        showLink={false}
                         linkMode="inline"
                         className="text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline"
                       />
                       {report.metadata.proposerIsPlaceholder && <SimulationPlaceholderBadge />}
                     </div>
                   </div>
-                  {/* Executor with placeholder badge (only show if available) */}
                   {report.metadata.executor && (
                     <div className="bg-muted p-3 rounded-md col-span-2">
                       <div className="text-sm text-muted-foreground">
@@ -345,7 +336,6 @@ export function StructuredReport({ report }: StructuredReportProps) {
                             report.metadata.addressLabels,
                           )}
                           blockExplorerUrl={getExplorerUrl(report.metadata)}
-                          showLink={false}
                           linkMode="inline"
                           className="text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline"
                         />
@@ -353,7 +343,6 @@ export function StructuredReport({ report }: StructuredReportProps) {
                       </div>
                     </div>
                   )}
-                  {/* Governor address (only show if available) */}
                   {report.metadata.governorAddress && (
                     <div className="bg-muted p-3 rounded-md col-span-2">
                       <div className="text-sm text-muted-foreground">Governor</div>
@@ -365,7 +354,6 @@ export function StructuredReport({ report }: StructuredReportProps) {
                             report.metadata.addressLabels,
                           )}
                           blockExplorerUrl={getExplorerUrl(report.metadata)}
-                          showLink={false}
                           linkMode="inline"
                           className="text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline"
                         />
