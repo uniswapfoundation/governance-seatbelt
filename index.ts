@@ -5,7 +5,7 @@
 import { existsSync } from 'node:fs';
 import { getAddress } from 'viem';
 import { generateAndSaveReports } from './presentation/report';
-import { runChecksForChain } from './run-checks';
+import { buildCoverageFromResults, buildCoverageMetadata, runChecksForChain } from './run-checks';
 import type {
   AllCheckResults,
   GovernorType,
@@ -18,7 +18,7 @@ import type {
 import { cacheProposal, getCachedProposal, needsSimulation } from './utils/cache/proposalCache';
 import { getChainConfig, publicClient } from './utils/clients/client';
 import { handleCrossChainSimulations, simulate } from './utils/clients/tenderly';
-import { DAO_NAME, GOVERNOR_ADDRESS, SIM_NAME } from './utils/constants';
+import { DAO_NAME, GOVERNOR_ADDRESS, REPORTS_OUTPUT_DIRECTORY, SIM_NAME } from './utils/constants';
 import {
   formatProposalId,
   getGovernor,
@@ -27,6 +27,14 @@ import {
   inferGovernorType,
 } from './utils/contracts/governor';
 import { PROPOSAL_STATES } from './utils/contracts/governor-bravo';
+
+/**
+ * @notice Run the complete simulation pipeline (source + cross-chain)
+ */
+async function runSimulationPipeline(config: SimulationConfig): Promise<SimulationResult> {
+  const sourceResult = await simulate(config);
+  return await handleCrossChainSimulations(sourceResult);
+}
 
 /**
  * @notice Fetch block data for proposal start and end blocks
@@ -132,8 +140,33 @@ async function processSimulation(
     destinationSimulations,
   );
 
+  // Build coverage data - include mainnet (chainId 1) and all L2 chains
+  const coverageMetadata = buildCoverageMetadata();
+  const coverage = buildCoverageFromResults(mainnetResults, coverageMetadata, 1);
+
+  // Merge L2 check coverage into the main coverage
+  for (const [chainIdStr, destResults] of Object.entries(destinationChecks)) {
+    const chainId = Number(chainIdStr);
+    const l2Coverage = buildCoverageFromResults(destResults, coverageMetadata, chainId);
+
+    // Append L2 checks to the main coverage
+    coverage.checks.push(...l2Coverage.checks);
+
+    // Aggregate summary totals
+    coverage.summary.total += l2Coverage.summary.total;
+    coverage.summary.ran += l2Coverage.summary.ran;
+    coverage.summary.skipped += l2Coverage.summary.skipped;
+    coverage.summary.failed += l2Coverage.summary.failed;
+    coverage.summary.inferredSkips += l2Coverage.summary.inferredSkips;
+  }
+
+  // Log coverage summary
+  console.log(
+    `  [Coverage] Total: ${coverage.summary.total}, Ran: ${coverage.summary.ran}, Skipped: ${coverage.summary.skipped}, Failed: ${coverage.summary.failed}`,
+  );
+
   // Generate reports
-  const dir = `./reports/${config.daoName}/${config.governorAddress}`;
+  const dir = `./${REPORTS_OUTPUT_DIRECTORY}/${config.daoName}/${config.governorAddress}`;
   await generateAndSaveReports({
     governorType,
     blocks,
@@ -146,6 +179,10 @@ async function processSimulation(
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
+    chainId: finalDeps.chainConfig.chainId,
+    simulationType: config.type,
+    simulation: sim,
+    coverage,
   });
 
   // Prepare simulation data
@@ -195,14 +232,9 @@ async function main() {
 
     governorType = await inferGovernorType(config.governorAddress);
 
-    // 1. Run source simulation
+    // Run simulation pipeline (source + cross-chain)
     console.log(`[Index] Simulating source chain for ${SIM_NAME}...`);
-    // Assume simulate returns the full SimulationResult including deps
-    const sourceResult = await simulate(config);
-
-    // 2. Handle potential cross-chain messages
-    console.log(`[Index] Handling cross-chain messages for ${SIM_NAME}...`);
-    const finalResult = await handleCrossChainSimulations(sourceResult);
+    const finalResult = await runSimulationPipeline(config);
     console.log(`[Index] Cross-chain handling complete for ${SIM_NAME}.`);
 
     const { sim, proposal, deps } = finalResult;
@@ -291,7 +323,7 @@ async function main() {
       );
 
       if (cachedData) {
-        const reportPath = `./reports/${DAO_NAME}/${GOVERNOR_ADDRESS}/${cachedProposal.id}.md`;
+        const reportPath = `./${REPORTS_OUTPUT_DIRECTORY}/${DAO_NAME}/${GOVERNOR_ADDRESS}/${cachedProposal.id}.md`;
         if (existsSync(reportPath)) {
           console.log(`  Using cached report for proposal ${cachedProposal.id}`);
         } else {
@@ -335,12 +367,9 @@ async function main() {
           proposalId: simProposal.id,
         };
 
-        // 1. Run source simulation
-        const sourceResult = await simulate(config);
-
-        // 2. Handle potential cross-chain messages
+        // Run simulation pipeline (source + cross-chain)
         console.log(`  Handling cross-chain messages for proposal ${simProposal.id}...`);
-        const finalResult = await handleCrossChainSimulations(sourceResult);
+        const finalResult = await runSimulationPipeline(config);
 
         // Check if simulations failed
         if (!finalResult.sim.transaction.status) {

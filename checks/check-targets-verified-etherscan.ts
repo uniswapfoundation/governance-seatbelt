@@ -1,14 +1,15 @@
 import { type PublicClient, getAddress } from 'viem';
 import { toAddressLink } from '../presentation/report';
 import type { CallTrace, ProposalCheck, TenderlySimulation } from '../types';
+import { BlockExplorerFactory } from '../utils/clients/block-explorers/factory';
 import type { ChainConfig } from '../utils/clients/client';
-import { isContractVerified } from '../utils/clients/etherscan';
+import { DEFAULT_SIMULATION_ADDRESS } from '../utils/clients/tenderly';
 
 /**
  * Check all targets with code are verified on block explorer
  */
-export const checkTargetsVerifiedEtherscan: ProposalCheck = {
-  name: 'Check all targets are verified on Etherscan',
+export const checkTargetsVerifiedOnBlockExplorer: ProposalCheck = {
+  name: 'Check all targets are verified on block explorer',
   async checkProposal(proposal, _sim, deps, l2Simulations) {
     const isL2Chain = deps.chainConfig?.chainId !== 1;
     const hasL2Data = l2Simulations && l2Simulations.length > 0;
@@ -20,9 +21,10 @@ export const checkTargetsVerifiedEtherscan: ProposalCheck = {
       targets = extractL2Targets(l2Simulations);
       if (targets.length === 0) {
         return {
-          info: ['No L2 targets found in cross-chain simulation'],
+          info: [],
           warnings: [],
           errors: [],
+          skipped: { reason: 'No L2 targets found in cross-chain simulation' },
         };
       }
     } else {
@@ -40,9 +42,19 @@ export const checkTargetsVerifiedEtherscan: ProposalCheck = {
 /**
  * Check all touched contracts with code are verified on Etherscan
  */
-export const checkTouchedContractsVerifiedEtherscan: ProposalCheck = {
-  name: 'Check all touched contracts are verified on Etherscan',
+export const checkTouchedContractsVerifiedOnBlockExplorer: ProposalCheck = {
+  name: 'Check all touched contracts are verified on block explorer',
   async checkProposal(_, sim, deps) {
+    // Only check touched contracts on the main chain (chain 1), not on L2 simulations
+    if (deps.chainConfig.chainId !== 1) {
+      return {
+        info: [],
+        warnings: [],
+        errors: [],
+        skipped: { reason: 'Touched contracts verification skipped for L2 simulations' },
+      };
+    }
+
     const info = await checkVerificationStatuses(
       sim.transaction.addresses.map(getAddress),
       deps.publicClient,
@@ -61,14 +73,19 @@ async function checkVerificationStatuses(
   chainConfig: ChainConfig,
 ): Promise<string[]> {
   const info: string[] = [];
+
   for (const addr of addresses) {
     const status = await checkVerificationStatus(addr, publicClient, chainConfig.chainId);
     const address = toAddressLink(addr, chainConfig.blockExplorer.baseUrl);
-    if (status === 'eoa') info.push(`${address}: EOA (verification not applicable)`);
+
+    const isPlaceholder = getAddress(addr) === getAddress(DEFAULT_SIMULATION_ADDRESS);
+    const suffix = isPlaceholder ? ' (simulation placeholder)' : '';
+
+    if (status === 'eoa') info.push(`${address}${suffix}: EOA (verification not applicable)`);
     else if (status === 'empty')
-      info.push(`${address}: EOA (may have code later, verification not applicable)`);
-    else if (status === 'verified') info.push(`${address}: Contract (verified)`);
-    else info.push(`${address}: Contract (not verified)`);
+      info.push(`${address}${suffix}: EOA (may have code later, verification not applicable)`);
+    else if (status === 'verified') info.push(`${address}${suffix}: Contract (verified)`);
+    else info.push(`${address}${suffix}: Contract (not verified)`);
   }
   return info;
 }
@@ -89,11 +106,29 @@ async function checkVerificationStatus(
 
   // If there is no code and nonce is > 0 then it's an EOA.
   // If nonce is 0 it is an empty account that might have code later.
-  if (!code || code === '0x') return nonce > 0 ? 'eoa' : 'empty';
+  if (!code || code === '0x') {
+    return nonce > 0 ? 'eoa' : 'empty';
+  }
 
   // For contracts, check verification status via appropriate block explorer API
-  const isVerified = await isContractVerified(addr, chainId);
+  const isVerified = await BlockExplorerFactory.isContractVerified(addr, chainId);
   return isVerified ? 'verified' : 'unverified';
+}
+
+/**
+ * Recursively extract target addresses from call traces
+ */
+function extractTargetsFromCalls(calls: CallTrace[], targets: Set<string>): void {
+  for (const call of calls || []) {
+    if (call.to && call.input && call.input !== '0x') {
+      targets.add(call.to.toLowerCase());
+    }
+
+    // Recursively process subcalls
+    if (call.calls) {
+      extractTargetsFromCalls(call.calls, targets);
+    }
+  }
 }
 
 /**
@@ -117,20 +152,4 @@ function extractL2Targets(
   }
 
   return Array.from(targets).map((addr) => getAddress(addr));
-}
-
-/**
- * Recursively extract target addresses from call traces
- */
-function extractTargetsFromCalls(calls: CallTrace[], targets: Set<string>): void {
-  for (const call of calls || []) {
-    if (call.to && call.input && call.input !== '0x') {
-      targets.add(call.to.toLowerCase());
-    }
-
-    // Recursively process subcalls
-    if (call.calls) {
-      extractTargetsFromCalls(call.calls, targets);
-    }
-  }
 }

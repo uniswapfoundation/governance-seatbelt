@@ -1,20 +1,44 @@
-import { exec as execCallback } from 'node:child_process';
+import { execFile as execFileCallback } from 'node:child_process';
 import util from 'node:util';
 import { getAddress } from 'viem';
 import { codeBlock } from '../presentation/report';
 import type { ProposalCheck } from '../types';
 import { getContractName } from '../utils/clients/tenderly';
-import { ETHERSCAN_API_KEY } from '../utils/constants';
+import { ETHERSCAN_API_KEY, SLITHER_ALLOW_UNVERIFIED } from '../utils/constants';
 import { getImplementation } from '../utils/contracts/governor';
+import { SECURITY_TOOL_TIMEOUT_MS } from '../utils/security-constants';
+import {
+  checkContractVerification,
+  formatSourcesChecked,
+  formatVerificationSource,
+} from '../utils/verification/contract-verification';
 
-// Convert exec method from a callback to a promise.
-const exec = util.promisify(execCallback);
+// Convert execFile method from a callback to a promise.
+const execFile = util.promisify(execFileCallback);
 
 // Data returned from command execution.
 type ExecOutput = {
   stdout: string;
   stderr: string;
 };
+
+// Result from runSlither with specific failure reason
+type SlitherResult =
+  | { success: true; output: ExecOutput }
+  | { success: false; reason: 'invalid_address' | 'timeout' | 'execution_error'; message: string };
+
+/**
+ * Check if Slither should be allowed to run on unverified contracts.
+ * Supports both environment variable and CLI argument override.
+ */
+function shouldAllowUnverified(): boolean {
+  // Check environment variable first
+  if (SLITHER_ALLOW_UNVERIFIED) {
+    return true;
+  }
+  // Check CLI argument
+  return process.argv.includes('--allow-unverified-slither');
+}
 
 /**
  * Runs slither against the verified contracts and reports the outputs. Assumes slither is already installed.
@@ -50,11 +74,22 @@ export const checkSlither: ProposalCheck = {
     );
     if (contracts.length === 0) {
       return {
-        info: ['No contracts to analyze: only the timelock and governor are touched'],
+        info: [],
         warnings,
         errors: [],
+        skipped: { reason: 'No contracts to analyze: only the timelock and governor are touched' },
       };
     }
+
+    // Get block explorer name for detailed messages
+    const blockExplorerSource = deps.chainConfig?.blockExplorer?.source || 'block explorer';
+    const blockExplorerName =
+      blockExplorerSource === 'etherscan'
+        ? 'Etherscan'
+        : blockExplorerSource === 'blockscout'
+          ? 'Blockscout'
+          : 'block explorer';
+    const allowUnverified = shouldAllowUnverified();
 
     // For each unique verified contract we run slither. Slither has a mode to run it directly against a mainnet
     // contract, which saves us from having to write files to a local temporary directory.
@@ -62,18 +97,65 @@ export const checkSlither: ProposalCheck = {
       const addr = getAddress(contract.address);
       if (addressesToSkip.has(addr)) continue;
 
+      const contractName = await getContractName(contract);
+
+      // Check contract verification status before running Slither
+      const verificationResult = await checkContractVerification(addr, deps.chainConfig.chainId);
+
+      // Handle Sourcify-only verification (Slither can't fetch from Sourcify)
+      if (verificationResult.sourcifyOnly) {
+        if (!allowUnverified) {
+          const matchType =
+            verificationResult.status === 'perfect'
+              ? 'perfect match'
+              : verificationResult.status === 'partial'
+                ? 'partial match'
+                : verificationResult.status || 'verified';
+          info.push(
+            `Skipped Slither analysis for ${contractName} at \`${addr}\`: Verified on Sourcify [${matchType}] but not on ${blockExplorerName}; Slither cannot fetch sources from Sourcify yet`,
+          );
+          continue;
+        }
+        // Override flag is set - warn but try anyway (will likely fail)
+        warnings.push(
+          `Running Slither on Sourcify-only contract ${contractName} at \`${addr}\` (override flag set; may fail)`,
+        );
+      }
+
+      // Handle completely unverified contracts
+      if (!verificationResult.verified) {
+        if (!allowUnverified) {
+          // Skip unverified contracts with detailed message
+          info.push(
+            `Skipped Slither analysis for ${contractName} at \`${addr}\`: ` +
+              `Contract not verified (checked: ${formatSourcesChecked(blockExplorerName)})`,
+          );
+          continue;
+        }
+        // Override flag is set - run Slither but warn about unverified contract
+        warnings.push(
+          `Running Slither on UNVERIFIED contract ${contractName} at \`${addr}\` (override flag set)`,
+        );
+      }
+
       // Run slither.
-      const slitherOutput = await runSlither(contract.address);
-      if (!slitherOutput) {
-        warnings.push(`Slither execution failed for \`${contract.contract_name}\` at \`${addr}\``);
+      const slitherResult = await runSlither(contract.address);
+      if (!slitherResult.success) {
+        warnings.push(
+          `Slither failed for \`${contract.contract_name}\` at \`${addr}\`: ${slitherResult.message}`,
+        );
         continue;
       }
 
       // Append results to report info.
       // Note that slither supports a `--json` flag  we could use, but directly printing the formatted
       // results in a code block is simpler and sufficient for now.
-      const contractName = await getContractName(contract);
-      info.push(`Slither report for ${contractName}${codeBlock(slitherOutput.stderr.trim())}`);
+      const verificationInfo = verificationResult.verified
+        ? ` (verified via ${formatVerificationSource(verificationResult)})`
+        : ' (UNVERIFIED - override flag set)';
+      info.push(
+        `Slither report for ${contractName}${verificationInfo}${codeBlock(slitherResult.output.stderr.trim())}`,
+      );
     }
 
     return { info, warnings, errors: [] };
@@ -87,12 +169,41 @@ export const checkSlither: ProposalCheck = {
  * This may require editing your $PATH variable prior to running this check. If you don't do this,
  * the nix version of solc will take precedence over the solc-select version, and slither will fail.
  */
-async function runSlither(address: string): Promise<ExecOutput | null> {
+async function runSlither(address: string): Promise<SlitherResult> {
+  // Validate address format before execution (defense in depth)
   try {
-    return await exec(`slither ${address} --etherscan-apikey ${ETHERSCAN_API_KEY}`);
+    getAddress(address); // Validates and checksums - throws if invalid
+  } catch {
+    return {
+      success: false,
+      reason: 'invalid_address',
+      message: `Invalid address format: ${address}`,
+    };
+  }
+
+  try {
+    // Use execFile with argument array to prevent shell injection
+    const output = await execFile('slither', [address, '--etherscan-apikey', ETHERSCAN_API_KEY], {
+      timeout: SECURITY_TOOL_TIMEOUT_MS,
+    });
+    return { success: true, output };
   } catch (e: unknown) {
-    if (e && typeof e === 'object' && 'stderr' in e) return e as ExecOutput;
-    console.warn(`Error: Could not run slither via Python: ${JSON.stringify(e)}`);
-    return null;
+    // Handle timeout errors
+    if (e && typeof e === 'object' && 'killed' in e && (e as { killed: boolean }).killed) {
+      return {
+        success: false,
+        reason: 'timeout',
+        message: `Timed out after ${SECURITY_TOOL_TIMEOUT_MS / 1000}s`,
+      };
+    }
+    // Slither reports findings via stderr and non-zero exit, which throws
+    if (e && typeof e === 'object' && 'stderr' in e) {
+      return { success: true, output: e as ExecOutput };
+    }
+    return {
+      success: false,
+      reason: 'execution_error',
+      message: `Execution failed: ${e instanceof Error ? e.message : String(e)}`,
+    };
   }
 }

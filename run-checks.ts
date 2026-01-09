@@ -2,11 +2,16 @@
  * @notice Script to run checks for a specific proposal ID
  */
 
+import { execFileSync } from 'node:child_process';
 import { getAddress } from 'viem';
 import ALL_CHECKS from './checks';
 import { generateAndSaveReports } from './presentation/report';
 import type {
   AllCheckResults,
+  CheckCoverage,
+  CoverageData,
+  CoverageMetadata,
+  Message,
   ProposalData,
   ProposalEvent,
   SimulationConfig,
@@ -15,7 +20,7 @@ import type {
 } from './types.d';
 import { getChainConfig, getClientForChain, publicClient } from './utils/clients/client';
 import { handleCrossChainSimulations, simulate } from './utils/clients/tenderly';
-import { DAO_NAME, GOVERNOR_ADDRESS } from './utils/constants';
+import { DAO_NAME, GOVERNOR_ADDRESS, REPORTS_OUTPUT_DIRECTORY } from './utils/constants';
 import {
   getGovernor,
   getProposalIds,
@@ -23,6 +28,153 @@ import {
   inferGovernorType,
 } from './utils/contracts/governor';
 import { PROPOSAL_STATES } from './utils/contracts/governor-bravo';
+
+/**
+ * Patterns that indicate a check skipped execution (for heuristic fallback)
+ */
+const SKIP_PATTERNS = [
+  /^skipped/i,
+  /^No .+ detected$/i,
+  /^No .+ found$/i,
+  /^No .+ to analyze/i,
+  /not applicable/i,
+  /skipped for L2/i,
+  /verification skipped/i,
+  /No L2 targets found/i,
+  /only the timelock and governor/i,
+];
+
+/**
+ * Infer if a check was skipped based on info messages (heuristic fallback)
+ */
+function inferSkipFromInfo(info: Message[]): string | null {
+  for (const msg of info) {
+    for (const pattern of SKIP_PATTERNS) {
+      if (pattern.test(msg)) {
+        return msg;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Get git metadata for coverage tracking
+ */
+function getGitMetadata(): { commitHash: string; branch: string } {
+  try {
+    const commitHash = execFileSync('git', ['rev-parse', 'HEAD']).toString().trim();
+    const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD']).toString().trim();
+    return { commitHash, branch };
+  } catch {
+    return { commitHash: 'unknown', branch: 'unknown' };
+  }
+}
+
+/**
+ * Get tool versions for coverage tracking
+ */
+function getToolVersions(): { solcVersion?: string; slitherVersion?: string } {
+  let solcVersion: string | undefined;
+  let slitherVersion: string | undefined;
+
+  try {
+    const solcOutput = execFileSync('solc', ['--version']).toString();
+    solcVersion = solcOutput.match(/Version: ([\d.]+)/)?.[1];
+  } catch {
+    // solc not available
+  }
+
+  try {
+    slitherVersion = execFileSync('slither', ['--version']).toString().trim();
+  } catch {
+    // slither not available
+  }
+
+  return { solcVersion, slitherVersion };
+}
+
+/**
+ * Build coverage metadata
+ */
+export function buildCoverageMetadata(): CoverageMetadata {
+  const git = getGitMetadata();
+  const tools = getToolVersions();
+  return {
+    gitCommitHash: git.commitHash,
+    gitBranch: git.branch,
+    timestamp: new Date().toISOString(),
+    solcVersion: tools.solcVersion,
+    slitherVersion: tools.slitherVersion,
+  };
+}
+
+/**
+ * Build coverage data from check results
+ */
+export function buildCoverageFromResults(
+  results: AllCheckResults,
+  metadata: CoverageMetadata,
+  chainId?: number,
+): CoverageData {
+  const checks: CheckCoverage[] = [];
+  let ran = 0;
+  let skipped = 0;
+  let failed = 0;
+  let inferredSkips = 0;
+
+  for (const [checkId, check] of Object.entries(results)) {
+    const { name, result } = check;
+    let status: 'ran' | 'skipped' | 'failed' = 'ran';
+    let skipReason: string | undefined;
+    let wasInferred = false;
+
+    if (result.skipped) {
+      // Explicit skip
+      status = 'skipped';
+      skipReason = result.skipped.reason;
+      skipped++;
+    } else if (result.errors.length > 0) {
+      // Check failed
+      status = 'failed';
+      failed++;
+    } else {
+      // Apply heuristic fallback for non-updated checks
+      const inferredSkip = inferSkipFromInfo(result.info);
+      if (inferredSkip) {
+        status = 'skipped';
+        skipReason = inferredSkip;
+        wasInferred = true;
+        skipped++;
+        inferredSkips++;
+        console.log(`[Coverage] Inferred skip for ${checkId}: ${inferredSkip}`);
+      } else {
+        ran++;
+      }
+    }
+
+    checks.push({
+      checkId,
+      checkName: name,
+      status,
+      skipReason,
+      wasInferred,
+      chainId,
+    });
+  }
+
+  return {
+    metadata,
+    checks,
+    summary: {
+      total: checks.length,
+      ran,
+      skipped,
+      failed,
+      inferredSkips,
+    },
+  };
+}
 
 /**
  * Run checks for a specific chain simulation
@@ -83,18 +235,18 @@ export async function runChecksForChain(
   };
 
   // Chain-specific checks
-  results.checkTargetsVerifiedEtherscan = {
-    name: ALL_CHECKS.checkTargetsVerifiedEtherscan.name,
-    result: await ALL_CHECKS.checkTargetsVerifiedEtherscan.checkProposal(
+  results.checkTargetsVerifiedOnBlockExplorer = {
+    name: ALL_CHECKS.checkTargetsVerifiedOnBlockExplorer.name,
+    result: await ALL_CHECKS.checkTargetsVerifiedOnBlockExplorer.checkProposal(
       proposal,
       sim,
       depsWithConfig,
       l2Simulations,
     ),
   };
-  results.checkTouchedContractsVerifiedEtherscan = {
-    name: ALL_CHECKS.checkTouchedContractsVerifiedEtherscan.name,
-    result: await ALL_CHECKS.checkTouchedContractsVerifiedEtherscan.checkProposal(
+  results.checkTouchedContractsVerifiedOnBlockExplorer = {
+    name: ALL_CHECKS.checkTouchedContractsVerifiedOnBlockExplorer.name,
+    result: await ALL_CHECKS.checkTouchedContractsVerifiedOnBlockExplorer.checkProposal(
       proposal,
       sim,
       depsWithConfig,
@@ -252,8 +404,38 @@ async function main() {
     end: endBlock,
   };
 
+  // Build coverage data - include mainnet (chainId 1) and all L2 chains
+  const coverageMetadata = buildCoverageMetadata();
+  const coverage = buildCoverageFromResults(sourceChecks, coverageMetadata, 1);
+
+  // Merge L2 check coverage into the main coverage
+  for (const [chainIdStr, destResults] of Object.entries(destinationChecks)) {
+    const chainId = Number(chainIdStr);
+    const l2Coverage = buildCoverageFromResults(destResults, coverageMetadata, chainId);
+
+    // Append L2 checks to the main coverage
+    coverage.checks.push(...l2Coverage.checks);
+
+    // Aggregate summary totals
+    coverage.summary.total += l2Coverage.summary.total;
+    coverage.summary.ran += l2Coverage.summary.ran;
+    coverage.summary.skipped += l2Coverage.summary.skipped;
+    coverage.summary.failed += l2Coverage.summary.failed;
+    coverage.summary.inferredSkips += l2Coverage.summary.inferredSkips;
+  }
+
+  // Log coverage summary
+  console.log(
+    `[Coverage] Total: ${coverage.summary.total}, Ran: ${coverage.summary.ran}, Skipped: ${coverage.summary.skipped}, Failed: ${coverage.summary.failed}`,
+  );
+  if (coverage.summary.inferredSkips > 0) {
+    console.log(
+      `[Coverage] Warning: ${coverage.summary.inferredSkips} skips were inferred via heuristic`,
+    );
+  }
+
   // Generate reports
-  const dir = `./reports/${config.daoName}/${config.governorAddress}`;
+  const dir = `./${REPORTS_OUTPUT_DIRECTORY}/${config.daoName}/${config.governorAddress}`;
   await generateAndSaveReports({
     governorType,
     blocks,
@@ -266,6 +448,10 @@ async function main() {
     executor: finalResult.executor,
     proposalCreatedBlock: finalResult.proposalCreatedBlock,
     proposalExecutedBlock: finalResult.proposalExecutedBlock,
+    chainId: proposalData.chainConfig.chainId,
+    simulationType: simType,
+    simulation: finalResult.sim,
+    coverage,
   });
 }
 

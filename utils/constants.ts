@@ -29,4 +29,11 @@ export const DAO_NAME = process.env.DAO_NAME ?? null;
 export const GOVERNOR_ADDRESS = process.env.GOVERNOR_ADDRESS
   ? getAddress(process.env.GOVERNOR_ADDRESS)
   : null;
-export const REPORTS_BRANCH = 'reports';
+export const REPORTS_OUTPUT_DIRECTORY = 'reports';
+
+// Re-export security constants (these can be imported without env validation)
+export { SECURITY_TOOL_TIMEOUT_MS } from './security-constants';
+
+// Slither configuration
+// When true, allows Slither to run on unverified contracts (not recommended for security)
+export const SLITHER_ALLOW_UNVERIFIED = process.env.SLITHER_ALLOW_UNVERIFIED === 'true';

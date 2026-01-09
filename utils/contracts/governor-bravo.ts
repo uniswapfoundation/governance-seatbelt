@@ -1,6 +1,4 @@
-import type { Address } from 'viem';
-import { pad } from 'viem';
-import { getContract } from 'viem';
+import { type Address, getContract, pad } from 'viem';
 import { GOVERNOR_ABI } from '../abis/GovernorBravo';
 import { publicClient } from '../clients/client';
 import { getSolidityStorageSlotUint, to32ByteHexString } from '../utils';

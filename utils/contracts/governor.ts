@@ -303,5 +303,3 @@ export function formatProposalId(governorType: GovernorType, id: string | bigint
   if (governorType === 'oz') return `0x${bigIntId.toString(16)}`;
   return bigIntId.toString();
 }
-
-export type GetGovernorReturnType = ReturnType<typeof getGovernor>;

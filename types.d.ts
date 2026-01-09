@@ -1,6 +1,9 @@
 import type { Address, Block, Hex } from 'viem';
 import type { ChainConfig } from './utils/clients/client';
 
+// Type alias for From - represents an Ethereum address
+type From = Address;
+
 // --- Call Trace Types ---
 export interface CallTrace {
   from: string;
@@ -98,16 +101,6 @@ export interface SimulationData extends SimulationResult {
   config: SimulationConfig;
 }
 
-// --- Proposal checks ---
-export type ProposalActions = [
-  // defined as an array instead of an object because the return data from governor.getActions()
-  // has no `values` key if all values are zero
-  string[],
-  BigNumber[],
-  string[],
-  string[],
-];
-
 // TODO If adding support for a third governor, instead of hardcoding optional governor-specific
 // fields, make this a union type of each governor's individual proposal type.
 export interface ProposalStruct {
@@ -144,6 +137,7 @@ export type CheckResult = {
   info: Message[];
   warnings: Message[];
   errors: Message[];
+  skipped?: { reason: string };
 };
 
 export interface ProposalData {
@@ -301,7 +295,6 @@ interface TenderlyContract {
   balance: string;
   network_id: string;
   public: boolean;
-  boolean;
   verified_by: string;
   verification_date: null;
   address: string;
@@ -545,11 +538,45 @@ interface RawElement {
 }
 
 /**
+ * Coverage tracking types for check execution status
+ */
+export interface CheckCoverage {
+  checkId: string;
+  checkName: string;
+  status: 'ran' | 'skipped' | 'failed';
+  skipReason?: string;
+  executionTimeMs?: number;
+  wasInferred?: boolean;
+  chainId?: number;
+}
+
+export interface CoverageMetadata {
+  gitCommitHash: string;
+  gitBranch: string;
+  timestamp: string;
+  solcVersion?: string;
+  slitherVersion?: string;
+}
+
+export interface CoverageData {
+  metadata: CoverageMetadata;
+  checks: CheckCoverage[];
+  summary: {
+    total: number;
+    ran: number;
+    skipped: number;
+    failed: number;
+    inferredSkips: number;
+  };
+}
+
+/**
  * Structured simulation report types
  */
 export interface SimulationCheck {
   title: string;
-  status: 'passed' | 'warning' | 'failed';
+  status: 'passed' | 'warning' | 'failed' | 'skipped';
+  skipReason?: string;
   details?: string;
   info?: string[];
   infoItems?: Array<{
@@ -593,23 +620,37 @@ export interface SimulationCalldata {
 export interface StructuredSimulationReport {
   title: string;
   proposalText: string;
-  status: 'success' | 'warning' | 'error';
+  status: 'success' | 'warning' | 'error' | 'inconclusive';
   summary: string;
   checks: SimulationCheck[];
   stateChanges: SimulationStateChange[];
   events: SimulationEvent[];
   calldata?: SimulationCalldata;
+  coverage?: CoverageData;
   metadata: {
     proposalId: string;
     proposer: string;
+    proposerIsPlaceholder?: boolean;
     governorAddress: string;
     executor?: string;
+    executorIsPlaceholder?: boolean;
     simulationBlockNumber: string;
     simulationTimestamp: string;
     proposalCreatedAtBlockNumber: string;
     proposalCreatedAtTimestamp: string;
     proposalExecutedAtBlockNumber?: string;
     proposalExecutedAtTimestamp?: string;
+    // Extended metadata for Tally integration
+    schemaVersion?: number;
+    chainId?: number;
+    chainName?: string;
+    blockExplorerBaseUrl?: string;
+    simulationType?: 'executed' | 'proposed' | 'new';
+    placeholderAddresses?: string[];
+    // Repository and simulation links for Issue #92
+    repoCommit?: string;
+    repoUrl?: string;
+    tenderlyUrl?: string;
   };
 }
 
@@ -625,6 +666,10 @@ export interface GenerateReportsParams {
   executor?: string;
   proposalCreatedBlock?: SimulationBlock;
   proposalExecutedBlock?: SimulationBlock;
+  chainId?: number;
+  simulationType?: 'executed' | 'proposed' | 'new';
+  simulation?: TenderlySimulation;
+  coverage?: CoverageData;
 }
 
 export interface WriteSimulationResultsJsonParams {
@@ -636,9 +681,13 @@ export interface WriteSimulationResultsJsonParams {
   governorAddress: string;
   outputPath: string;
   destinationSimulations?: SimulationResult['destinationSimulations'];
+  destinationChecks?: Record<number, AllCheckResults>;
   executor?: string;
   proposalCreatedBlock?: SimulationBlock;
   proposalExecutedBlock?: SimulationBlock;
+  chainId?: number;
+  simulationType?: 'executed' | 'proposed' | 'new';
+  simulation?: TenderlySimulation;
 }
 
 export interface FrontendData {

@@ -1,6 +1,7 @@
 import { type PublicClient, getAddress } from 'viem';
 import { toAddressLink } from '../presentation/report';
 import type { CallTrace, ProposalCheck, TenderlySimulation } from '../types';
+import { DEFAULT_SIMULATION_ADDRESS } from '../utils/clients/tenderly';
 
 /**
  * Check all targets with code if they contain selfdestruct.
@@ -18,9 +19,10 @@ export const checkTargetsNoSelfdestruct: ProposalCheck = {
       targets = extractL2Targets(l2Simulations);
       if (targets.length === 0) {
         return {
-          info: ['No L2 targets found in cross-chain simulation'],
+          info: [],
           warnings: [],
           errors: [],
+          skipped: { reason: 'No L2 targets found in cross-chain simulation' },
         };
       }
     } else {
@@ -70,15 +72,64 @@ async function checkNoSelfdestructs(
   const info: string[] = [];
   const warn: string[] = [];
   const error: string[] = [];
+  const placeholderWarnings: string[] = [];
+
   for (const addr of addresses) {
     const status = await checkNoSelfdestruct(trustedAddrs, addr, publicClient);
     const address = toAddressLink(addr, blockExplorerUrl);
-    if (status === 'eoa') info.push(`${address}: EOA`);
-    else if (status === 'empty') warn.push(`${address}: EOA (may have code later)`);
-    else if (status === 'safe') info.push(`${address}: Contract (looks safe)`);
-    else if (status === 'delegatecall') warn.push(`${address}: Contract (with DELEGATECALL)`);
-    else if (status === 'trusted') info.push(`${address}: Trusted contract (not checked)`);
-    else error.push(`${address}: Contract (with SELFDESTRUCT)`);
+    const isOurPlaceholder = getAddress(addr) === getAddress(DEFAULT_SIMULATION_ADDRESS);
+    const suffix = isOurPlaceholder ? ' (simulation placeholder)' : '';
+
+    if (status === 'eoa') {
+      info.push(`${address}${suffix}: EOA`);
+    } else if (status === 'empty') {
+      const warningMsg = `${address}${suffix}: EOA (may have code later)`;
+      if (isOurPlaceholder) {
+        placeholderWarnings.push(warningMsg);
+      } else {
+        warn.push(warningMsg);
+      }
+    } else if (status === 'safe') {
+      info.push(`${address}${suffix}: Contract (looks safe)`);
+    } else if (status === 'delegatecall') {
+      const warningMsg = `${address}${suffix}: Contract (with DELEGATECALL)`;
+      if (isOurPlaceholder) {
+        placeholderWarnings.push(warningMsg);
+      } else {
+        warn.push(warningMsg);
+      }
+    } else if (status === 'trusted') {
+      info.push(`${address}${suffix}: Trusted contract (not checked)`);
+    } else {
+      error.push(`${address}${suffix}: Contract (with SELFDESTRUCT)`);
+    }
+  }
+
+  // Only suppress warnings for the specific hardcoded DEFAULT_SIMULATION_ADDRESS
+  // This prevents security bypass where someone sets placeholder to a dangerous address
+  const legitPlaceholderWarnings = placeholderWarnings.filter((warning) => {
+    // Extract the address from the warning message to verify it matches our hardcoded address
+    const addressMatch = warning.match(/\[0x[a-fA-F0-9]{40}\]/);
+    if (addressMatch) {
+      const warningAddress = addressMatch[0].slice(1, -1); // Remove brackets
+      return getAddress(warningAddress) === getAddress(DEFAULT_SIMULATION_ADDRESS);
+    }
+    return false;
+  });
+
+  // Add any non-legitimate placeholder warnings as real warnings (security protection)
+  const suspiciousWarnings = placeholderWarnings.filter(
+    (warning) => !legitPlaceholderWarnings.includes(warning),
+  );
+  warn.push(...suspiciousWarnings);
+
+  // Only suppress legitimate placeholder warnings if there are no other warnings
+  if (warn.length === 0 && legitPlaceholderWarnings.length > 0) {
+    // No real warnings, so we can safely suppress legitimate placeholder warnings
+    // (legitPlaceholderWarnings are discarded)
+  } else {
+    // There are real warnings, so show ALL warnings including legitimate placeholder ones
+    warn.push(...legitPlaceholderWarnings);
   }
   return { info, warn, error };
 }

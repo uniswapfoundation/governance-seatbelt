@@ -130,3 +130,85 @@ bun test tests/check-eth-balance-changes.test.ts
 ```
 
 Currently, there is a test for the ETH balance changes check, which verifies that the check correctly identifies and reports ETH transfers and balance changes. As new checks are added or existing checks are modified, corresponding tests should be added to ensure their functionality. The test framework is set up to use Bun's built-in testing capabilities and can be extended to cover additional checks in the future.
+
+## Using Seatbelt for Other DAOs
+
+Seatbelt supports any Governor Bravo or OpenZeppelin Governor contract, making it suitable for governance safety analysis across the ecosystem.
+
+### Setup for Other DAOs
+
+To use Seatbelt with a different DAO:
+
+1. **Fork this repository** to your organization
+2. **Update environment variables** in your `.env` file:
+   ```bash
+   DAO_NAME=YourDAO
+   GOVERNOR_ADDRESS=0x... # Your governor contract address
+   ```
+3. **Test the setup** with a known proposal:
+   ```bash
+   bun start
+   ```
+
+### Supported Governor Types
+
+- **Governor Bravo**: Used by Compound, Uniswap, and many others
+- **OpenZeppelin Governor**: Modern governor standard
+
+The system automatically detects the governor type, so no manual configuration is needed.
+
+### Example Configurations
+
+**Compound:**
+```bash
+DAO_NAME=Compound
+GOVERNOR_ADDRESS=0xc0Da02939E1441F497fd74F78cE7Decb17B66529
+
+# Check all proposals
+bun start
+
+# Check specific proposal
+bun run check-proposal 43
+```
+
+**Custom DAO:**
+```bash
+DAO_NAME=YourDAO
+GOVERNOR_ADDRESS=0x... # Your governor address
+bun start
+```
+
+### Custom Simulations
+
+For hypothetical or new proposals, create a simulation file in `sims/`:
+
+```typescript
+// sims/my-proposal.sim.ts
+export const config = {
+  type: 'proposed', // or 'executed'
+  daoName: 'Compound',
+  governorAddress: '0xc0Da02939E1441F497fd74F78cE7Decb17B66529',
+  governorType: 'bravo',
+  // ... proposal details
+};
+```
+
+Then run: `SIM_NAME=my-proposal bun start`
+
+### Testing Setup
+
+To verify your setup works:
+```bash
+# Test with existing simulation
+SIM_NAME=compound-43 bun start
+```
+
+## Security
+
+### Pre-commit Hooks
+
+This repository uses Husky to run secretlint before each commit, preventing accidental secret leaks. Hooks install automatically when you run `bun install`.
+
+### Reporting Vulnerabilities
+
+See [SECURITY.md](SECURITY.md) for our security policy and vulnerability reporting process.
