@@ -89,11 +89,8 @@ function getRepoInfo(): { repoCommit?: string; repoUrl?: string } {
       repoCommit: commit,
       repoUrl: httpsUrl,
     };
-  } catch (error: unknown) {
+  } catch {
     // Git not available or not in a git repository
-    if (process.env.DEBUG_REPO_INFO) {
-      console.warn('[Report] Failed to get repo info:', error);
-    }
     return {};
   }
 }
@@ -673,7 +670,8 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
       description: proposal.description,
     };
 
-    // Use pre-generated structured report if provided, otherwise generate one
+    // Use pre-generated structured report if provided (e.g., already enriched with labels),
+    // otherwise generate one.
     const simulationId = simulation?.simulation?.id;
     const structuredReport =
       params.structuredReport ??
