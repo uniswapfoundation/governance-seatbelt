@@ -449,6 +449,8 @@ async function main() {
     proposalCreatedBlock: finalResult.proposalCreatedBlock,
     proposalExecutedBlock: finalResult.proposalExecutedBlock,
     coverage,
+    chainId: proposalData.chainConfig.chainId,
+    simulationType: simType,
   });
 }
 

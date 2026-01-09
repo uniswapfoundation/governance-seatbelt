@@ -1,3 +1,4 @@
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type {
@@ -20,12 +21,112 @@ import {
 import type React from 'react';
 import { useMemo, useState } from 'react';
 
+// --- Explorer URL helpers ---
+
+function getExplorerUrl(metadata: StructuredSimulationReport['metadata']): string {
+  return metadata.blockExplorerBaseUrl || 'https://etherscan.io';
+}
+
+function buildAddressLink(
+  address: string,
+  metadata: StructuredSimulationReport['metadata'],
+): string {
+  const baseUrl = getExplorerUrl(metadata);
+  return `${baseUrl}/address/${address}`;
+}
+
+function buildBlockLink(
+  blockNumber: string,
+  metadata: StructuredSimulationReport['metadata'],
+): string {
+  const baseUrl = getExplorerUrl(metadata);
+  return `${baseUrl}/block/${blockNumber}`;
+}
+
+function isPlaceholderAddress(
+  address: string,
+  metadata: StructuredSimulationReport['metadata'],
+): boolean {
+  if (!metadata.placeholderAddresses) return false;
+  return metadata.placeholderAddresses.some(
+    (placeholder) => placeholder.toLowerCase() === address.toLowerCase(),
+  );
+}
+
+// --- Simulation warning components ---
+
+function SimulationPlaceholderBadge({ className }: { className?: string }) {
+  return (
+    <Badge
+      variant="outline"
+      className={`bg-orange-100 text-orange-800 border-orange-300 text-xs ${className || ''}`}
+    >
+      Simulation Placeholder
+    </Badge>
+  );
+}
+
+interface SimulationWarningBannerProps {
+  metadata: StructuredSimulationReport['metadata'];
+}
+
+function SimulationWarningBanner({ metadata }: SimulationWarningBannerProps) {
+  const hasPlaceholders = metadata.proposerIsPlaceholder || metadata.executorIsPlaceholder;
+  const simulationType = metadata.simulationType;
+
+  // Determine the appropriate message based on simulation type
+  const getMessage = () => {
+    if (simulationType === 'new') {
+      return (
+        <>
+          This is a simulation of a <strong>new proposal</strong> that has not been submitted
+          on-chain yet.
+          {hasPlaceholders && ' Placeholder addresses are being used for the proposer/executor.'}
+        </>
+      );
+    }
+    if (simulationType === 'proposed') {
+      return (
+        <>
+          This is a simulation of a <strong>proposed</strong> governance action that has not yet
+          been executed on-chain.
+          {hasPlaceholders && ' Some addresses shown are simulation placeholders.'}
+        </>
+      );
+    }
+    if (simulationType === 'executed') {
+      return (
+        <>
+          This is a <strong>re-simulation</strong> of an already executed proposal. Results shown
+          reflect what the simulation produced, which may differ from actual on-chain execution.
+        </>
+      );
+    }
+    // Fallback for unknown or missing simulation type
+    return (
+      <>
+        This report shows simulated execution results.
+        {hasPlaceholders && ' Some addresses shown are simulation placeholders.'}
+      </>
+    );
+  };
+
+  return (
+    <Alert className="mb-4 border-orange-300 bg-orange-50">
+      <AlertTriangleIcon className="h-4 w-4 text-orange-600" />
+      <AlertTitle className="text-orange-800">Simulated Execution</AlertTitle>
+      <AlertDescription className="text-orange-700">{getMessage()}</AlertDescription>
+    </Alert>
+  );
+}
+
 // Create a new StateChanges component for reuse
 interface StateChangesProps {
   stateChanges: SimulationStateChange[];
+  metadata?: StructuredSimulationReport['metadata'];
 }
 
-function StateChanges({ stateChanges }: StateChangesProps) {
+function StateChanges({ stateChanges, metadata }: StateChangesProps) {
   if (stateChanges.length === 0) {
     return (
       <div className="flex items-center justify-center p-6 text-muted-foreground border border-muted rounded-md">
@@ -34,6 +135,9 @@ function StateChanges({ stateChanges }: StateChangesProps) {
       </div>
     );
   }
+
+  // Create a default metadata for backwards compatibility
+  const effectiveMetadata = metadata || { proposalId: '', proposer: '' as `0x${string}` };
 
   return (
     <div className="space-y-6">
@@ -67,10 +171,10 @@ function StateChanges({ stateChanges }: StateChangesProps) {
                       ? 'Contract Code'
                       : contractName}
                 {contractAddress && (
-                  <span className="ml-2 text-sm font-normal">
+                  <span className="ml-2 text-sm font-normal inline-flex items-center gap-2">
                     at{' '}
                     <a
-                      href={`https://etherscan.io/address/${contractAddress}`}
+                      href={buildAddressLink(contractAddress, effectiveMetadata)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
@@ -78,6 +182,9 @@ function StateChanges({ stateChanges }: StateChangesProps) {
                       {contractAddress}
                       <ExternalLinkIcon className="h-3 w-3 ml-1" />
                     </a>
+                    {isPlaceholderAddress(contractAddress, effectiveMetadata) && (
+                      <SimulationPlaceholderBadge />
+                    )}
                   </span>
                 )}
               </h3>
@@ -88,6 +195,7 @@ function StateChanges({ stateChanges }: StateChangesProps) {
                 <StateChangeItem
                   key={`state-${change.contract}-${change.key}-${index}`}
                   stateChange={change}
+                  metadata={effectiveMetadata}
                 />
               ))}
             </div>
@@ -320,8 +428,16 @@ interface StructuredReportProps {
 }
 
 export function StructuredReport({ report }: StructuredReportProps) {
+  // Get block number with fallback for backwards compatibility
+  const blockNumber =
+    report.metadata.simulationBlockNumber || report.metadata.blockNumber || 'unknown';
+  const timestamp = report.metadata.simulationTimestamp || report.metadata.timestamp || '0';
+
   return (
     <div className="w-full border border-muted rounded-md p-6">
+      {/* Simulation warning banner */}
+      <SimulationWarningBanner metadata={report.metadata} />
+
       <div className="mb-6">
         <h2 className="text-2xl font-bold">{report.title}</h2>
         <div className="flex items-center mt-2">
@@ -395,12 +511,12 @@ export function StructuredReport({ report }: StructuredReportProps) {
                   <div className="text-sm text-muted-foreground">Block Number</div>
                   <div className="font-medium">
                     <a
-                      href={`https://etherscan.io/block/${report.metadata.blockNumber}`}
+                      href={buildBlockLink(blockNumber, report.metadata)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
                     >
-                      {report.metadata.blockNumber}
+                      {blockNumber}
                       <ExternalLinkIcon className="h-3 w-3 ml-1" />
                     </a>
                   </div>
@@ -408,7 +524,7 @@ export function StructuredReport({ report }: StructuredReportProps) {
                 <div className="bg-muted p-3 rounded-md">
                   <div className="text-sm text-muted-foreground">Timestamp</div>
                   <div className="font-medium">
-                    {new Date(Number.parseInt(report.metadata.timestamp) * 1000).toLocaleString()}
+                    {new Date(Number.parseInt(timestamp) * 1000).toLocaleString()}
                   </div>
                 </div>
                 <div className="bg-muted p-3 rounded-md">
@@ -417,8 +533,59 @@ export function StructuredReport({ report }: StructuredReportProps) {
                 </div>
                 <div className="bg-muted p-3 rounded-md">
                   <div className="text-sm text-muted-foreground">Network</div>
-                  <div className="font-medium">Ethereum</div>
+                  <div className="font-medium">{report.metadata.chainName || 'Ethereum'}</div>
                 </div>
+                {/* Proposer with placeholder badge */}
+                <div className="bg-muted p-3 rounded-md col-span-2">
+                  <div className="text-sm text-muted-foreground">Proposer</div>
+                  <div className="font-medium flex items-center gap-2 flex-wrap">
+                    <a
+                      href={buildAddressLink(report.metadata.proposer, report.metadata)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                    >
+                      {report.metadata.proposer}
+                      <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                    </a>
+                    {report.metadata.proposerIsPlaceholder && <SimulationPlaceholderBadge />}
+                  </div>
+                </div>
+                {/* Executor with placeholder badge (only show if available) */}
+                {report.metadata.executor && (
+                  <div className="bg-muted p-3 rounded-md col-span-2">
+                    <div className="text-sm text-muted-foreground">Executor</div>
+                    <div className="font-medium flex items-center gap-2 flex-wrap">
+                      <a
+                        href={buildAddressLink(report.metadata.executor, report.metadata)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                      >
+                        {report.metadata.executor}
+                        <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                      </a>
+                      {report.metadata.executorIsPlaceholder && <SimulationPlaceholderBadge />}
+                    </div>
+                  </div>
+                )}
+                {/* Governor address (only show if available) */}
+                {report.metadata.governorAddress && (
+                  <div className="bg-muted p-3 rounded-md col-span-2">
+                    <div className="text-sm text-muted-foreground">Governor</div>
+                    <div className="font-medium">
+                      <a
+                        href={buildAddressLink(report.metadata.governorAddress, report.metadata)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                      >
+                        {report.metadata.governorAddress}
+                        <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </TabsContent>
@@ -436,6 +603,7 @@ export function StructuredReport({ report }: StructuredReportProps) {
                     key={`check-${check.title}-${index}`}
                     check={check}
                     stateChanges={report.stateChanges}
+                    metadata={report.metadata}
                   />
                 ))
               )}
@@ -447,7 +615,7 @@ export function StructuredReport({ report }: StructuredReportProps) {
             className="mt-4 absolute inset-0 overflow-y-auto pb-8 px-1"
           >
             <div className="space-y-4">
-              <StateChanges stateChanges={report.stateChanges} />
+              <StateChanges stateChanges={report.stateChanges} metadata={report.metadata} />
             </div>
           </TabsContent>
         </div>
@@ -460,7 +628,12 @@ export function StructuredReport({ report }: StructuredReportProps) {
 function ExpandableCheckItem({
   check,
   stateChanges,
-}: { check: SimulationCheck; stateChanges?: SimulationStateChange[] }) {
+  metadata,
+}: {
+  check: SimulationCheck;
+  stateChanges?: SimulationStateChange[];
+  metadata?: StructuredSimulationReport['metadata'];
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const getStatusIcon = () => {
@@ -541,10 +714,13 @@ function ExpandableCheckItem({
     // Split by lines to process each line
     const lines = cleanedDetails.split('\n').filter((line: string) => line.trim() !== '');
 
+    // Create effective metadata for dynamic explorer links
+    const effectiveMetadata = metadata || { proposalId: '', proposer: '' as `0x${string}` };
+
     if (isStateChangesCheck) {
       // Only return StateChanges if stateChanges exists and is not empty
       return stateChanges && stateChanges.length > 0 ? (
-        <StateChanges stateChanges={stateChanges} />
+        <StateChanges stateChanges={stateChanges} metadata={effectiveMetadata} />
       ) : null;
     }
 
@@ -584,12 +760,12 @@ function ExpandableCheckItem({
               const contractAddress = match[2];
               return (
                 <div key={`contract-header-${contractAddress}`} className="mb-4 mt-2">
-                  <h3 className="text-lg font-semibold flex items-center">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
                     {contractName}
-                    <span className="ml-2 text-sm font-normal">
+                    <span className="text-sm font-normal inline-flex items-center gap-2">
                       at{' '}
                       <a
-                        href={`https://etherscan.io/address/${contractAddress}`}
+                        href={buildAddressLink(contractAddress, effectiveMetadata)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
@@ -597,6 +773,9 @@ function ExpandableCheckItem({
                         {contractAddress}
                         <ExternalLinkIcon className="h-3 w-3 ml-1" />
                       </a>
+                      {isPlaceholderAddress(contractAddress, effectiveMetadata) && (
+                        <SimulationPlaceholderBadge />
+                      )}
                     </span>
                   </h3>
                 </div>
@@ -635,10 +814,10 @@ function ExpandableCheckItem({
               // Format the target with proper styling
               return (
                 <div key={`target-${address}`} className="mb-3">
-                  <div className="flex items-center flex-wrap">
+                  <div className="flex items-center flex-wrap gap-2">
                     <span className="mr-2">{processedLine.includes('at `') ? '' : 'Target:'}</span>
                     <a
-                      href={`https://etherscan.io/address/${address}`}
+                      href={buildAddressLink(address, effectiveMetadata)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-mono text-xs bg-muted p-2 rounded hover:underline inline-flex items-center"
@@ -646,7 +825,10 @@ function ExpandableCheckItem({
                       {address}
                       <ExternalLinkIcon className="h-3 w-3 ml-1" />
                     </a>
-                    <span className="ml-2 text-muted-foreground text-xs">{status}</span>
+                    {isPlaceholderAddress(address, effectiveMetadata) && (
+                      <SimulationPlaceholderBadge />
+                    )}
+                    <span className="text-muted-foreground text-xs">{status}</span>
                   </div>
                 </div>
               );
@@ -685,7 +867,7 @@ function ExpandableCheckItem({
                   <code className="block font-mono text-xs bg-muted p-3 rounded whitespace-pre-wrap overflow-x-auto">
                     <span className="flex flex-wrap gap-2 items-center">
                       <a
-                        href={`https://etherscan.io/address/${fromAddress}`}
+                        href={buildAddressLink(fromAddress, effectiveMetadata)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
@@ -693,11 +875,14 @@ function ExpandableCheckItem({
                         {fromAddress}
                         <ExternalLinkIcon className="h-3 w-3 ml-1" />
                       </a>
+                      {isPlaceholderAddress(fromAddress, effectiveMetadata) && (
+                        <SimulationPlaceholderBadge />
+                      )}
                       <span>transfers</span>
                       <span className="font-bold">{amount} UNI</span>
                       <span>to</span>
                       <a
-                        href={`https://etherscan.io/address/${toAddress}`}
+                        href={buildAddressLink(toAddress, effectiveMetadata)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
@@ -705,6 +890,9 @@ function ExpandableCheckItem({
                         {toAddress}
                         <ExternalLinkIcon className="h-3 w-3 ml-1" />
                       </a>
+                      {isPlaceholderAddress(toAddress, effectiveMetadata) && (
+                        <SimulationPlaceholderBadge />
+                      )}
                     </span>
                   </code>
                 </div>
@@ -746,19 +934,25 @@ function ExpandableCheckItem({
               parts.push(processedLine.substring(lastIndex, match.index));
             }
 
-            // Add the address as a link
+            // Add the address as a link with optional placeholder badge
             const address = match[1];
+            const isPlaceholder = isPlaceholderAddress(address, effectiveMetadata);
             parts.push(
-              <a
-                key={`address-${address}-${match.index}`}
-                href={`https://etherscan.io/address/${address}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+              <span
+                key={`address-wrapper-${address}-${match.index}`}
+                className="inline-flex items-center gap-1"
               >
-                {address}
-                <ExternalLinkIcon className="h-3 w-3 ml-1" />
-              </a>,
+                <a
+                  href={buildAddressLink(address, effectiveMetadata)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                >
+                  {address}
+                  <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                </a>
+                {isPlaceholder && <SimulationPlaceholderBadge />}
+              </span>,
             );
 
             lastIndex = match.index + match[0].length;
@@ -794,7 +988,7 @@ function ExpandableCheckItem({
         })}
       </>
     );
-  }, [check.details, isStateChangesCheck, stateChanges]);
+  }, [check.details, isStateChangesCheck, stateChanges, metadata]);
 
   return (
     <div className="border border-muted rounded-md overflow-hidden">
@@ -848,8 +1042,16 @@ function ExpandableCheckItem({
   );
 }
 
-function StateChangeItem({ stateChange }: { stateChange: SimulationStateChange }) {
+function StateChangeItem({
+  stateChange,
+  metadata,
+}: {
+  stateChange: SimulationStateChange;
+  metadata?: StructuredSimulationReport['metadata'];
+}) {
   const [isExpanded, setIsExpanded] = useState(true);
+  // Create a default metadata for backwards compatibility
+  const effectiveMetadata = metadata || { proposalId: '', proposer: '' as `0x${string}` };
 
   const toggleExpanded = () => {
     setIsExpanded(!isExpanded);
@@ -982,12 +1184,12 @@ function StateChangeItem({ stateChange }: { stateChange: SimulationStateChange }
         <div className="bg-muted p-3 rounded-md mt-4">
           <div className="text-sm text-muted-foreground">Address Change</div>
           <div className="font-medium text-xs">
-            <div className="flex flex-col gap-1">
-              <span>
+            <div className="flex flex-col gap-2">
+              <span className="inline-flex items-center gap-2 flex-wrap">
                 From:{' '}
                 <code className="bg-muted-foreground/10 px-1 py-0.5 rounded">
                   <a
-                    href={`https://etherscan.io/address/${oldValueCleaned}`}
+                    href={buildAddressLink(oldValueCleaned, effectiveMetadata)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="hover:underline inline-flex items-center"
@@ -996,12 +1198,15 @@ function StateChangeItem({ stateChange }: { stateChange: SimulationStateChange }
                     <ExternalLinkIcon className="h-3 w-3 ml-1" />
                   </a>
                 </code>
+                {isPlaceholderAddress(oldValueCleaned, effectiveMetadata) && (
+                  <SimulationPlaceholderBadge />
+                )}
               </span>
-              <span>
+              <span className="inline-flex items-center gap-2 flex-wrap">
                 To:{' '}
                 <code className="bg-muted-foreground/10 px-1 py-0.5 rounded">
                   <a
-                    href={`https://etherscan.io/address/${newValueCleaned}`}
+                    href={buildAddressLink(newValueCleaned, effectiveMetadata)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="hover:underline inline-flex items-center"
@@ -1010,6 +1215,9 @@ function StateChangeItem({ stateChange }: { stateChange: SimulationStateChange }
                     <ExternalLinkIcon className="h-3 w-3 ml-1" />
                   </a>
                 </code>
+                {isPlaceholderAddress(newValueCleaned, effectiveMetadata) && (
+                  <SimulationPlaceholderBadge />
+                )}
               </span>
             </div>
           </div>
@@ -1045,7 +1253,7 @@ function StateChangeItem({ stateChange }: { stateChange: SimulationStateChange }
           <code className="text-xs bg-muted-foreground/20 px-2 py-1 rounded">
             {stateChange.key.startsWith('0x') ? (
               <a
-                href={`https://etherscan.io/address/${stateChange.key}`}
+                href={buildAddressLink(stateChange.key, effectiveMetadata)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:underline inline-flex items-center"
@@ -1058,6 +1266,10 @@ function StateChangeItem({ stateChange }: { stateChange: SimulationStateChange }
               stateChange.key
             )}
           </code>
+          {stateChange.key.startsWith('0x') &&
+            isPlaceholderAddress(stateChange.key, effectiveMetadata) && (
+              <SimulationPlaceholderBadge />
+            )}
           {isExpanded ? (
             <ChevronUpIcon className="h-4 w-4 text-muted-foreground" />
           ) : (

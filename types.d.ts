@@ -637,6 +637,13 @@ export interface StructuredSimulationReport {
     proposalCreatedAtTimestamp: string;
     proposalExecutedAtBlockNumber?: string;
     proposalExecutedAtTimestamp?: string;
+    // Extended metadata for Tally integration
+    schemaVersion?: number;
+    chainId?: number;
+    chainName?: string;
+    blockExplorerBaseUrl?: string;
+    simulationType?: 'executed' | 'proposed' | 'new';
+    placeholderAddresses?: string[];
   };
 }
 
@@ -653,6 +660,8 @@ export interface GenerateReportsParams {
   proposalCreatedBlock?: SimulationBlock;
   proposalExecutedBlock?: SimulationBlock;
   coverage?: CoverageData;
+  chainId?: number;
+  simulationType?: 'executed' | 'proposed' | 'new';
 }
 
 export interface WriteSimulationResultsJsonParams {
@@ -667,6 +676,8 @@ export interface WriteSimulationResultsJsonParams {
   executor?: string;
   proposalCreatedBlock?: SimulationBlock;
   proposalExecutedBlock?: SimulationBlock;
+  chainId?: number;
+  simulationType?: 'executed' | 'proposed' | 'new';
 }
 
 export interface FrontendData {

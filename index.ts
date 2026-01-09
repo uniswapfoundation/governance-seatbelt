@@ -180,6 +180,8 @@ async function processSimulation(
     proposalCreatedBlock,
     proposalExecutedBlock,
     coverage,
+    chainId: finalDeps.chainConfig.chainId,
+    simulationType: config.type,
   });
 
   // Prepare simulation data

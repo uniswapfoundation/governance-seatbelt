@@ -2,7 +2,7 @@ import { DEFAULT_GOVERNOR_ADDRESS, GOVERNOR_ABI } from '@/config';
 import { parseWeb3Error } from '@/lib/errors';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { usePublicClient, useWriteContract } from 'wagmi';
+import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
 import { useSimulationResults } from './use-simulation-results';
 
 const HIGH_GAS_LIMIT = BigInt(10000000); // 10M gas limit for complex governance operations
@@ -13,8 +13,15 @@ const TOAST_ID = 'proposal-tx'; // Consistent toast ID for updates
  */
 export function useWriteProposeNew() {
   const publicClient = usePublicClient();
+  const { chain } = useAccount();
   const { data: simulationData } = useSimulationResults();
   const { writeContractAsync, isPending: isPendingConfirmation } = useWriteContract();
+
+  // Get block explorer URL from connected chain, fallback to Etherscan
+  const getExplorerTxUrl = (hash: string) => {
+    const baseUrl = chain?.blockExplorers?.default?.url || 'https://etherscan.io';
+    return `${baseUrl}/tx/${hash}`;
+  };
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -57,14 +64,15 @@ export function useWriteProposeNew() {
       return { hash, receipt };
     },
     onSuccess: (data) => {
-      const etherscanUrl = `https://etherscan.io/tx/${data.hash}`;
+      const explorerUrl = getExplorerTxUrl(data.hash);
+      const explorerName = chain?.blockExplorers?.default?.name || 'Explorer';
       toast.success('Proposal created successfully!', {
         id: TOAST_ID,
         description: `Transaction confirmed in block ${data.receipt.blockNumber}.`,
         duration: 8000, // Show success for 8 seconds to give time to click the link
         action: {
-          label: 'View on Etherscan',
-          onClick: () => window.open(etherscanUrl, '_blank'),
+          label: `View on ${explorerName}`,
+          onClick: () => window.open(explorerUrl, '_blank'),
         },
       });
     },

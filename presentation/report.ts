@@ -33,6 +33,23 @@ import { getChainConfig } from '../utils/clients/client';
 import { DEFAULT_SIMULATION_ADDRESS, getContractName } from '../utils/clients/tenderly';
 import { formatProposalId } from '../utils/contracts/governor';
 
+// --- Chain name utility ---
+
+const CHAIN_NAMES: Record<number, string> = {
+  1: 'Ethereum',
+  42161: 'Arbitrum One',
+  10: 'Optimism',
+  8453: 'Base',
+  1301: 'Unichain',
+  57073: 'Ink',
+  1868: 'Soneium',
+  60808: 'BOB',
+};
+
+function getChainName(chainId: number): string {
+  return CHAIN_NAMES[chainId] || `Chain ${chainId}`;
+}
+
 // --- Markdown helpers ---
 
 export function bullet(text: string, level = 0) {
@@ -307,6 +324,8 @@ function generateStructuredReport(
   executor?: string,
   proposalCreatedBlock?: SimulationBlock,
   proposalExecutedBlock?: SimulationBlock,
+  chainId?: number,
+  simulationType?: 'executed' | 'proposed' | 'new',
 ): StructuredSimulationReport {
   // Validate required fields
   if (!proposal.proposer) {
@@ -367,6 +386,25 @@ function generateStructuredReport(
     };
   });
 
+  // Get chain configuration for explorer URL
+  const targetChainId = chainId ?? 1; // Default to mainnet
+  let blockExplorerBaseUrl = 'https://etherscan.io';
+  try {
+    const chainConfig = getChainConfig(targetChainId);
+    blockExplorerBaseUrl = chainConfig.blockExplorer.baseUrl;
+  } catch {
+    // Fallback to etherscan if chain config not found
+  }
+
+  // Always include the standard placeholder address so Tally/seatbelt can badge any occurrence
+  const placeholderAddresses: string[] = [DEFAULT_SIMULATION_ADDRESS];
+
+  const proposerIsPlaceholder =
+    getAddress(proposal.proposer) === getAddress(DEFAULT_SIMULATION_ADDRESS);
+  const executorIsPlaceholder = executor
+    ? getAddress(executor) === getAddress(DEFAULT_SIMULATION_ADDRESS)
+    : undefined;
+
   // Create the structured report
   return {
     title,
@@ -380,19 +418,23 @@ function generateStructuredReport(
     metadata: {
       proposalId: formatProposalId(governorType, proposal.id!),
       proposer: proposal.proposer,
-      proposerIsPlaceholder:
-        getAddress(proposal.proposer) === getAddress(DEFAULT_SIMULATION_ADDRESS),
+      proposerIsPlaceholder,
       governorAddress,
       executor,
-      executorIsPlaceholder: executor
-        ? getAddress(executor) === getAddress(DEFAULT_SIMULATION_ADDRESS)
-        : undefined,
+      executorIsPlaceholder,
       simulationBlockNumber: blocks.current.number?.toString() ?? 'unknown',
       simulationTimestamp: blocks.current.timestamp.toString(),
       proposalCreatedAtBlockNumber: proposalCreatedBlock?.number?.toString() ?? 'unknown',
       proposalCreatedAtTimestamp: proposalCreatedBlock?.timestamp?.toString() ?? 'unknown',
       proposalExecutedAtBlockNumber: proposalExecutedBlock?.number?.toString(),
       proposalExecutedAtTimestamp: proposalExecutedBlock?.timestamp?.toString(),
+      // Extended metadata for Tally integration
+      schemaVersion: 1,
+      chainId: targetChainId,
+      chainName: getChainName(targetChainId),
+      blockExplorerBaseUrl,
+      simulationType,
+      placeholderAddresses,
     },
   };
 }
@@ -413,6 +455,8 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
+    chainId,
+    simulationType,
   } = params;
 
   try {
@@ -437,6 +481,8 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
       executor,
       proposalCreatedBlock,
       proposalExecutedBlock,
+      chainId,
+      simulationType,
     );
 
     // Create a simplified report structure for the frontend
@@ -495,6 +541,8 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     proposalCreatedBlock,
     proposalExecutedBlock,
     coverage,
+    chainId,
+    simulationType,
   } = params;
   console.log(`[Report] Generating report for proposal ${proposal.id} (${proposal.proposalId})`);
   console.log(`[Report] Output directory: ${outputDir}`);
@@ -540,6 +588,8 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
+    chainId,
+    simulationType,
   );
 
   // Add coverage data to the structured report if available
@@ -782,20 +832,6 @@ ${errors ? `- Errors:\n${errors}` : ''}${l2Events}${checkResults}`;
   );
 
   return chainSections.filter(Boolean).join('\n\n');
-}
-
-/**
- * Get human-readable chain name from chain ID
- */
-function getChainName(chainId: number): string {
-  const chainNames: Record<number, string> = {
-    42161: 'Arbitrum One',
-    10: 'Optimism',
-    137: 'Polygon',
-    100: 'Gnosis Chain',
-    1: 'Ethereum Mainnet',
-  };
-  return chainNames[chainId] || `Chain ${chainId}`;
 }
 
 /**

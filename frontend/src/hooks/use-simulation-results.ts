@@ -56,10 +56,29 @@ export interface StructuredSimulationReport {
   events: SimulationEvent[];
   calldata?: SimulationCalldata;
   metadata: {
-    blockNumber: string;
-    timestamp: string;
+    // Legacy fields for backwards compatibility
+    blockNumber?: string;
+    timestamp?: string;
+    // Core fields
     proposalId: string;
     proposer: Address;
+    proposerIsPlaceholder?: boolean;
+    governorAddress?: string;
+    executor?: Address;
+    executorIsPlaceholder?: boolean;
+    simulationBlockNumber?: string;
+    simulationTimestamp?: string;
+    proposalCreatedAtBlockNumber?: string;
+    proposalCreatedAtTimestamp?: string;
+    proposalExecutedAtBlockNumber?: string;
+    proposalExecutedAtTimestamp?: string;
+    // Extended metadata for Tally integration
+    schemaVersion?: number;
+    chainId?: number;
+    chainName?: string;
+    blockExplorerBaseUrl?: string;
+    simulationType?: 'executed' | 'proposed' | 'new';
+    placeholderAddresses?: string[];
   };
 }
 
