@@ -21,8 +21,8 @@ describe('Sourcify-first verification', () => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
 
-      if (url.startsWith('https://sourcify.dev/server/v2/contract/')) {
-        return new Response(JSON.stringify({ match: 'exact_match' }), {
+      if (url.startsWith('https://sourcify.dev/server/check-all-by-addresses')) {
+        return new Response(JSON.stringify([{ address, chainIds: [{ chainId: '1', status: 'perfect' }] }]), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });

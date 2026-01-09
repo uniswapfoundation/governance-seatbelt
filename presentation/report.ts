@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { existsSync, promises as fsp, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { mdToPdf } from 'md-to-pdf';
@@ -27,11 +28,13 @@ import type {
   SimulationResult,
   SimulationStateChange,
   StructuredSimulationReport,
+  TenderlySimulation,
   WriteSimulationResultsJsonParams,
 } from '../types';
 import { getChainConfig } from '../utils/clients/client';
 import { DEFAULT_SIMULATION_ADDRESS, getContractName } from '../utils/clients/tenderly';
 import { formatProposalId } from '../utils/contracts/governor';
+import { generateProposalSummary } from '../utils/proposal-summary';
 
 // --- Chain name utility ---
 
@@ -48,6 +51,58 @@ const CHAIN_NAMES: Record<number, string> = {
 
 function getChainName(chainId: number): string {
   return CHAIN_NAMES[chainId] || `Chain ${chainId}`;
+}
+
+// --- Repository and Tenderly utilities ---
+
+/**
+ * Get repository information from CI environment or git
+ */
+function getRepoInfo(): { repoCommit?: string; repoUrl?: string } {
+  try {
+    // Prefer CI environment variables
+    if (process.env.GITHUB_SHA && process.env.GITHUB_REPOSITORY) {
+      return {
+        repoCommit: process.env.GITHUB_SHA,
+        repoUrl: `https://github.com/${process.env.GITHUB_REPOSITORY}`,
+      };
+    }
+
+    // Fallback to git commands for local development
+    const commit = execSync('git rev-parse HEAD', {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+    }).trim();
+
+    const remoteUrl = execSync('git config --get remote.origin.url', {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+    }).trim();
+
+    // Convert git SSH URL to HTTPS if needed
+    const httpsUrl = remoteUrl
+      .replace(/^git@github\.com:/, 'https://github.com/')
+      .replace(/\.git$/, '');
+
+    return {
+      repoCommit: commit,
+      repoUrl: httpsUrl,
+    };
+  } catch {
+    // Git not available or not in a git repository
+    return {};
+  }
+}
+
+/**
+ * Get Tenderly simulation URL if available
+ */
+function getTenderlyUrl(simulationId?: string): string | undefined {
+  if (!simulationId || !process.env.TENDERLY_USER || !process.env.TENDERLY_PROJECT_SLUG) {
+    return undefined;
+  }
+
+  return `https://dashboard.tenderly.co/${process.env.TENDERLY_USER}/${process.env.TENDERLY_PROJECT_SLUG}/simulator/${simulationId}`;
 }
 
 // --- Markdown helpers ---
@@ -326,6 +381,9 @@ function generateStructuredReport(
   proposalExecutedBlock?: SimulationBlock,
   chainId?: number,
   simulationType?: 'executed' | 'proposed' | 'new',
+  simulationId?: string,
+  simulation?: TenderlySimulation,
+  destinationChecks?: Record<number, AllCheckResults>,
 ): StructuredSimulationReport {
   // Validate required fields
   if (!proposal.proposer) {
@@ -340,16 +398,39 @@ function generateStructuredReport(
   const proposalText = proposal.description.trim();
 
   // Determine overall status
-  let status: 'success' | 'warning' | 'error' = 'success';
+  let status: 'success' | 'warning' | 'error' | 'inconclusive' = 'success';
+
+  // Check for inconclusive conditions first
+  let hasSkippedChecks = false;
+  let hasErrors = false;
+  let hasWarnings = false;
+
   for (const checkId in checks) {
     const { result } = checks[checkId];
+
+    // Check if this check was skipped (indicates partial execution)
+    if ('skipped' in result && result.skipped) {
+      hasSkippedChecks = true;
+    }
+
     if (result.errors.length > 0) {
-      status = 'error';
-      break;
+      hasErrors = true;
     }
     if (result.warnings.length > 0) {
-      status = 'warning';
+      hasWarnings = true;
     }
+  }
+
+  // Set status based on conditions
+  if (hasErrors) {
+    status = 'error';
+  } else if (hasSkippedChecks) {
+    // If some checks were skipped, the result is inconclusive
+    status = 'inconclusive';
+  } else if (hasWarnings) {
+    status = 'warning';
+  } else {
+    status = 'success';
   }
 
   // Format checks
@@ -405,12 +486,35 @@ function generateStructuredReport(
     ? getAddress(executor) === getAddress(DEFAULT_SIMULATION_ADDRESS)
     : undefined;
 
+  // Get repository and Tenderly information
+  const { repoCommit, repoUrl } = getRepoInfo();
+  const tenderlyUrl = getTenderlyUrl(simulationId);
+
   // Create the structured report
+  // Generate plain-language summary using the new summary generator
+  // Pass L2 checks to enable detailed cross-chain summaries
+  const plainLanguageSummary = generateProposalSummary(
+    proposal,
+    checks,
+    simulation,
+    destinationChecks,
+  );
+
+  // Combine with simulation status for complete summary
+  const statusText =
+    status === 'success'
+      ? 'completed successfully'
+      : status === 'warning'
+        ? 'completed with warnings'
+        : status === 'inconclusive'
+          ? 'completed with inconclusive results'
+          : 'completed with errors';
+
   return {
     title,
     proposalText,
     status,
-    summary: `Simulation ${status === 'success' ? 'completed successfully' : status === 'warning' ? 'completed with warnings' : 'completed with errors'} for proposal: "${title}".`,
+    summary: `${plainLanguageSummary}. Simulation ${statusText}.`,
     checks: formattedChecks,
     stateChanges: extractStateChanges(checks),
     events: extractEvents(checks),
@@ -435,6 +539,10 @@ function generateStructuredReport(
       blockExplorerBaseUrl,
       simulationType,
       placeholderAddresses,
+      // Repository and simulation links for Issue #92
+      repoCommit,
+      repoUrl,
+      tenderlyUrl,
     },
   };
 }
@@ -452,11 +560,13 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
     governorAddress,
     outputPath,
     destinationSimulations,
+    destinationChecks,
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
     chainId,
     simulationType,
+    simulation,
   } = params;
 
   try {
@@ -471,7 +581,8 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
       description: proposal.description,
     };
 
-    // Generate the structured report
+    // Generate the structured report with simulation ID and L2 checks for cross-chain summaries
+    const simulationId = simulation?.simulation?.id;
     const structuredReport = generateStructuredReport(
       governorType,
       blocks,
@@ -483,6 +594,9 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
       proposalExecutedBlock,
       chainId,
       simulationType,
+      simulationId,
+      simulation,
+      destinationChecks,
     );
 
     // Create a simplified report structure for the frontend
@@ -540,9 +654,10 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
-    coverage,
     chainId,
     simulationType,
+    simulation,
+    coverage,
   } = params;
   console.log(`[Report] Generating report for proposal ${proposal.id} (${proposal.proposalId})`);
   console.log(`[Report] Output directory: ${outputDir}`);
@@ -578,7 +693,7 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
       .process(baseReport),
   );
 
-  // Generate the structured report for JSON output
+  // Generate the structured report for JSON output with L2 checks for cross-chain summaries
   const structuredReport = generateStructuredReport(
     governorType,
     blocks,
@@ -590,6 +705,9 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     proposalExecutedBlock,
     chainId,
     simulationType,
+    simulation?.simulation?.id,
+    simulation,
+    destinationChecks,
   );
 
   // Add coverage data to the structured report if available
@@ -639,9 +757,13 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     governorAddress,
     outputPath: simulationResultsPath,
     destinationSimulations,
+    destinationChecks,
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
+    chainId,
+    simulationType,
+    simulation,
   });
 }
 

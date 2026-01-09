@@ -253,7 +253,7 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
     simTimestamp,
     storageObj,
     executeInputs,
-    saveIfFails: false,
+    saveIfFails: true,
   });
 
   // Handle ETH transfers if needed
@@ -528,8 +528,8 @@ async function simulateExecuted(config: SimulationConfigExecuted): Promise<Simul
     gas: Number(tx.gas),
     gas_price: tx.gasPrice?.toString(),
     value: tx.value.toString(),
-    save_if_fails: false, // Set to true to save the simulation to your Tenderly dashboard if it fails.
-    save: false, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
+    save_if_fails: true, // Set to true to save the simulation to your Tenderly dashboard if it fails.
+    save: true, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
     generate_access_list: true,
   };
   const sim = await sendSimulation(simulationPayload);
@@ -632,7 +632,7 @@ export async function handleCrossChainSimulations(
           gas_price: '0',
           value: message.l2Value,
           save_if_fails: true,
-          save: false,
+          save: true,
         };
 
         // Log the payload before sending
@@ -759,7 +759,7 @@ function buildSimulationPayload(params: SimulationPayloadParams): TenderlyPayloa
     gas_price: '0',
     value: '0', // Will be updated by handleETHValueRequirements if needed
     save_if_fails: saveIfFails, // Set to true to save the simulation to your Tenderly dashboard if it fails.
-    save: false, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
+    save: true, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
     generate_access_list: true, // not required, but useful as a sanity check to ensure consistency in the simulation response
     block_header: {
       // this data represents what block.number and block.timestamp should return in the EVM during the simulation

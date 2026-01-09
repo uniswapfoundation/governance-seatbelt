@@ -49,7 +49,7 @@ export interface SimulationCalldata {
 export interface StructuredSimulationReport {
   title: string;
   proposalText: string;
-  status: 'success' | 'warning' | 'error';
+  status: 'success' | 'warning' | 'error' | 'inconclusive';
   summary: string;
   checks: SimulationCheck[];
   stateChanges: SimulationStateChange[];
@@ -79,6 +79,10 @@ export interface StructuredSimulationReport {
     blockExplorerBaseUrl?: string;
     simulationType?: 'executed' | 'proposed' | 'new';
     placeholderAddresses?: string[];
+    // Repository and simulation links for Issue #92
+    repoCommit?: string;
+    repoUrl?: string;
+    tenderlyUrl?: string;
   };
 }
 

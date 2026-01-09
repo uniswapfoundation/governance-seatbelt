@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useMemo, useState } from 'react';
+import { DecisionHeader } from './DecisionHeader';
 
 // --- Explorer URL helpers ---
 
@@ -35,7 +36,7 @@ function buildAddressLink(
   return `${baseUrl}/address/${address}`;
 }
 
-function buildBlockLink(
+export function buildBlockLink(
   blockNumber: string,
   metadata: StructuredSimulationReport['metadata'],
 ): string {
@@ -78,44 +79,48 @@ function SimulationWarningBanner({ metadata }: SimulationWarningBannerProps) {
   const getMessage = () => {
     if (simulationType === 'new') {
       return (
-        <>
+        <span className="leading-relaxed block">
           This is a simulation of a <strong>new proposal</strong> that has not been submitted
           on-chain yet.
           {hasPlaceholders && ' Placeholder addresses are being used for the proposer/executor.'}
-        </>
+        </span>
       );
     }
     if (simulationType === 'proposed') {
       return (
-        <>
+        <span className="leading-relaxed block">
           This is a simulation of a <strong>proposed</strong> governance action that has not yet
           been executed on-chain.
           {hasPlaceholders && ' Some addresses shown are simulation placeholders.'}
-        </>
+        </span>
       );
     }
     if (simulationType === 'executed') {
       return (
-        <>
+        <span className="leading-relaxed block">
           This is a <strong>re-simulation</strong> of an already executed proposal. Results shown
           reflect what the simulation produced, which may differ from actual on-chain execution.
-        </>
+        </span>
       );
     }
     // Fallback for unknown or missing simulation type
     return (
-      <>
+      <span className="leading-relaxed block">
         This report shows simulated execution results.
         {hasPlaceholders && ' Some addresses shown are simulation placeholders.'}
-      </>
+      </span>
     );
   };
 
   return (
-    <Alert className="mb-4 border-orange-300 bg-orange-50">
-      <AlertTriangleIcon className="h-4 w-4 text-orange-600" />
-      <AlertTitle className="text-orange-800">Simulated Execution</AlertTitle>
-      <AlertDescription className="text-orange-700">{getMessage()}</AlertDescription>
+    <Alert className="mb-4 border-orange-300 bg-orange-50 flex flex-row items-start gap-2 p-4">
+      <AlertTriangleIcon className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
+      <div className="flex flex-col gap-1">
+        <AlertTitle className="text-orange-800 font-semibold mb-0 leading-none">
+          Simulated Execution
+        </AlertTitle>
+        <AlertDescription className="text-orange-700 text-sm mt-1">{getMessage()}</AlertDescription>
+      </div>
     </Alert>
   );
 }
@@ -427,6 +432,20 @@ interface StructuredReportProps {
   report: StructuredSimulationReport;
 }
 
+// Helper function for contextual executor labels
+function getExecutorLabel(simulationType?: string): string {
+  switch (simulationType) {
+    case 'new':
+      return 'Intended Executor';
+    case 'proposed':
+      return 'Will Execute';
+    case 'executed':
+      return 'Executed By';
+    default:
+      return 'Executor';
+  }
+}
+
 export function StructuredReport({ report }: StructuredReportProps) {
   // Get block number with fallback for backwards compatibility
   const blockNumber =
@@ -434,192 +453,164 @@ export function StructuredReport({ report }: StructuredReportProps) {
   const timestamp = report.metadata.simulationTimestamp || report.metadata.timestamp || '0';
 
   return (
-    <div className="w-full border border-muted rounded-md p-6">
-      {/* Simulation warning banner */}
-      <SimulationWarningBanner metadata={report.metadata} />
+    <div className="w-full">
+      <DecisionHeader report={report} />
 
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold">{report.title}</h2>
-        <div className="flex items-center mt-2">
-          <span className="text-muted-foreground mr-2">Status:</span>
-          <Badge
-            variant={
-              report.status === 'success'
-                ? 'outline'
-                : report.status === 'warning'
-                  ? 'outline'
-                  : 'destructive'
-            }
-            className={
-              report.status === 'success'
-                ? 'bg-green-100 text-green-800 border-green-300'
-                : report.status === 'warning'
-                  ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
-                  : ''
-            }
-          >
-            {report.status === 'success'
-              ? 'Passed'
-              : report.status === 'warning'
-                ? 'Passed with warnings'
-                : 'Failed'}
-          </Badge>
-        </div>
-        <p className="text-muted-foreground mt-2">{report.summary}</p>
-      </div>
+      <div className="border border-muted rounded-md p-6">
+        <SimulationWarningBanner metadata={report.metadata} />
 
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-4">
-          <TabsTrigger className="cursor-pointer" value="overview">
-            Overview
-          </TabsTrigger>
-          <TabsTrigger className="cursor-pointer" value="checks">
-            Checks
-          </TabsTrigger>
-          <TabsTrigger className="cursor-pointer" value="state-changes">
-            State Changes
-          </TabsTrigger>
-        </TabsList>
+        <Tabs defaultValue="overview" className="w-full">
+          <TabsList className="grid w-full grid-cols-3 mb-4">
+            <TabsTrigger className="cursor-pointer" value="overview">
+              Overview
+            </TabsTrigger>
+            <TabsTrigger className="cursor-pointer" value="checks">
+              Checks
+            </TabsTrigger>
+            <TabsTrigger className="cursor-pointer" value="state-changes">
+              State Changes
+            </TabsTrigger>
+          </TabsList>
 
-        <div className="h-[600px] overflow-y-auto relative">
-          <TabsContent
-            value="overview"
-            className="mt-4 space-y-6 absolute inset-0 overflow-y-auto pb-8 px-1"
-          >
-            {report.proposalText && (
+          <div className="h-[600px] overflow-y-auto relative">
+            <TabsContent
+              value="overview"
+              className="mt-4 space-y-6 absolute inset-0 overflow-y-auto pb-8 px-1"
+            >
+              {report.proposalText && (
+                <div className="border border-muted rounded-md p-6 bg-card">
+                  <h3 className="text-lg font-semibold mb-3">Proposal Details</h3>
+                  <div className="bg-muted p-4 rounded-md whitespace-pre-wrap">
+                    {report.proposalText}
+                  </div>
+                </div>
+              )}
+
+              {report.calldata && (
+                <div className="border border-muted rounded-md p-6 bg-card">
+                  <h3 className="text-lg font-semibold mb-3">Calldata Decoded</h3>
+                  <div className="bg-muted p-4 rounded-md font-mono text-sm overflow-x-auto">
+                    {report.calldata.decoded}
+                  </div>
+                </div>
+              )}
+
               <div className="border border-muted rounded-md p-6 bg-card">
-                <h3 className="text-lg font-semibold mb-3">Proposal Details</h3>
-                <div className="bg-muted p-4 rounded-md whitespace-pre-wrap">
-                  {report.proposalText}
-                </div>
-              </div>
-            )}
-
-            {report.calldata && (
-              <div className="border border-muted rounded-md p-6 bg-card">
-                <h3 className="text-lg font-semibold mb-3">Calldata Decoded</h3>
-                <div className="bg-muted p-4 rounded-md font-mono text-sm overflow-x-auto">
-                  {report.calldata.decoded}
-                </div>
-              </div>
-            )}
-
-            <div className="border border-muted rounded-md p-6 bg-card">
-              <h3 className="text-lg font-semibold mb-3">Metadata</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-muted p-3 rounded-md">
-                  <div className="text-sm text-muted-foreground">Block Number</div>
-                  <div className="font-medium">
-                    <a
-                      href={buildBlockLink(blockNumber, report.metadata)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
-                    >
-                      {blockNumber}
-                      <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                    </a>
-                  </div>
-                </div>
-                <div className="bg-muted p-3 rounded-md">
-                  <div className="text-sm text-muted-foreground">Timestamp</div>
-                  <div className="font-medium">
-                    {new Date(Number.parseInt(timestamp) * 1000).toLocaleString()}
-                  </div>
-                </div>
-                <div className="bg-muted p-3 rounded-md">
-                  <div className="text-sm text-muted-foreground">Proposal ID</div>
-                  <div className="font-medium">{report.metadata.proposalId}</div>
-                </div>
-                <div className="bg-muted p-3 rounded-md">
-                  <div className="text-sm text-muted-foreground">Network</div>
-                  <div className="font-medium">{report.metadata.chainName || 'Ethereum'}</div>
-                </div>
-                {/* Proposer with placeholder badge */}
-                <div className="bg-muted p-3 rounded-md col-span-2">
-                  <div className="text-sm text-muted-foreground">Proposer</div>
-                  <div className="font-medium flex items-center gap-2 flex-wrap">
-                    <a
-                      href={buildAddressLink(report.metadata.proposer, report.metadata)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
-                    >
-                      {report.metadata.proposer}
-                      <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                    </a>
-                    {report.metadata.proposerIsPlaceholder && <SimulationPlaceholderBadge />}
-                  </div>
-                </div>
-                {/* Executor with placeholder badge (only show if available) */}
-                {report.metadata.executor && (
-                  <div className="bg-muted p-3 rounded-md col-span-2">
-                    <div className="text-sm text-muted-foreground">Executor</div>
-                    <div className="font-medium flex items-center gap-2 flex-wrap">
-                      <a
-                        href={buildAddressLink(report.metadata.executor, report.metadata)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
-                      >
-                        {report.metadata.executor}
-                        <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                      </a>
-                      {report.metadata.executorIsPlaceholder && <SimulationPlaceholderBadge />}
-                    </div>
-                  </div>
-                )}
-                {/* Governor address (only show if available) */}
-                {report.metadata.governorAddress && (
-                  <div className="bg-muted p-3 rounded-md col-span-2">
-                    <div className="text-sm text-muted-foreground">Governor</div>
+                <h3 className="text-lg font-semibold mb-3">Metadata</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-muted p-3 rounded-md">
+                    <div className="text-sm text-muted-foreground">Block Number</div>
                     <div className="font-medium">
                       <a
-                        href={buildAddressLink(report.metadata.governorAddress, report.metadata)}
+                        href={buildBlockLink(blockNumber, report.metadata)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
                       >
-                        {report.metadata.governorAddress}
+                        {blockNumber}
                         <ExternalLinkIcon className="h-3 w-3 ml-1" />
                       </a>
                     </div>
                   </div>
+                  <div className="bg-muted p-3 rounded-md">
+                    <div className="text-sm text-muted-foreground">Timestamp</div>
+                    <div className="font-medium">
+                      {new Date(Number.parseInt(timestamp) * 1000).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="bg-muted p-3 rounded-md">
+                    <div className="text-sm text-muted-foreground">Proposal ID</div>
+                    <div className="font-medium">{report.metadata.proposalId}</div>
+                  </div>
+                  <div className="bg-muted p-3 rounded-md">
+                    <div className="text-sm text-muted-foreground">Network</div>
+                    <div className="font-medium">{report.metadata.chainName || 'Ethereum'}</div>
+                  </div>
+                  <div className="bg-muted p-3 rounded-md col-span-2">
+                    <div className="text-sm text-muted-foreground">Proposer</div>
+                    <div className="font-medium flex items-center gap-2 flex-wrap">
+                      <a
+                        href={buildAddressLink(report.metadata.proposer, report.metadata)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                      >
+                        {report.metadata.proposer}
+                        <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                      </a>
+                      {report.metadata.proposerIsPlaceholder && <SimulationPlaceholderBadge />}
+                    </div>
+                  </div>
+                  {report.metadata.executor && (
+                    <div className="bg-muted p-3 rounded-md col-span-2">
+                      <div className="text-sm text-muted-foreground">
+                        {getExecutorLabel(report.metadata.simulationType)}
+                      </div>
+                      <div className="font-medium flex items-center gap-2 flex-wrap">
+                        <a
+                          href={buildAddressLink(report.metadata.executor, report.metadata)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                        >
+                          {report.metadata.executor}
+                          <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                        </a>
+                        {report.metadata.executorIsPlaceholder && <SimulationPlaceholderBadge />}
+                      </div>
+                    </div>
+                  )}
+                  {report.metadata.governorAddress && (
+                    <div className="bg-muted p-3 rounded-md col-span-2">
+                      <div className="text-sm text-muted-foreground">Governor</div>
+                      <div className="font-medium">
+                        <a
+                          href={buildAddressLink(report.metadata.governorAddress, report.metadata)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                        >
+                          {report.metadata.governorAddress}
+                          <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="checks" className="mt-4 absolute inset-0 overflow-y-auto pb-8 px-1">
+              <div className="space-y-4">
+                {report.checks.length === 0 ? (
+                  <div className="flex items-center justify-center p-6 text-muted-foreground border border-muted rounded-md">
+                    <InfoIcon className="h-4 w-4 mr-2" />
+                    <span>No checks found in the report</span>
+                  </div>
+                ) : (
+                  report.checks.map((check: SimulationCheck, index: number) => (
+                    <ExpandableCheckItem
+                      key={`check-${check.title}-${index}`}
+                      check={check}
+                      stateChanges={report.stateChanges}
+                      metadata={report.metadata}
+                    />
+                  ))
                 )}
               </div>
-            </div>
-          </TabsContent>
+            </TabsContent>
 
-          <TabsContent value="checks" className="mt-4 absolute inset-0 overflow-y-auto pb-8 px-1">
-            <div className="space-y-4">
-              {report.checks.length === 0 ? (
-                <div className="flex items-center justify-center p-6 text-muted-foreground border border-muted rounded-md">
-                  <InfoIcon className="h-4 w-4 mr-2" />
-                  <span>No checks found in the report</span>
-                </div>
-              ) : (
-                report.checks.map((check: SimulationCheck, index: number) => (
-                  <ExpandableCheckItem
-                    key={`check-${check.title}-${index}`}
-                    check={check}
-                    stateChanges={report.stateChanges}
-                    metadata={report.metadata}
-                  />
-                ))
-              )}
-            </div>
-          </TabsContent>
-
-          <TabsContent
-            value="state-changes"
-            className="mt-4 absolute inset-0 overflow-y-auto pb-8 px-1"
-          >
-            <div className="space-y-4">
-              <StateChanges stateChanges={report.stateChanges} metadata={report.metadata} />
-            </div>
-          </TabsContent>
-        </div>
-      </Tabs>
+            <TabsContent
+              value="state-changes"
+              className="mt-4 absolute inset-0 overflow-y-auto pb-8 px-1"
+            >
+              <div className="space-y-4">
+                <StateChanges stateChanges={report.stateChanges} metadata={report.metadata} />
+              </div>
+            </TabsContent>
+          </div>
+        </Tabs>
+      </div>
     </div>
   );
 }

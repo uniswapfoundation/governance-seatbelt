@@ -1,6 +1,9 @@
 import type { Address, Block, Hex } from 'viem';
 import type { ChainConfig } from './utils/clients/client';
 
+// Type alias for From - represents an Ethereum address
+type From = Address;
+
 // --- Call Trace Types ---
 export interface CallTrace {
   from: string;
@@ -617,7 +620,7 @@ export interface SimulationCalldata {
 export interface StructuredSimulationReport {
   title: string;
   proposalText: string;
-  status: 'success' | 'warning' | 'error';
+  status: 'success' | 'warning' | 'error' | 'inconclusive';
   summary: string;
   checks: SimulationCheck[];
   stateChanges: SimulationStateChange[];
@@ -644,6 +647,10 @@ export interface StructuredSimulationReport {
     blockExplorerBaseUrl?: string;
     simulationType?: 'executed' | 'proposed' | 'new';
     placeholderAddresses?: string[];
+    // Repository and simulation links for Issue #92
+    repoCommit?: string;
+    repoUrl?: string;
+    tenderlyUrl?: string;
   };
 }
 
@@ -659,9 +666,10 @@ export interface GenerateReportsParams {
   executor?: string;
   proposalCreatedBlock?: SimulationBlock;
   proposalExecutedBlock?: SimulationBlock;
-  coverage?: CoverageData;
   chainId?: number;
   simulationType?: 'executed' | 'proposed' | 'new';
+  simulation?: TenderlySimulation;
+  coverage?: CoverageData;
 }
 
 export interface WriteSimulationResultsJsonParams {
@@ -673,11 +681,13 @@ export interface WriteSimulationResultsJsonParams {
   governorAddress: string;
   outputPath: string;
   destinationSimulations?: SimulationResult['destinationSimulations'];
+  destinationChecks?: Record<number, AllCheckResults>;
   executor?: string;
   proposalCreatedBlock?: SimulationBlock;
   proposalExecutedBlock?: SimulationBlock;
   chainId?: number;
   simulationType?: 'executed' | 'proposed' | 'new';
+  simulation?: TenderlySimulation;
 }
 
 export interface FrontendData {

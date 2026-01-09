@@ -179,9 +179,10 @@ async function processSimulation(
     executor,
     proposalCreatedBlock,
     proposalExecutedBlock,
-    coverage,
     chainId: finalDeps.chainConfig.chainId,
     simulationType: config.type,
+    simulation: sim,
+    coverage,
   });
 
   // Prepare simulation data
