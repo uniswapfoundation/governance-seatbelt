@@ -137,7 +137,10 @@ export async function getSourcifyVerification(
   return { status: 'unverified' };
 }
 
-export async function isContractVerifiedOnSourcify(address: string, chainId: number): Promise<boolean> {
+export async function isContractVerifiedOnSourcify(
+  address: string,
+  chainId: number,
+): Promise<boolean> {
   const result = await SourcifyClient.isContractVerified(address, chainId);
   return result.verified;
 }
