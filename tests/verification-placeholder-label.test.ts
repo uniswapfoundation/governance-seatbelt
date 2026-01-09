@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { getAddress } from 'viem';
-import { checkTargetsVerifiedOnBlockExplorer } from '../checks/check-targets-verified-etherscan';
+import { checkTargetsVerifiedOnBlockExplorer } from '../checks/check-targets-verified-on-block-explorer';
 import type { ProposalData, ProposalEvent, TenderlySimulation } from '../types';
 import { BlockExplorerFactory } from '../utils/clients/block-explorers/factory';
 import { DEFAULT_SIMULATION_ADDRESS } from '../utils/clients/tenderly';

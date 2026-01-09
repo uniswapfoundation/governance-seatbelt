@@ -12,7 +12,7 @@ import {
 import {
   checkTargetsVerifiedOnBlockExplorer,
   checkTouchedContractsVerifiedOnBlockExplorer,
-} from './check-targets-verified-etherscan';
+} from './check-targets-verified-on-block-explorer';
 import { checkValueRequired } from './check-value-required';
 
 const ALL_CHECKS: {
