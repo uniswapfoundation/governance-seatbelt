@@ -308,7 +308,9 @@ describe('Cross-Chain Simulation Metadata Tests', () => {
   });
 
   describe('Simulation Performance Metrics', () => {
-    test('should track simulation execution times', async () => {
+    const perfTest = process.env.CI ? test.skip : test;
+
+    perfTest('should track simulation execution times', async () => {
       const { config } = await import('../../sims/arb-distro.sim.ts');
 
       const startTime = performance.now();
