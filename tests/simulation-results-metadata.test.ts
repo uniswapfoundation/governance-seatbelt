@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type {
   AllCheckResults,
+  CoverageData,
   ProposalEvent,
   SimulationBlock,
   StructuredSimulationReport,
@@ -195,6 +196,53 @@ describe('Simulation Results Metadata', () => {
       expect(data).toHaveProperty('report');
       expect(data.report.structuredReport.metadata.governorAddress).toBe(mockGovernorAddress);
     }
+  });
+
+  test('should include coverage section in markdown report when provided', async () => {
+    const coverage: CoverageData = {
+      metadata: {
+        gitCommitHash: 'deadbeef',
+        gitBranch: 'feature/issue-96-coverage-table-component',
+        timestamp: '2026-01-07T00:00:00.000Z',
+        solcVersion: '0.8.19',
+        slitherVersion: '0.10.0',
+      },
+      checks: [
+        {
+          checkId: 'test-check',
+          checkName: 'Test Check',
+          status: 'ran',
+          executionTimeMs: 42,
+          wasInferred: false,
+          chainId: 1,
+        },
+      ],
+      summary: {
+        total: 1,
+        ran: 1,
+        skipped: 0,
+        failed: 0,
+        inferredSkips: 0,
+      },
+    };
+
+    await generateAndSaveReports({
+      governorType: 'bravo',
+      blocks: mockBlocks,
+      proposal: mockProposal,
+      checks: mockChecks,
+      outputDir: testOutputDir,
+      governorAddress: mockGovernorAddress,
+      coverage,
+    });
+
+    const mdPath = join(testOutputDir, '123.md');
+    expect(existsSync(mdPath)).toBe(true);
+
+    const markdown = readFileSync(mdPath, 'utf8');
+    expect(markdown).toContain('## Coverage');
+    expect(markdown).toContain('Test Check');
+    expect(markdown).toContain('`test-check`');
   });
 });
 

@@ -32,9 +32,10 @@ import type {
   TenderlySimulation,
   WriteSimulationResultsJsonParams,
 } from '../types';
-import { getChainConfig } from '../utils/clients/client';
+import { getChainConfig, publicClient } from '../utils/clients/client';
 import { DEFAULT_SIMULATION_ADDRESS, getContractName } from '../utils/clients/tenderly';
 import { formatProposalId } from '../utils/contracts/governor';
+import { extractAddressesFromReport, resolveLabelsForAddresses } from '../utils/labels';
 import { generateProposalSummary } from '../utils/proposal-summary';
 
 // --- Chain name utility ---
@@ -169,10 +170,11 @@ function toMessageList(header: string, text: string[]): string {
  * @param warnings the warnings returned by the check
  * @param name the descriptive name of the check
  */
-function toCheckSummary({
-  result: { errors, warnings, info, skipped },
-  name,
-}: AllCheckResults[string]): string {
+function toCheckSummary(checkId: string, check: AllCheckResults[string], chainKey: string): string {
+  const {
+    result: { errors, warnings, info, skipped },
+    name,
+  } = check;
   let status: string;
 
   if (skipped) {
@@ -183,7 +185,8 @@ function toCheckSummary({
     status = '❌ **Failed**';
   }
 
-  let report = `### ${name} ${status}\n\n`;
+  const anchorId = `check-${chainKey}-${checkId}`;
+  let report = `<a id="${anchorId}"></a>\n\n### ${name} ${status}\n\n`;
 
   if (skipped) {
     report += `${bold('Skip Reason')}: ${skipped.reason}\n\n`;
@@ -197,6 +200,88 @@ function toCheckSummary({
   report += '\n';
 
   return report;
+}
+
+function escapeMarkdownInline(value: string): string {
+  return value.replaceAll('\n', ' ');
+}
+
+function toCoverageMarkdown(coverage: CoverageData): string {
+  const explainer =
+    'Coverage tracks whether each check executed (ran/skipped/failed). It does not indicate pass/fail; see the check results below.';
+
+  const metaLines = [
+    `- Commit: \`${coverage.metadata.gitCommitHash}\``,
+    `- Branch: \`${coverage.metadata.gitBranch}\``,
+    `- Timestamp: ${coverage.metadata.timestamp}`,
+    ...(coverage.metadata.solcVersion ? [`- solc: \`${coverage.metadata.solcVersion}\``] : []),
+    ...(coverage.metadata.slitherVersion
+      ? [`- slither: \`${coverage.metadata.slitherVersion}\``]
+      : []),
+  ].join('\n');
+
+  const summary = coverage.summary;
+  const summaryLines = [
+    `- Total: ${summary.total}`,
+    `- Ran: ${summary.ran}`,
+    `- Skipped: ${summary.skipped}${
+      summary.inferredSkips > 0 ? ` (${summary.inferredSkips} inferred)` : ''
+    }`,
+    `- Failed: ${summary.failed}`,
+  ].join('\n');
+
+  if (coverage.checks.length === 0) {
+    return `## Coverage\n\n${explainer}\n\n${metaLines}\n\n${summaryLines}\n\nNo coverage entries found.\n`;
+  }
+
+  const checksByChainId = coverage.checks.reduce<Record<string, typeof coverage.checks>>(
+    (acc, entry) => {
+      const chainKey = String(entry.chainId ?? 'unknown');
+      if (!acc[chainKey]) acc[chainKey] = [];
+      acc[chainKey].push(entry);
+      return acc;
+    },
+    {},
+  );
+
+  const chainSections = Object.entries(checksByChainId)
+    .sort(([a], [b]) => {
+      if (a === 'unknown') return 1;
+      if (b === 'unknown') return -1;
+      return Number(a) - Number(b);
+    })
+    .map(([chainId, chainChecks]) => {
+      const chainHeading =
+        chainId === 'unknown' ? '### Unknown chain' : `### ${getChainName(Number(chainId))}`;
+
+      const items = [...chainChecks]
+        .sort((a, b) => a.checkName.localeCompare(b.checkName))
+        .map((entry) => {
+          const status =
+            entry.status === 'ran'
+              ? '✅ ran'
+              : entry.status === 'skipped'
+                ? '⏭️ skipped'
+                : '❌ failed';
+          const methodSuffix = entry.wasInferred ? ' (inferred)' : '';
+          const timeSuffix = entry.executionTimeMs != null ? ` • ${entry.executionTimeMs}ms` : '';
+          const notesSuffix = entry.skipReason
+            ? ` • ${escapeMarkdownInline(entry.skipReason)}`
+            : '';
+
+          const anchorId = `check-${chainId}-${entry.checkId}`;
+          const nameWithLink =
+            chainId === 'unknown' ? entry.checkName : `[${entry.checkName}](#${anchorId})`;
+
+          return `- ${nameWithLink} (\`${entry.checkId}\`) — ${status}${methodSuffix}${timeSuffix}${notesSuffix}`;
+        })
+        .join('\n');
+
+      return [chainHeading, '', items].join('\n');
+    })
+    .join('\n\n');
+
+  return `## Coverage\n\n${explainer}\n\n${metaLines}\n\n${summaryLines}\n\n${chainSections}\n`;
 }
 
 /**
@@ -459,7 +544,7 @@ function generateStructuredReport(
   }
 
   // Format checks
-  const formattedChecks: SimulationCheck[] = Object.entries(checks).map(([_, check]) => {
+  const formattedChecks: SimulationCheck[] = Object.entries(checks).map(([checkId, check]) => {
     const { name, result } = check;
     const { errors, warnings, info, skipped } = result;
 
@@ -484,9 +569,12 @@ function generateStructuredReport(
     ].join('\n\n');
 
     return {
+      checkId,
       title: name,
       status: checkStatus,
       skipReason,
+      warningCount: warnings.length,
+      errorCount: errors.length,
       details,
       info,
     };
@@ -593,6 +681,7 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
     chainId,
     simulationType,
     simulation,
+    coverage,
   } = params;
 
   try {
@@ -607,23 +696,30 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
       description: proposal.description,
     };
 
-    // Generate the structured report with simulation ID and L2 checks for cross-chain summaries
+    // Use pre-generated structured report if provided (e.g., already enriched with labels),
+    // otherwise generate one.
     const simulationId = simulation?.simulation?.id;
-    const structuredReport = generateStructuredReport(
-      governorType,
-      blocks,
-      proposal,
-      checks,
-      governorAddress,
-      executor,
-      proposalCreatedBlock,
-      proposalExecutedBlock,
-      chainId,
-      simulationType,
-      simulationId,
-      simulation,
-      destinationChecks,
-    );
+    const structuredReport =
+      params.structuredReport ??
+      generateStructuredReport(
+        governorType,
+        blocks,
+        proposal,
+        checks,
+        governorAddress,
+        executor,
+        proposalCreatedBlock,
+        proposalExecutedBlock,
+        chainId,
+        simulationType,
+        simulationId,
+        simulation,
+        destinationChecks,
+      );
+
+    if (coverage) {
+      structuredReport.coverage = coverage;
+    }
 
     // Create a simplified report structure for the frontend
     const reportForFrontend = {
@@ -684,6 +780,8 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     simulationType,
     simulation,
     coverage,
+    daoName,
+    contracts,
   } = params;
   console.log(`[Report] Generating report for proposal ${proposal.id} (${proposal.proposalId})`);
   console.log(`[Report] Output directory: ${outputDir}`);
@@ -701,6 +799,7 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     checks,
     destinationSimulations,
     destinationChecks,
+    coverage,
   );
 
   // The table of contents' links in the baseReport work when converted to HTML, but do not work as Markdown
@@ -739,6 +838,36 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
   // Add coverage data to the structured report if available
   if (coverage) {
     structuredReport.coverage = coverage;
+  }
+
+  // Resolve address labels if daoName is provided (Issue #94)
+  if (daoName) {
+    try {
+      // Extract all addresses from the report
+      const addresses = extractAddressesFromReport(
+        Object.values(checks).map((c) => c.result),
+        structuredReport.stateChanges,
+        structuredReport.events,
+        structuredReport.metadata,
+      );
+
+      // Resolve labels for all unique addresses
+      const addressLabels = await resolveLabelsForAddresses(
+        addresses,
+        daoName,
+        publicClient,
+        contracts || [],
+      );
+
+      // Add labels to the report metadata
+      if (Object.keys(addressLabels).length > 0) {
+        structuredReport.metadata.addressLabels = addressLabels;
+        console.log(`[Report] Resolved ${Object.keys(addressLabels).length} address labels`);
+      }
+    } catch (error) {
+      console.warn('[Report] Failed to resolve address labels:', error);
+      // Continue without labels - they're optional
+    }
   }
 
   // Save off all reports. The Markdown and PDF reports use the `markdownReport`.
@@ -790,6 +919,8 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     chainId,
     simulationType,
     simulation,
+    coverage,
+    structuredReport, // Pass the report with labels already resolved
   });
 }
 
@@ -816,10 +947,13 @@ async function toMarkdownProposalReport(
   checks: AllCheckResults,
   destinationSimulations?: SimulationResult['destinationSimulations'],
   destinationChecks?: Record<number, AllCheckResults>,
+  coverage?: CoverageData,
 ): Promise<string> {
   const { id, proposer, targets, endBlock, startBlock, description } = proposal;
 
   if (!blocks.current.number) throw new Error('Current block number is null');
+
+  const sourceChainKey = String(coverage?.checks.find((c) => c.chainId != null)?.chainId ?? 1);
 
   // Generate the report. We insert an empty table of contents header which is populated later using remark-toc.
   const isPlaceholderProposer = getAddress(proposer) === getAddress(DEFAULT_SIMULATION_ADDRESS);
@@ -849,13 +983,15 @@ _Updated as of block [${blocks.current.number}](https://etherscan.io/block/${blo
 
 This is filled in by remark-toc and this sentence will be removed.
 
+${coverage ? `\n${toCoverageMarkdown(coverage)}\n` : ''}
+
 ## Proposal Text
 
 ${blockQuote(description.trim())}
 
 ## Main Chain Checks\n
 ${Object.keys(checks)
-  .map((checkId) => toCheckSummary(checks[checkId]))
+  .map((checkId) => toCheckSummary(checkId, checks[checkId], sourceChainKey))
   .join('\n')}
 
 ## Cross-Chain Simulation Results
@@ -921,7 +1057,9 @@ async function formatCrossChainResults(
       if (destinationChecks?.[Number(chainId)]) {
         checkResults = '\n  ### L2 Checks\n';
         checkResults += Object.keys(destinationChecks[Number(chainId)])
-          .map((checkId) => toCheckSummary(destinationChecks[Number(chainId)][checkId]))
+          .map((checkId) =>
+            toCheckSummary(checkId, destinationChecks[Number(chainId)][checkId], String(chainId)),
+          )
           .join('\n');
       }
 

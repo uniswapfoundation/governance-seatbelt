@@ -1,0 +1,26 @@
+{
+  "0x408ED6354d4973f66138C91495F2f2FCbd8724C3": {
+    "label": "Uniswap Governor",
+    "type": "governance"
+  },
+  "0x1a9C8182C09F50C8318d769245beA52c32BE35BC": {
+    "label": "Uniswap Timelock",
+    "type": "governance"
+  },
+  "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984": {
+    "label": "UNI Token",
+    "type": "token"
+  },
+  "0x912CE59144191C1204E64559FE8253a0e49E6548": {
+    "label": "ARB Token",
+    "type": "token"
+  },
+  "0xFd2892eFf2615C9F29AF83Fb528fAf3fE41c1426": {
+    "label": "Gauntlet",
+    "type": "user"
+  },
+  "0x66cCbf509cD28c2fc0f40b4469D6b6AA1FC0FeD3": {
+    "label": "OpenBlock",
+    "type": "user"
+  }
+}

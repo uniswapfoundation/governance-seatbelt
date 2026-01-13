@@ -601,9 +601,12 @@ export interface CoverageData {
  * Structured simulation report types
  */
 export interface SimulationCheck {
+  checkId?: string;
   title: string;
   status: 'passed' | 'warning' | 'failed' | 'skipped';
   skipReason?: string;
+  warningCount?: number;
+  errorCount?: number;
   details?: string;
   info?: string[];
   infoItems?: Array<{
@@ -644,6 +647,15 @@ export interface SimulationCalldata {
   }>;
 }
 
+/**
+ * Address label with metadata about the source and type of label
+ */
+export interface AddressLabel {
+  label: string;
+  type?: 'governance' | 'token' | 'bridge' | 'contract' | 'user';
+  source?: 'custom' | 'ens' | 'tenderly';
+}
+
 export interface StructuredSimulationReport {
   title: string;
   proposalText: string;
@@ -679,6 +691,8 @@ export interface StructuredSimulationReport {
     repoCommit?: string;
     repoUrl?: string;
     tenderlyUrl?: string;
+    // Address labels for entity identification (Issue #94)
+    addressLabels?: Record<string, AddressLabel>;
   };
 }
 
@@ -698,6 +712,9 @@ export interface GenerateReportsParams {
   simulationType?: 'executed' | 'proposed' | 'new';
   simulation?: TenderlySimulation;
   coverage?: CoverageData;
+  // For address label resolution (Issue #94)
+  daoName?: string;
+  contracts?: TenderlyContract[];
 }
 
 export interface WriteSimulationResultsJsonParams {
@@ -716,6 +733,9 @@ export interface WriteSimulationResultsJsonParams {
   chainId?: number;
   simulationType?: 'executed' | 'proposed' | 'new';
   simulation?: TenderlySimulation;
+  coverage?: CoverageData;
+  // Pre-generated structured report (with labels) to avoid regenerating
+  structuredReport?: StructuredSimulationReport;
 }
 
 export interface FrontendData {

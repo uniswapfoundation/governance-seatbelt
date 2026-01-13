@@ -183,6 +183,8 @@ async function processSimulation(
     simulationType: config.type,
     simulation: sim,
     coverage,
+    daoName: config.daoName,
+    contracts: sim.contracts,
   });
 
   // Prepare simulation data

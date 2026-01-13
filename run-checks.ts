@@ -18,6 +18,12 @@ import type {
   SimulationResult,
   TenderlySimulation,
 } from './types.d';
+import { runChecksWithTimeouts } from './utils/check-runner';
+import {
+  CHECKS_GLOBAL_TIMEOUT_MS,
+  CHECK_TIMEOUT_MS,
+  CHECK_TIMEOUT_OVERRIDES_MS,
+} from './utils/check-timeout-constants';
 import { getChainConfig, getClientForChain, publicClient } from './utils/clients/client';
 import { handleCrossChainSimulations, simulate } from './utils/clients/tenderly';
 import { DAO_NAME, GOVERNOR_ADDRESS, REPORTS_OUTPUT_DIRECTORY } from './utils/constants';
@@ -48,14 +54,15 @@ const SKIP_PATTERNS = [
  * Infer if a check was skipped based on info messages (heuristic fallback)
  */
 function inferSkipFromInfo(info: Message[]): string | null {
-  for (const msg of info) {
-    for (const pattern of SKIP_PATTERNS) {
-      if (pattern.test(msg)) {
-        return msg;
-      }
-    }
-  }
-  return null;
+  if (info.length === 0) return null;
+
+  // Only infer a skip if *all* messages look like a skip/not-applicable signal.
+  // This avoids false positives for checks that legitimately run but include
+  // some "not applicable" informational rows (e.g. EOAs in verification checks).
+  const allSkipLike = info.every((msg) => SKIP_PATTERNS.some((pattern) => pattern.test(msg)));
+  if (!allSkipLike) return null;
+
+  return info[0] ?? null;
 }
 
 /**
@@ -186,7 +193,6 @@ export async function runChecksForChain(
   chainId: number,
   allL2Simulations?: SimulationResult['destinationSimulations'],
 ): Promise<AllCheckResults> {
-  const results: AllCheckResults = {};
   const chainConfig = getChainConfig(chainId);
 
   // Run all checks with chain-specific configuration
@@ -201,100 +207,11 @@ export async function runChecksForChain(
       ? allL2Simulations.filter((s) => s.sim).map((s) => ({ chainId: s.chainId, sim: s.sim! }))
       : undefined;
 
-  // Chain-agnostic checks
-  results.checkStateChanges = {
-    name: ALL_CHECKS.checkStateChanges.name,
-    result: await ALL_CHECKS.checkStateChanges.checkProposal(
-      proposal,
-      sim,
-      depsWithConfig,
-      l2Simulations,
-    ),
-  };
-  results.checkLogs = {
-    name: ALL_CHECKS.checkLogs.name,
-    result: await ALL_CHECKS.checkLogs.checkProposal(proposal, sim, depsWithConfig, l2Simulations),
-  };
-  results.checkPermissionDiff = {
-    name: ALL_CHECKS.checkPermissionDiff.name,
-    result: await ALL_CHECKS.checkPermissionDiff.checkProposal(
-      proposal,
-      sim,
-      depsWithConfig,
-      l2Simulations,
-    ),
-  };
-  results.checkEthBalanceChanges = {
-    name: ALL_CHECKS.checkEthBalanceChanges.name,
-    result: await ALL_CHECKS.checkEthBalanceChanges.checkProposal(
-      proposal,
-      sim,
-      depsWithConfig,
-      l2Simulations,
-    ),
-  };
-  results.checkDecodeCalldata = {
-    name: ALL_CHECKS.checkDecodeCalldata.name,
-    result: await ALL_CHECKS.checkDecodeCalldata.checkProposal(
-      proposal,
-      sim,
-      depsWithConfig,
-      l2Simulations,
-    ),
-  };
-
-  // Chain-specific checks
-  results.checkTargetsVerifiedOnBlockExplorer = {
-    name: ALL_CHECKS.checkTargetsVerifiedOnBlockExplorer.name,
-    result: await ALL_CHECKS.checkTargetsVerifiedOnBlockExplorer.checkProposal(
-      proposal,
-      sim,
-      depsWithConfig,
-      l2Simulations,
-    ),
-  };
-  results.checkTouchedContractsVerifiedOnBlockExplorer = {
-    name: ALL_CHECKS.checkTouchedContractsVerifiedOnBlockExplorer.name,
-    result: await ALL_CHECKS.checkTouchedContractsVerifiedOnBlockExplorer.checkProposal(
-      proposal,
-      sim,
-      depsWithConfig,
-      l2Simulations,
-    ),
-  };
-  results.checkTargetsNoSelfdestruct = {
-    name: ALL_CHECKS.checkTargetsNoSelfdestruct.name,
-    result: await ALL_CHECKS.checkTargetsNoSelfdestruct.checkProposal(
-      proposal,
-      sim,
-      depsWithConfig,
-      l2Simulations,
-    ),
-  };
-  results.checkTouchedContractsNoSelfdestruct = {
-    name: ALL_CHECKS.checkTouchedContractsNoSelfdestruct.name,
-    result: await ALL_CHECKS.checkTouchedContractsNoSelfdestruct.checkProposal(
-      proposal,
-      sim,
-      depsWithConfig,
-      l2Simulations,
-    ),
-  };
-  results.checkSolc = {
-    name: ALL_CHECKS.checkSolc.name,
-    result: await ALL_CHECKS.checkSolc.checkProposal(proposal, sim, depsWithConfig, l2Simulations),
-  };
-  results.checkSlither = {
-    name: ALL_CHECKS.checkSlither.name,
-    result: await ALL_CHECKS.checkSlither.checkProposal(
-      proposal,
-      sim,
-      depsWithConfig,
-      l2Simulations,
-    ),
-  };
-
-  return results;
+  return await runChecksWithTimeouts(ALL_CHECKS, proposal, sim, depsWithConfig, l2Simulations, {
+    globalTimeoutMs: CHECKS_GLOBAL_TIMEOUT_MS,
+    defaultPerCheckTimeoutMs: CHECK_TIMEOUT_MS,
+    perCheckTimeoutOverridesMs: CHECK_TIMEOUT_OVERRIDES_MS,
+  });
 }
 
 /**
@@ -461,6 +378,8 @@ async function main() {
     simulationType: simType,
     simulation: finalResult.sim,
     coverage,
+    daoName: config.daoName,
+    contracts: finalResult.sim?.contracts,
   });
 }
 

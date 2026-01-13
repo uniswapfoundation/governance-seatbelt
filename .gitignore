@@ -24,4 +24,4 @@ crytic-export/
 trace*.json
 tenderly*.json
 new-response.json
-
+.osgrep/

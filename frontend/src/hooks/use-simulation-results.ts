@@ -11,10 +11,42 @@ export interface Proposal {
 }
 
 export interface SimulationCheck {
+  checkId?: string;
   title: string;
   status: 'passed' | 'warning' | 'failed' | 'skipped';
+  warningCount?: number;
+  errorCount?: number;
   details?: string;
   skipReason?: string;
+  info?: string[];
+}
+
+export interface CheckCoverage {
+  checkId: string;
+  checkName: string;
+  status: 'ran' | 'skipped' | 'failed';
+  skipReason?: string;
+  executionTimeMs?: number;
+  wasInferred?: boolean;
+  chainId?: number;
+}
+
+export interface CoverageData {
+  metadata: {
+    gitCommitHash: string;
+    gitBranch: string;
+    timestamp: string;
+    solcVersion?: string;
+    slitherVersion?: string;
+  };
+  checks: CheckCoverage[];
+  summary: {
+    total: number;
+    ran: number;
+    skipped: number;
+    failed: number;
+    inferredSkips: number;
+  };
 }
 
 export interface SimulationStateChange {
@@ -44,6 +76,15 @@ export interface SimulationCalldata {
     address: string;
     href: string;
   }>;
+}
+
+/**
+ * Address label with metadata about the source and type
+ */
+export interface AddressLabel {
+  label: string;
+  type?: 'governance' | 'token' | 'bridge' | 'contract' | 'user';
+  source?: 'custom' | 'ens' | 'tenderly';
 }
 
 export interface StructuredSimulationReport {
@@ -81,6 +122,7 @@ export interface StructuredSimulationReport {
       }
   >;
   calldata?: SimulationCalldata;
+  coverage?: CoverageData;
   metadata: {
     // Legacy fields for backwards compatibility
     blockNumber?: string;
@@ -109,6 +151,8 @@ export interface StructuredSimulationReport {
     repoCommit?: string;
     repoUrl?: string;
     tenderlyUrl?: string;
+    // Address labels for entity identification (Issue #94)
+    addressLabels?: Record<string, AddressLabel>;
   };
 }
 

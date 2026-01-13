@@ -1,28 +1,25 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { runChecksForChain } from '../../run-checks';
 import type { SimulationConfigNew, SimulationResult } from '../../types';
-import { simulateNew } from '../../utils/clients/tenderly';
-import { handleCrossChainSimulations } from '../../utils/clients/tenderly';
+import { handleCrossChainSimulations, simulateNew } from '../../utils/clients/tenderly';
+import {
+  getArbDistroCrossChainResult,
+  getArbDistroSourceResult,
+  getOptimismBridgeCrossChainResult,
+  getOptimismBridgeSourceResult,
+} from './cross-chain-fixtures';
 
 describe('Cross-Chain Integration Tests', () => {
   describe('Arbitrum Cross-Chain Integration', () => {
-    let arbSimConfig: SimulationConfigNew;
-
-    beforeAll(async () => {
-      // Import arb-distro simulation config
-      const { config } = await import('../../sims/arb-distro.sim.ts');
-      arbSimConfig = config;
-    });
-
     test('should complete full Arbitrum cross-chain simulation flow', async () => {
       // 1. Run source chain simulation
-      const sourceResult = await simulateNew(arbSimConfig);
+      const sourceResult = await getArbDistroSourceResult();
       expect(sourceResult).toBeDefined();
       expect(sourceResult.sim).toBeDefined();
       expect(sourceResult.proposal).toBeDefined();
 
       // 2. Handle cross-chain simulations
-      const crossChainResult = await handleCrossChainSimulations(sourceResult);
+      const crossChainResult = await getArbDistroCrossChainResult();
       expect(crossChainResult).toBeDefined();
       expect(crossChainResult.sim).toBeDefined();
       expect(crossChainResult.proposal).toBeDefined();
@@ -56,6 +53,8 @@ describe('Cross-Chain Integration Tests', () => {
     }, 60000); // Increased timeout for external API calls // 30 second timeout for integration test
 
     test('should handle Arbitrum simulation failures gracefully', async () => {
+      const { config: arbSimConfig } = await import('../../sims/arb-distro.sim.ts');
+
       // Create a config that will likely fail on L2
       const failingConfig: SimulationConfigNew = {
         ...arbSimConfig,
@@ -87,22 +86,14 @@ describe('Cross-Chain Integration Tests', () => {
   });
 
   describe('Optimism Cross-Chain Integration', () => {
-    let opSimConfig: SimulationConfigNew;
-
-    beforeAll(async () => {
-      // Import optimism-bridge-test simulation config
-      const { config } = await import('../../sims/optimism-bridge-test.sim.ts');
-      opSimConfig = config;
-    });
-
     test('should complete full Optimism cross-chain simulation flow', async () => {
       // 1. Run source chain simulation
-      const sourceResult = await simulateNew(opSimConfig);
+      const sourceResult = await getOptimismBridgeSourceResult();
       expect(sourceResult).toBeDefined();
       expect(sourceResult.sim).toBeDefined();
 
       // 2. Handle cross-chain simulations
-      const crossChainResult = await handleCrossChainSimulations(sourceResult);
+      const crossChainResult = await getOptimismBridgeCrossChainResult();
       expect(crossChainResult).toBeDefined();
 
       // 3. Verify destination simulations for both OP and Base
@@ -141,8 +132,7 @@ describe('Cross-Chain Integration Tests', () => {
     }, 60000); // Increased timeout for external API calls
 
     test('should handle multiple chain destinations correctly', async () => {
-      const sourceResult = await simulateNew(opSimConfig);
-      const crossChainResult = await handleCrossChainSimulations(sourceResult);
+      const crossChainResult = await getOptimismBridgeCrossChainResult();
 
       // Should have simulations for both OP and Base
       expect(crossChainResult.destinationSimulations).toBeDefined();
@@ -274,10 +264,7 @@ describe('Cross-Chain Integration Tests', () => {
 
   describe('Cross-Chain Check Integration', () => {
     test('should run all checks on cross-chain simulations', async () => {
-      const { config } = await import('../../sims/arb-distro.sim.ts');
-
-      const sourceResult = await simulateNew(config);
-      const crossChainResult = await handleCrossChainSimulations(sourceResult);
+      const crossChainResult = await getArbDistroCrossChainResult();
 
       const results = await runChecksForChain(
         crossChainResult.proposal,
@@ -309,10 +296,7 @@ describe('Cross-Chain Integration Tests', () => {
     }, 60000); // Increased timeout for external API calls
 
     test('should include cross-chain information in check results', async () => {
-      const { config } = await import('../../sims/arb-distro.sim.ts');
-
-      const sourceResult = await simulateNew(config);
-      const crossChainResult = await handleCrossChainSimulations(sourceResult);
+      const crossChainResult = await getArbDistroCrossChainResult();
 
       // Only run checks if we have destination simulations
       if (
