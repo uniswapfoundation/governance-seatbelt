@@ -1,0 +1,22 @@
+# CODEOWNERS is used for review routing on sensitive paths.
+# We intentionally keep coverage scoped to "critical" files to avoid noisy review requests.
+
+# CI / automation
+/.github/workflows/ @marcomariscal
+
+# Dependency / toolchain surface
+/package.json @marcomariscal
+/bun.lockb @marcomariscal
+/bunfig.toml @marcomariscal
+/tsconfig.json @marcomariscal
+/biome.json @marcomariscal
+
+# Check execution surface (anything that runs or defines checks)
+/index.ts @marcomariscal
+/run-checks.ts @marcomariscal
+/run-proposal.sh @marcomariscal
+/checks/ @marcomariscal
+/utils/ @marcomariscal
+/sims/ @marcomariscal
+/presentation/ @marcomariscal
+/tests/ @marcomariscal

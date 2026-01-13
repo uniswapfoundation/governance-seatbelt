@@ -1,3 +1,5 @@
+'use client';
+
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -20,6 +22,12 @@ import {
 import type React from 'react';
 import { useMemo, useState } from 'react';
 import { DecisionHeader } from './DecisionHeader';
+import {
+  TreasuryMovementCheck,
+  isTreasuryMovementCheckDataV1,
+  parseTreasuryMovementDetails,
+  treasuryMovementDataToViewModel,
+} from './TreasuryMovementCheck';
 
 // --- Explorer URL helpers ---
 
@@ -589,6 +597,25 @@ function ExpandableCheckItem({
   // Check if this is a proxy resolution check
   const isProxyResolutionCheck = check.title.toLowerCase().includes('proxy implementation');
 
+  // Check if this is a treasury movement check
+  const isTreasuryMovementCheck = check.title.toLowerCase().includes('treasury movement');
+
+  // Parse treasury movement data if applicable
+  const treasuryData = useMemo(() => {
+    if (!isTreasuryMovementCheck) return null;
+
+    const warnings = check.warnings ?? [];
+
+    if (isTreasuryMovementCheckDataV1(check.data)) {
+      return treasuryMovementDataToViewModel(check.data, warnings);
+    }
+
+    if (!check.details) return null;
+    return parseTreasuryMovementDetails(check.details);
+  }, [isTreasuryMovementCheck, check.data, check.details, check.warnings]);
+
+
+
   // Format the details content as React components
   const FormattedDetails = useMemo(() => {
     if (!check.details) return null;
@@ -909,7 +936,7 @@ function ExpandableCheckItem({
         </div>
         <div className="flex items-center gap-2">
           {getStatusBadge()}
-          {(check.details || check.skipReason) &&
+          {(check.details || check.skipReason || isTreasuryMovementCheck) &&
             (isExpanded ? (
               <ChevronUpIcon className="h-4 w-4 text-muted-foreground" />
             ) : (
@@ -917,7 +944,7 @@ function ExpandableCheckItem({
             ))}
         </div>
       </button>
-      {isExpanded && (check.details || check.skipReason) && (
+      {isExpanded && (check.details || check.skipReason || isTreasuryMovementCheck) && (
         <div className="p-5 pt-0 pl-11 text-sm border-t border-muted bg-muted/10">
           {check.status === 'skipped' && check.skipReason ? (
             <div className="mt-4">
@@ -937,6 +964,10 @@ function ExpandableCheckItem({
           ) : isProxyResolutionCheck && check.details ? (
             <div className="mt-4">
               <ProxyResolutionDetails details={check.details} />
+            </div>
+          ) : isTreasuryMovementCheck && treasuryData ? (
+            <div className="mt-4">
+              <TreasuryMovementCheck {...treasuryData} />
             </div>
           ) : (
             <div className="mt-4 whitespace-pre-wrap">{FormattedDetails}</div>

@@ -137,8 +137,41 @@ export type CheckResult = {
   info: Message[];
   warnings: Message[];
   errors: Message[];
+  /**
+   * Optional machine-readable data payload for consumers (e.g., frontend UI).
+   * Must be JSON-serializable.
+   */
+  // biome-ignore lint/suspicious/noExplicitAny: Generic structured payload varies per check
+  data?: any;
   skipped?: { reason: string };
+  permissionsDiff?: PermissionsDiffItem[];
 };
+
+export type PermissionsDiffItem =
+  | {
+      kind: 'ownership_transferred';
+      contractAddress: Address;
+      contractName?: string;
+      previous?: Address;
+      next: Address;
+      via: 'event' | 'state_diff' | 'event+state_diff';
+    }
+  | {
+      kind: 'role_granted' | 'role_revoked';
+      contractAddress: Address;
+      contractName?: string;
+      role: { id: Hex; name: string | null };
+      account: Address;
+      sender: Address;
+    }
+  | {
+      kind: 'timelock_admin_changed' | 'timelock_pending_admin_changed';
+      contractAddress: Address;
+      contractName?: string;
+      previous?: Address;
+      next: Address;
+      via: 'event' | 'state_diff' | 'event+state_diff';
+    };
 
 export interface ProposalData {
   // biome-ignore lint/suspicious/noExplicitAny: TODO: Properly type governor
@@ -574,11 +607,18 @@ export interface CoverageData {
  * Structured simulation report types
  */
 export interface SimulationCheck {
+  checkId?: string;
   title: string;
   status: 'passed' | 'warning' | 'failed' | 'skipped';
   skipReason?: string;
+  warningCount?: number;
+  errorCount?: number;
   details?: string;
   info?: string[];
+  warnings?: string[];
+  errors?: string[];
+  // biome-ignore lint/suspicious/noExplicitAny: Generic structured payload varies per check
+  data?: any;
   infoItems?: Array<{
     label: string;
     value: string;
@@ -617,6 +657,15 @@ export interface SimulationCalldata {
   }>;
 }
 
+/**
+ * Address label with metadata about the source and type of label
+ */
+export interface AddressLabel {
+  label: string;
+  type?: 'governance' | 'token' | 'bridge' | 'contract' | 'user';
+  source?: 'custom' | 'ens' | 'tenderly';
+}
+
 export interface StructuredSimulationReport {
   title: string;
   proposalText: string;
@@ -625,6 +674,7 @@ export interface StructuredSimulationReport {
   checks: SimulationCheck[];
   stateChanges: SimulationStateChange[];
   events: SimulationEvent[];
+  permissionsDiff?: PermissionsDiffItem[];
   calldata?: SimulationCalldata;
   coverage?: CoverageData;
   metadata: {
@@ -651,6 +701,8 @@ export interface StructuredSimulationReport {
     repoCommit?: string;
     repoUrl?: string;
     tenderlyUrl?: string;
+    // Address labels for entity identification (Issue #94)
+    addressLabels?: Record<string, AddressLabel>;
   };
 }
 
@@ -670,6 +722,9 @@ export interface GenerateReportsParams {
   simulationType?: 'executed' | 'proposed' | 'new';
   simulation?: TenderlySimulation;
   coverage?: CoverageData;
+  // For address label resolution (Issue #94)
+  daoName?: string;
+  contracts?: TenderlyContract[];
 }
 
 export interface WriteSimulationResultsJsonParams {
@@ -688,6 +743,9 @@ export interface WriteSimulationResultsJsonParams {
   chainId?: number;
   simulationType?: 'executed' | 'proposed' | 'new';
   simulation?: TenderlySimulation;
+  coverage?: CoverageData;
+  // Pre-generated structured report (with labels) to avoid regenerating
+  structuredReport?: StructuredSimulationReport;
 }
 
 export interface FrontendData {

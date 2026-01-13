@@ -54,7 +54,8 @@ describe('Verification checks - placeholder labeling', () => {
       const proposal = makeProposal([placeholder, realContract]);
       const res = await checkTargetsVerifiedOnBlockExplorer.checkProposal(
         proposal,
-        undefined as unknown as TenderlySimulation,
+        {} as unknown as TenderlySimulation,
+        {} as unknown as TenderlySimulation,
         deps,
       );
 

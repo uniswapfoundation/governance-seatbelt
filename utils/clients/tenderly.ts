@@ -26,6 +26,7 @@ import type {
   TenderlySimulation,
 } from '../../types.d';
 import { GOVERNOR_ABI } from '../abis/GovernorBravo';
+import { timelockAbi } from '../abis/Timelock';
 import { parseArbitrumL1L2Messages } from '../bridges/arbitrum';
 import { parseOptimismL1L2Messages } from '../bridges/optimism';
 import {
@@ -54,6 +55,23 @@ const TENDERLY_FETCH_OPTIONS = {
   type: 'json' as const,
   headers: { 'X-Access-Key': TENDERLY_ACCESS_TOKEN },
 };
+
+function parseBooleanEnv(value: string | undefined): boolean | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'y', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'n', 'off'].includes(normalized)) return false;
+  return undefined;
+}
+
+function getTenderlySaveFlags(defaultSaveIfFails: boolean): {
+  save: boolean;
+  saveIfFails: boolean;
+} {
+  const save = parseBooleanEnv(process.env.TENDERLY_SAVE_SIMULATIONS) ?? true;
+  const saveIfFails = parseBooleanEnv(process.env.TENDERLY_SAVE_IF_FAILS) ?? defaultSaveIfFails;
+  return { save, saveIfFails: save ? saveIfFails : false };
+}
 
 // Placeholder sender for simulations.
 // IMPORTANT: This MUST remain an empty EOA on mainnet (no code, nonce = 0).
@@ -283,6 +301,7 @@ export async function simulateNew(config: SimulationConfigNew): Promise<Simulati
  */
 async function simulateProposed(config: SimulationConfigProposed): Promise<SimulationResult> {
   const { governorAddress, governorType, proposalId } = config;
+  const proposalIdBigInt = typeof proposalId === 'bigint' ? proposalId : BigInt(proposalId);
 
   // --- Get details about the proposal we're simulating ---
   const chainId = await publicClient.getChainId();
@@ -291,7 +310,7 @@ async function simulateProposed(config: SimulationConfigProposed): Promise<Simul
   const blockRange = [0n, latestBlock.number];
   const governor = getGovernor(governorType, governorAddress);
   const timelock = await getTimelock(governorType, governorAddress);
-  const proposal = await getProposal(governorType, governorAddress, proposalId);
+  const proposal = await getProposal(governorType, governorAddress, proposalIdBigInt);
   const abi = governorType === 'bravo' ? GOVERNOR_ABI : GOVERNOR_OZ_ABI;
 
   const proposalCreatedEvents = await publicClient.getContractEvents({
@@ -305,15 +324,15 @@ async function simulateProposed(config: SimulationConfigProposed): Promise<Simul
   const proposalCreatedEvent = proposalCreatedEvents.filter((e) => {
     const args = e.args;
     if (governorType === 'bravo' && 'id' in args) {
-      return args.id === proposalId;
+      return args.id === proposalIdBigInt;
     }
     if (governorType === 'oz' && 'proposalId' in args) {
-      return args.proposalId === proposalId;
+      return args.proposalId === proposalIdBigInt;
     }
     return false;
   })[0];
   if (!proposalCreatedEvent)
-    throw new Error(`Proposal creation log for #${proposalId} not found in governor logs`);
+    throw new Error(`Proposal creation log for #${proposalIdBigInt} not found in governor logs`);
   const { targets, signatures: sigs, calldatas, description, values } = proposalCreatedEvent.args;
   if (!targets || !values || !sigs || !calldatas || !description) {
     throw new Error('Missing required proposal data in creation event');
@@ -469,14 +488,141 @@ async function simulateProposed(config: SimulationConfigProposed): Promise<Simul
  */
 async function simulateExecuted(config: SimulationConfigExecuted): Promise<SimulationResult> {
   const { governorAddress, governorType, proposalId } = config;
+  const proposalIdBigInt = typeof proposalId === 'bigint' ? proposalId : BigInt(proposalId);
 
   // --- Get details about the proposal we're analyzing ---
   const latestBlockNumber = await publicClient.getBlockNumber();
   const latestBlock = await publicClient.getBlock({ blockNumber: BigInt(latestBlockNumber) });
-  const blockRange = [0n, latestBlock.number];
   const governor = getGovernor(governorType, governorAddress);
   const timelock = await getTimelock(governorType, governorAddress);
 
+  if (governorType === 'bravo') {
+    const proposalStruct = await getProposal(governorType, governorAddress, proposalIdBigInt);
+    const startBlock = proposalStruct.startBlock;
+    if (!startBlock) throw new Error(`Missing startBlock for proposal ${proposalIdBigInt}`);
+
+    const votingDelay = await publicClient.readContract({
+      address: governorAddress,
+      abi: GOVERNOR_ABI,
+      functionName: 'votingDelay',
+    });
+
+    const approxCreatedBlock = startBlock > votingDelay ? startBlock - votingDelay : 0n;
+
+    const proposalCreatedEvent = await findProposalCreatedEventNearBlock({
+      governorType,
+      governorAddress,
+      proposalId: proposalIdBigInt,
+      approxBlock: approxCreatedBlock,
+      latestBlock: latestBlock.number ?? 0n,
+    });
+
+    const proposal = proposalCreatedEvent.args;
+
+    if (!proposal.description) {
+      throw new Error(
+        `Missing description in ProposalCreated event for proposal ${proposalIdBigInt}`,
+      );
+    }
+
+    const { targets, signatures, calldatas, values } = proposal;
+    if (!targets || !values || !signatures || !calldatas) {
+      throw new Error('Missing required proposal data in creation event');
+    }
+
+    const eta = proposalStruct.eta;
+    if (!eta || eta === 0n) {
+      throw new Error(`Missing eta for executed proposal ${proposalIdBigInt}`);
+    }
+
+    const txHashes = computeTransactionHashes(
+      targets as readonly `0x${string}`[],
+      values,
+      signatures,
+      calldatas as readonly `0x${string}`[],
+      eta,
+    );
+
+    const executeEvents = await publicClient.getContractEvents({
+      address: timelock.address,
+      abi: timelockAbi,
+      eventName: 'ExecuteTransaction',
+      args: { txHash: txHashes[0] as `0x${string}` },
+      fromBlock: 0n,
+      toBlock: latestBlock.number,
+    });
+
+    const executeEvent = executeEvents[0];
+    if (!executeEvent) {
+      throw new Error(
+        `Could not find timelock ExecuteTransaction event for proposal ${proposalIdBigInt} (txHash: ${txHashes[0]})`,
+      );
+    }
+
+    // Prepare tenderly payload. Since this proposal was already executed, we directly use that transaction data
+    const tx = await publicClient.getTransaction({ hash: executeEvent.transactionHash });
+    const simulationPayload: TenderlyPayload = {
+      network_id: String(tx.chainId) as TenderlyPayload['network_id'],
+      block_number: Number(tx.blockNumber),
+      from: tx.from,
+      to: tx.to ?? '',
+      input: tx.input,
+      gas: Number(tx.gas),
+      gas_price: tx.gasPrice?.toString(),
+      value: tx.value.toString(),
+      save_if_fails: false,
+      save: false,
+      generate_access_list: true,
+    };
+    const sim = await sendSimulation(simulationPayload);
+
+    // Validate required fields
+    if (!proposal.proposer) {
+      throw new Error(`Missing proposer in ProposalCreated event for proposal ${proposalIdBigInt}`);
+    }
+
+    const formattedProposal: ProposalEvent = {
+      ...proposal,
+      id: proposalIdBigInt,
+      proposalId: proposalIdBigInt,
+      proposer: proposal.proposer,
+      description: proposal.description,
+      targets: [...(proposal.targets ?? [])],
+      values: [...(proposal.values ?? [])],
+      signatures: [...(proposal.signatures ?? [])],
+      calldatas: [...(proposal.calldatas ?? [])],
+      startBlock: proposal.startBlock ?? 0n,
+      endBlock: proposal.endBlock ?? 0n,
+    };
+    const deps: ProposalData = {
+      governor,
+      timelock,
+      publicClient,
+      chainConfig: getChainConfig(1),
+      targets: proposal.targets?.map((target: string) => target) ?? [],
+      touchedContracts: sim.contracts.map((contract) => contract.address),
+    };
+
+    const [proposalCreatedBlock, proposalExecutedBlock] = await Promise.all([
+      publicClient.getBlock({ blockNumber: proposalCreatedEvent.blockNumber }),
+      tx.blockNumber
+        ? publicClient.getBlock({ blockNumber: tx.blockNumber })
+        : Promise.resolve(undefined),
+    ]);
+
+    return {
+      sim,
+      proposal: formattedProposal,
+      latestBlock,
+      deps,
+      executor: tx.from,
+      proposalCreatedBlock,
+      proposalExecutedBlock,
+    };
+  }
+
+  // --- OZ governors (fallback to governor logs) ---
+  const blockRange = [0n, latestBlock.number];
   const [createProposalEvents, proposalExecutedEvents] = await Promise.all([
     publicClient.getContractEvents({
       address: governorAddress,
@@ -496,29 +642,28 @@ async function simulateExecuted(config: SimulationConfigExecuted): Promise<Simul
 
   const proposalCreatedEvent = createProposalEvents.filter((e) => {
     const args = e.args;
-    if (governorType === 'bravo' && 'id' in args) {
-      return args.id === proposalId;
-    }
     if (governorType === 'oz' && 'proposalId' in args) {
-      return args.proposalId === proposalId;
+      return args.proposalId === proposalIdBigInt;
     }
   })[0];
+  if (!proposalCreatedEvent)
+    throw new Error(`Proposal creation log for #${proposalIdBigInt} not found in governor logs`);
 
   const proposal = proposalCreatedEvent.args;
 
   const proposalExecutedEvent = proposalExecutedEvents.filter((e) => {
     const args = e.args;
-    if (governorType === 'bravo' && 'id' in args) {
-      return args.id === proposalId;
-    }
     if (governorType === 'oz' && 'proposalId' in args) {
-      return args.proposalId === proposalId;
+      return args.proposalId === proposalIdBigInt;
     }
   })[0];
+  if (!proposalExecutedEvent)
+    throw new Error(`Proposal executed log for #${proposalIdBigInt} not found in governor logs`);
 
   // --- Simulate it ---
   // Prepare tenderly payload. Since this proposal was already executed, we directly use that transaction data
   const tx = await publicClient.getTransaction({ hash: proposalExecutedEvent.transactionHash });
+  const { save: saveSimulation, saveIfFails: saveSimulationIfFails } = getTenderlySaveFlags(true);
   const simulationPayload: TenderlyPayload = {
     network_id: String(tx.chainId) as TenderlyPayload['network_id'],
     block_number: Number(tx.blockNumber),
@@ -528,24 +673,26 @@ async function simulateExecuted(config: SimulationConfigExecuted): Promise<Simul
     gas: Number(tx.gas),
     gas_price: tx.gasPrice?.toString(),
     value: tx.value.toString(),
-    save_if_fails: true, // Set to true to save the simulation to your Tenderly dashboard if it fails.
-    save: true, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
+    save_if_fails: saveSimulationIfFails, // Save failed sims when enabled.
+    save: saveSimulation, // Save successful sims when enabled.
     generate_access_list: true,
   };
   const sim = await sendSimulation(simulationPayload);
 
   // Validate required fields
   if (!proposal.proposer) {
-    throw new Error(`Missing proposer in ProposalCreated event for proposal ${proposalId}`);
+    throw new Error(`Missing proposer in ProposalCreated event for proposal ${proposalIdBigInt}`);
   }
   if (!proposal.description) {
-    throw new Error(`Missing description in ProposalCreated event for proposal ${proposalId}`);
+    throw new Error(
+      `Missing description in ProposalCreated event for proposal ${proposalIdBigInt}`,
+    );
   }
 
   const formattedProposal: ProposalEvent = {
     ...proposal,
-    id: proposalId,
-    proposalId: proposalId,
+    id: proposalIdBigInt,
+    proposalId: proposalIdBigInt,
     proposer: proposal.proposer, // Required field, validated above
     description: proposal.description, // Required field, validated above
     targets: [...(proposal.targets ?? [])],
@@ -623,6 +770,8 @@ export async function handleCrossChainSimulations(
     extractedMessages.map(async (message) => {
       console.log(`[CrossChainHandler] Simulating L2 message to: ${message.l2TargetAddress}`);
       try {
+        const { save: saveSimulation, saveIfFails: saveSimulationIfFails } =
+          getTenderlySaveFlags(true);
         const destinationPayload: TenderlyPayload = {
           network_id: message.destinationChainId.toString() as TenderlyPayload['network_id'],
           from: message.l2FromAddress ?? DEFAULT_SIMULATION_ADDRESS,
@@ -631,8 +780,8 @@ export async function handleCrossChainSimulations(
           gas: BLOCK_GAS_LIMIT,
           gas_price: '0',
           value: message.l2Value,
-          save_if_fails: true,
-          save: true,
+          save_if_fails: saveSimulationIfFails,
+          save: saveSimulation,
         };
 
         // Log the payload before sending
@@ -744,6 +893,8 @@ function buildSimulationPayload(params: SimulationPayloadParams): TenderlyPayloa
     saveIfFails = false,
   } = params;
 
+  const { save: saveSimulation, saveIfFails: saveSimulationIfFails } =
+    getTenderlySaveFlags(saveIfFails);
   return {
     network_id: '1',
     // this field represents the block state to simulate against, so we use the latest block number
@@ -758,8 +909,8 @@ function buildSimulationPayload(params: SimulationPayloadParams): TenderlyPayloa
     gas: BLOCK_GAS_LIMIT,
     gas_price: '0',
     value: '0', // Will be updated by handleETHValueRequirements if needed
-    save_if_fails: saveIfFails, // Set to true to save the simulation to your Tenderly dashboard if it fails.
-    save: true, // Set to true to save the simulation to your Tenderly dashboard if it succeeds.
+    save_if_fails: saveSimulationIfFails, // Save failed sims when enabled.
+    save: saveSimulation, // Save successful sims when enabled.
     generate_access_list: true, // not required, but useful as a sanity check to ensure consistency in the simulation response
     block_header: {
       // this data represents what block.number and block.timestamp should return in the EVM during the simulation
@@ -867,6 +1018,43 @@ const sleep = (delay: number) => new Promise((resolve) => setTimeout(resolve, de
 
 // Get a random integer between two values
 const randomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min) + min); // max is exclusive, min is inclusive
+
+async function findProposalCreatedEventNearBlock(params: {
+  governorType: GovernorType;
+  governorAddress: Address;
+  proposalId: bigint;
+  approxBlock: bigint;
+  latestBlock: bigint;
+}) {
+  const { governorType, governorAddress, proposalId, approxBlock, latestBlock } = params;
+
+  const abi = governorType === 'bravo' ? GOVERNOR_ABI : GOVERNOR_OZ_ABI;
+  const windows = [2_000n, 10_000n, 50_000n, 200_000n, 1_000_000n];
+
+  for (const window of windows) {
+    const fromBlock = approxBlock > window ? approxBlock - window : 0n;
+    const toBlock = approxBlock + window < latestBlock ? approxBlock + window : latestBlock;
+
+    const events = await publicClient.getContractEvents({
+      address: governorAddress,
+      abi,
+      eventName: 'ProposalCreated',
+      fromBlock,
+      toBlock,
+    });
+
+    const match = events.find((e) => {
+      const args = e.args;
+      if (governorType === 'bravo' && 'id' in args) return args.id === proposalId;
+      if (governorType === 'oz' && 'proposalId' in args) return args.proposalId === proposalId;
+      return false;
+    });
+
+    if (match) return match;
+  }
+
+  throw new Error(`Proposal creation log for #${proposalId} not found near block ${approxBlock}`);
+}
 
 /**
  * @notice Given a Tenderly contract object, generates a descriptive human-friendly name for that contract
@@ -1028,7 +1216,7 @@ async function sendSimulation(payload: TenderlyPayload, delay = 1000): Promise<T
 function computeTransactionHashes(
   targets: readonly `0x${string}`[],
   values: readonly bigint[],
-  signatures: readonly `0x${string}`[],
+  signatures: readonly string[],
   calldatas: readonly `0x${string}`[],
   eta: bigint,
 ): string[] {

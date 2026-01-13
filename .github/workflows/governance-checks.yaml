@@ -9,6 +9,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   check-proposals:
     name: Check Uniswap Proposals
@@ -17,20 +20,20 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.10"
 
       - name: Set up Bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@f4d14e03ff726c06358e5557344e1da148b56cf7 # v1
         with:
           bun-version: latest
 
       - name: Cache proposal simulation results and ABIs
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             cache
@@ -43,7 +46,7 @@ jobs:
         run: bun install
 
       - name: Cache pip dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-slither-v1
@@ -59,7 +62,7 @@ jobs:
           solc-select use 0.8.20
 
       - name: Run checks
-        uses: nick-fields/retry@v2
+        uses: nick-fields/retry@14672906e672a08bd6eeb15720e9ed3ce869cdd4 # v2
         with:
           timeout_minutes: 60
           max_attempts: 5
@@ -80,7 +83,7 @@ jobs:
 
       - name: Upload artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Uniswap
           path: reports/Uniswap/0x408ED6354d4973f66138C91495F2f2FCbd8724C3/
