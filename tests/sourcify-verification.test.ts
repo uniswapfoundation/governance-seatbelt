@@ -22,7 +22,10 @@ describe('Sourcify-first verification', () => {
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
       const url = new URL(urlString);
 
-      if (url.origin === 'https://sourcify.dev' && url.pathname === '/server/check-all-by-addresses') {
+      if (
+        url.origin === 'https://sourcify.dev' &&
+        url.pathname === '/server/check-all-by-addresses'
+      ) {
         return new Response(
           JSON.stringify([{ address, chainIds: [{ chainId: '1', status: 'perfect' }] }]),
           {
