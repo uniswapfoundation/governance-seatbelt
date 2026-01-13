@@ -18,10 +18,11 @@ describe('Sourcify-first verification', () => {
     let etherscanCalled = false;
 
     globalThis.fetch = (async (input: RequestInfo | URL, _init?: RequestInit) => {
-      const url =
+      const urlString =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      const url = new URL(urlString);
 
-      if (url.startsWith('https://sourcify.dev/server/check-all-by-addresses')) {
+      if (url.origin === 'https://sourcify.dev' && url.pathname === '/server/check-all-by-addresses') {
         return new Response(
           JSON.stringify([{ address, chainIds: [{ chainId: '1', status: 'perfect' }] }]),
           {
@@ -31,7 +32,7 @@ describe('Sourcify-first verification', () => {
         );
       }
 
-      if (url.includes('api.etherscan.io')) {
+      if (url.hostname === 'api.etherscan.io') {
         etherscanCalled = true;
         return new Response(JSON.stringify({ status: '0', result: 'NOTOK' }), {
           status: 200,
@@ -39,7 +40,7 @@ describe('Sourcify-first verification', () => {
         });
       }
 
-      throw new Error(`Unexpected fetch in test: ${url}`);
+      throw new Error(`Unexpected fetch in test: ${url.toString()}`);
     }) as typeof fetch;
 
     try {
