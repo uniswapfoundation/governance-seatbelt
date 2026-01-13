@@ -11,42 +11,14 @@ export interface Proposal {
 }
 
 export interface SimulationCheck {
-  checkId?: string;
   title: string;
   status: 'passed' | 'warning' | 'failed' | 'skipped';
-  warningCount?: number;
-  errorCount?: number;
   details?: string;
   skipReason?: string;
   info?: string[];
-}
-
-export interface CheckCoverage {
-  checkId: string;
-  checkName: string;
-  status: 'ran' | 'skipped' | 'failed';
-  skipReason?: string;
-  executionTimeMs?: number;
-  wasInferred?: boolean;
-  chainId?: number;
-}
-
-export interface CoverageData {
-  metadata: {
-    gitCommitHash: string;
-    gitBranch: string;
-    timestamp: string;
-    solcVersion?: string;
-    slitherVersion?: string;
-  };
-  checks: CheckCoverage[];
-  summary: {
-    total: number;
-    ran: number;
-    skipped: number;
-    failed: number;
-    inferredSkips: number;
-  };
+  warnings?: string[];
+  errors?: string[];
+  data?: unknown;
 }
 
 export interface SimulationStateChange {
@@ -78,15 +50,6 @@ export interface SimulationCalldata {
   }>;
 }
 
-/**
- * Address label with metadata about the source and type
- */
-export interface AddressLabel {
-  label: string;
-  type?: 'governance' | 'token' | 'bridge' | 'contract' | 'user';
-  source?: 'custom' | 'ens' | 'tenderly';
-}
-
 export interface StructuredSimulationReport {
   title: string;
   proposalText: string;
@@ -95,34 +58,7 @@ export interface StructuredSimulationReport {
   checks: SimulationCheck[];
   stateChanges: SimulationStateChange[];
   events: SimulationEvent[];
-  permissionsDiff?: Array<
-    | {
-        kind: 'ownership_transferred';
-        contractAddress: Address;
-        contractName?: string;
-        previous?: Address;
-        next: Address;
-        via: 'event' | 'state_diff' | 'event+state_diff';
-      }
-    | {
-        kind: 'role_granted' | 'role_revoked';
-        contractAddress: Address;
-        contractName?: string;
-        role: { id: `0x${string}`; name: string | null };
-        account: Address;
-        sender: Address;
-      }
-    | {
-        kind: 'timelock_admin_changed' | 'timelock_pending_admin_changed';
-        contractAddress: Address;
-        contractName?: string;
-        previous?: Address;
-        next: Address;
-        via: 'event' | 'state_diff' | 'event+state_diff';
-      }
-  >;
   calldata?: SimulationCalldata;
-  coverage?: CoverageData;
   metadata: {
     // Legacy fields for backwards compatibility
     blockNumber?: string;
@@ -151,8 +87,6 @@ export interface StructuredSimulationReport {
     repoCommit?: string;
     repoUrl?: string;
     tenderlyUrl?: string;
-    // Address labels for entity identification (Issue #94)
-    addressLabels?: Record<string, AddressLabel>;
   };
 }
 
@@ -190,13 +124,10 @@ export function useSimulationResults() {
         throw new Error(errorData.error || 'Failed to fetch simulation results');
       }
 
-      const raw = (await response.json()) as unknown;
-
-      // API normalizes to an array, but keep this defensive in case of older responses
-      const data = (Array.isArray(raw) ? raw : [raw]) as SimulationResponse[];
+      const data = (await response.json()) as SimulationResponse[];
 
       // Validate the data structure
-      if (!data || data.length === 0) {
+      if (!data || !Array.isArray(data) || data.length === 0) {
         throw new Error('Invalid simulation results: no results found');
       }
 

@@ -137,6 +137,12 @@ export type CheckResult = {
   info: Message[];
   warnings: Message[];
   errors: Message[];
+  /**
+   * Optional machine-readable data payload for consumers (e.g., frontend UI).
+   * Must be JSON-serializable.
+   */
+  // biome-ignore lint/suspicious/noExplicitAny: Generic structured payload varies per check
+  data?: any;
   skipped?: { reason: string };
   permissionsDiff?: PermissionsDiffItem[];
 };
@@ -609,6 +615,10 @@ export interface SimulationCheck {
   errorCount?: number;
   details?: string;
   info?: string[];
+  warnings?: string[];
+  errors?: string[];
+  // biome-ignore lint/suspicious/noExplicitAny: Generic structured payload varies per check
+  data?: any;
   infoItems?: Array<{
     label: string;
     value: string;

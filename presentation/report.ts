@@ -577,6 +577,9 @@ function generateStructuredReport(
       errorCount: errors.length,
       details,
       info,
+      warnings,
+      errors,
+      data: result.data,
     };
   });
 

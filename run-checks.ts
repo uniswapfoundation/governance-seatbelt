@@ -18,12 +18,6 @@ import type {
   SimulationResult,
   TenderlySimulation,
 } from './types.d';
-import { runChecksWithTimeouts } from './utils/check-runner';
-import {
-  CHECKS_GLOBAL_TIMEOUT_MS,
-  CHECK_TIMEOUT_MS,
-  CHECK_TIMEOUT_OVERRIDES_MS,
-} from './utils/check-timeout-constants';
 import { getChainConfig, getClientForChain, publicClient } from './utils/clients/client';
 import { handleCrossChainSimulations, simulate } from './utils/clients/tenderly';
 import { DAO_NAME, GOVERNOR_ADDRESS, REPORTS_OUTPUT_DIRECTORY } from './utils/constants';
@@ -193,6 +187,7 @@ export async function runChecksForChain(
   chainId: number,
   allL2Simulations?: SimulationResult['destinationSimulations'],
 ): Promise<AllCheckResults> {
+  const results: AllCheckResults = {};
   const chainConfig = getChainConfig(chainId);
 
   // Run all checks with chain-specific configuration
@@ -207,11 +202,74 @@ export async function runChecksForChain(
       ? allL2Simulations.filter((s) => s.sim).map((s) => ({ chainId: s.chainId, sim: s.sim! }))
       : undefined;
 
-  return await runChecksWithTimeouts(ALL_CHECKS, proposal, sim, depsWithConfig, l2Simulations, {
-    globalTimeoutMs: CHECKS_GLOBAL_TIMEOUT_MS,
-    defaultPerCheckTimeoutMs: CHECK_TIMEOUT_MS,
-    perCheckTimeoutOverridesMs: CHECK_TIMEOUT_OVERRIDES_MS,
-  });
+  // Chain-agnostic checks
+  const CHAIN_AGNOSTIC_CHECK_IDS = [
+    'checkStateChanges',
+    'checkLogs',
+    'checkEthBalanceChanges',
+    'checkTreasuryMovement',
+    'checkDecodeCalldata',
+  ] as const;
+
+  for (const checkId of CHAIN_AGNOSTIC_CHECK_IDS) {
+    results[checkId] = {
+      name: ALL_CHECKS[checkId].name,
+      result: await ALL_CHECKS[checkId].checkProposal(proposal, sim, depsWithConfig, l2Simulations),
+    };
+  }
+
+  // Chain-specific checks
+  results.checkTargetsVerifiedOnBlockExplorer = {
+    name: ALL_CHECKS.checkTargetsVerifiedOnBlockExplorer.name,
+    result: await ALL_CHECKS.checkTargetsVerifiedOnBlockExplorer.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
+  };
+  results.checkTouchedContractsVerifiedOnBlockExplorer = {
+    name: ALL_CHECKS.checkTouchedContractsVerifiedOnBlockExplorer.name,
+    result: await ALL_CHECKS.checkTouchedContractsVerifiedOnBlockExplorer.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
+  };
+  results.checkTargetsNoSelfdestruct = {
+    name: ALL_CHECKS.checkTargetsNoSelfdestruct.name,
+    result: await ALL_CHECKS.checkTargetsNoSelfdestruct.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
+  };
+  results.checkTouchedContractsNoSelfdestruct = {
+    name: ALL_CHECKS.checkTouchedContractsNoSelfdestruct.name,
+    result: await ALL_CHECKS.checkTouchedContractsNoSelfdestruct.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
+  };
+  results.checkSolc = {
+    name: ALL_CHECKS.checkSolc.name,
+    result: await ALL_CHECKS.checkSolc.checkProposal(proposal, sim, depsWithConfig, l2Simulations),
+  };
+  results.checkSlither = {
+    name: ALL_CHECKS.checkSlither.name,
+    result: await ALL_CHECKS.checkSlither.checkProposal(
+      proposal,
+      sim,
+      depsWithConfig,
+      l2Simulations,
+    ),
+  };
+
+  return results;
 }
 
 /**

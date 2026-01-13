@@ -14,6 +14,7 @@ import {
   checkTargetsVerifiedOnBlockExplorer,
   checkTouchedContractsVerifiedOnBlockExplorer,
 } from './check-targets-verified-etherscan';
+import { checkTreasuryMovement } from './check-treasury-movement';
 import { checkValueRequired } from './check-value-required';
 
 const ALL_CHECKS: {
@@ -29,6 +30,7 @@ const ALL_CHECKS: {
   checkTouchedContractsNoSelfdestruct,
   checkValueRequired,
   checkEthBalanceChanges,
+  checkTreasuryMovement,
   // The solc check must be run before the slither check, because the compilation exports a zip file
   // which is consumed by slither. This prevents us from having to compile the contracts twice.
   checkSolc,
