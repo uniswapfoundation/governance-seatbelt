@@ -635,6 +635,9 @@ function ExpandableCheckItem({
           ? `Inferred: ${coverage.skipReason}`
           : null;
 
+  // Check if this is a permission changes check
+  const isPermissionChangesCheck = check.title.toLowerCase().includes('permission changes');
+
   const isExpandable = Boolean(
     check.details ||
       check.skipReason ||
@@ -694,9 +697,6 @@ function ExpandableCheckItem({
 
   // Check if this is a state changes check
   const isStateChangesCheck = check.title.toLowerCase().includes('state changes');
-
-  // Check if this is a permission changes check
-  const isPermissionChangesCheck = check.title.toLowerCase().includes('permission changes');
 
   // Format the details content as React components
   const FormattedDetails = useMemo(() => {
