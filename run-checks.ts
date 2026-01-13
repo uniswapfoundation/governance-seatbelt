@@ -48,14 +48,15 @@ const SKIP_PATTERNS = [
  * Infer if a check was skipped based on info messages (heuristic fallback)
  */
 function inferSkipFromInfo(info: Message[]): string | null {
-  for (const msg of info) {
-    for (const pattern of SKIP_PATTERNS) {
-      if (pattern.test(msg)) {
-        return msg;
-      }
-    }
-  }
-  return null;
+  if (info.length === 0) return null;
+
+  // Only infer a skip if *all* messages look like a skip/not-applicable signal.
+  // This avoids false positives for checks that legitimately run but include
+  // some "not applicable" informational rows (e.g. EOAs in verification checks).
+  const allSkipLike = info.every((msg) => SKIP_PATTERNS.some((pattern) => pattern.test(msg)));
+  if (!allSkipLike) return null;
+
+  return info[0] ?? null;
 }
 
 /**
