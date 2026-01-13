@@ -20,6 +20,19 @@ Some notes on the outputs of reports:
 - State changes and events around the proposal execution process, such as the `ExecuteTransaction` event and `queuedTransactions` state changes, are omitted from reports to reduce noise
 - Slither analysis for the timelock, governor proxy, and governor implementation is skipped to reduce noise in the output. Note that skipping analysis for the implementation on historical proposals requires an archive node, and a warning will be shown if archive data is required not available
 - ETH balance changes are reported in a dedicated section, showing transfers and net balance changes for each address involved
+- Permission changes (ownership transfers, role grants/revokes, timelock admin changes) are detected and surfaced as warnings, and also emitted as structured data in `structuredReport.permissionsDiff`
+
+## Structured Report JSON
+
+When running simulations locally, Seatbelt writes `public/simulation-results.json` for the frontend. The `report.structuredReport` object is a stable, machine-readable representation of the report.
+
+### `structuredReport.permissionsDiff`
+
+If present, this is an array of permission changes detected during the simulation. Each entry has a `kind` plus additional fields:
+
+- `ownership_transferred`: `{ contractAddress, previous?, next, via }`
+- `role_granted` / `role_revoked`: `{ contractAddress, role: { id, name }, account, sender }`
+- `timelock_admin_changed` / `timelock_pending_admin_changed`: `{ contractAddress, previous?, next, via }`
 
 ## Proposing via Frontend
 

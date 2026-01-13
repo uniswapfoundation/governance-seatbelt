@@ -14,11 +14,11 @@ export interface SourcifyCheckResult {
   status: SourcifyVerificationStatus;
 }
 
-/**
- * Match-style status used by some verification flows.
- */
 export type SourcifyMatch = 'exact_match' | 'match' | 'no_match' | 'error';
 
+export type SourcifyVerification =
+  | { status: 'verified'; match: 'exact_match' | 'partial_match' }
+  | { status: 'unverified' };
 // In-memory cache for Sourcify verification results
 const sourcifyCache: Record<string, SourcifyCheckResult> = {};
 
@@ -123,4 +123,23 @@ export async function getSourcifyMatch(address: string, chainId: number): Promis
   if (result.status === 'partial') return 'match';
   if (result.status === 'error') return 'error';
   return 'no_match';
+}
+
+export async function getSourcifyVerification(
+  address: string,
+  chainId: number,
+): Promise<SourcifyVerification> {
+  const result = await SourcifyClient.isContractVerified(address, chainId);
+
+  if (result.status === 'perfect') return { status: 'verified', match: 'exact_match' };
+  if (result.status === 'partial') return { status: 'verified', match: 'partial_match' };
+  return { status: 'unverified' };
+}
+
+export async function isContractVerifiedOnSourcify(
+  address: string,
+  chainId: number,
+): Promise<boolean> {
+  const result = await SourcifyClient.isContractVerified(address, chainId);
+  return result.verified;
 }

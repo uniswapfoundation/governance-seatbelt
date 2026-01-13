@@ -64,7 +64,7 @@ describe('Selfdestruct checks - placeholder warning suppression', () => {
     const proposal = makeProposal([placeholder, realEoa]);
     const res = await checkTargetsNoSelfdestruct.checkProposal(
       proposal,
-      undefined as unknown as TenderlySimulation,
+      {} as unknown as TenderlySimulation,
       deps,
     );
 
@@ -89,7 +89,7 @@ describe('Selfdestruct checks - placeholder warning suppression', () => {
     const proposal = makeProposal([placeholder, otherEmpty]);
     const res = await checkTargetsNoSelfdestruct.checkProposal(
       proposal,
-      undefined as unknown as TenderlySimulation,
+      {} as unknown as TenderlySimulation,
       deps,
     );
 
