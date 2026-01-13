@@ -589,6 +589,10 @@ export interface CoverageMetadata {
   timestamp: string;
   solcVersion?: string;
   slitherVersion?: string;
+  bunVersion?: string;
+  nodeVersion?: string;
+  pythonVersion?: string;
+  runnerOs?: string;
 }
 
 export interface CoverageData {

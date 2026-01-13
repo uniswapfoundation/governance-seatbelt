@@ -96,17 +96,61 @@ function getToolVersions(): { solcVersion?: string; slitherVersion?: string } {
 }
 
 /**
+ * Get runtime versions for coverage tracking
+ */
+function getRuntimeVersions(): {
+  bunVersion?: string;
+  nodeVersion?: string;
+  pythonVersion?: string;
+  runnerOs?: string;
+} {
+  let bunVersion: string | undefined;
+  let nodeVersion: string | undefined = process.version;
+  let pythonVersion: string | undefined;
+
+  try {
+    bunVersion = execFileSync('bun', ['--version']).toString().trim();
+  } catch {
+    // bun not available
+  }
+
+  try {
+    nodeVersion = execFileSync('node', ['--version']).toString().trim();
+  } catch {
+    // node not available; keep process.version fallback
+  }
+
+  try {
+    pythonVersion = execFileSync('python3', ['--version']).toString().trim();
+  } catch {
+    // python not available
+  }
+
+  return {
+    bunVersion,
+    nodeVersion,
+    pythonVersion,
+    runnerOs: process.env.RUNNER_OS ?? process.platform,
+  };
+}
+
+/**
  * Build coverage metadata
  */
 export function buildCoverageMetadata(): CoverageMetadata {
   const git = getGitMetadata();
   const tools = getToolVersions();
+  const runtime = getRuntimeVersions();
   return {
     gitCommitHash: git.commitHash,
     gitBranch: git.branch,
     timestamp: new Date().toISOString(),
     solcVersion: tools.solcVersion,
     slitherVersion: tools.slitherVersion,
+    bunVersion: runtime.bunVersion,
+    nodeVersion: runtime.nodeVersion,
+    pythonVersion: runtime.pythonVersion,
+    runnerOs: runtime.runnerOs,
   };
 }
 

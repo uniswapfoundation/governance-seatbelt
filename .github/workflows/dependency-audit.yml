@@ -13,28 +13,48 @@ permissions:
 jobs:
   bun-audit:
     name: bun audit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
+      - name: Read Bun version
+        id: bun-version
+        run: echo "version=$(cat .bun-version)" >> "$GITHUB_OUTPUT"
+
       - name: Set up Bun
         uses: oven-sh/setup-bun@f4d14e03ff726c06358e5557344e1da148b56cf7 # v1
         with:
-          bun-version: latest
+          bun-version: ${{ steps.bun-version.outputs.version }}
 
       - name: Install dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Run audit (JSON)
         id: audit
         continue-on-error: true
         run: bun audit --json > bun-audit.json
 
+      - name: Write tool versions
+        run: |
+          node_version="$(node --version || true)"
+          bun_version="$(bun --version || true)"
+          python_version="$(python3 --version 2>/dev/null || true)"
+          cat > tool-versions.json <<EOF
+          {
+            "bunVersion": "${bun_version}",
+            "nodeVersion": "${node_version}",
+            "pythonVersion": "${python_version}",
+            "runnerOs": "${RUNNER_OS}"
+          }
+          EOF
+
       - name: Upload audit artifact
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: bun-audit
-          path: bun-audit.json
+          path: |
+            bun-audit.json
+            tool-versions.json

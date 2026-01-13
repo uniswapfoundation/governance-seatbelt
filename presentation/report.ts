@@ -214,6 +214,12 @@ function toCoverageMarkdown(coverage: CoverageData): string {
     `- Commit: \`${coverage.metadata.gitCommitHash}\``,
     `- Branch: \`${coverage.metadata.gitBranch}\``,
     `- Timestamp: ${coverage.metadata.timestamp}`,
+    ...(coverage.metadata.runnerOs ? [`- Runner OS: \`${coverage.metadata.runnerOs}\``] : []),
+    ...(coverage.metadata.nodeVersion ? [`- Node: \`${coverage.metadata.nodeVersion}\``] : []),
+    ...(coverage.metadata.bunVersion ? [`- Bun: \`${coverage.metadata.bunVersion}\``] : []),
+    ...(coverage.metadata.pythonVersion
+      ? [`- Python: \`${coverage.metadata.pythonVersion}\``]
+      : []),
     ...(coverage.metadata.solcVersion ? [`- solc: \`${coverage.metadata.solcVersion}\``] : []),
     ...(coverage.metadata.slitherVersion
       ? [`- slither: \`${coverage.metadata.slitherVersion}\``]
