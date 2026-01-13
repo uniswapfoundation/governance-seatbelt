@@ -292,7 +292,6 @@ describe('Cross-Chain Integration Tests', () => {
         expect(Array.isArray(result.result.warnings)).toBe(true);
         expect(Array.isArray(result.result.errors)).toBe(true);
       }
-
     });
 
     test('should include cross-chain information in check results', async () => {

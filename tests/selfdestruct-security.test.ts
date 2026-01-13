@@ -65,7 +65,6 @@ describe('Selfdestruct checks - security against placeholder bypass', () => {
     const res = await checkTargetsNoSelfdestruct.checkProposal(
       proposal,
       {} as unknown as TenderlySimulation,
-      {} as unknown as TenderlySimulation,
       deps,
     );
 
@@ -95,7 +94,6 @@ describe('Selfdestruct checks - security against placeholder bypass', () => {
     const proposal = makeProposal([legitimatePlaceholder]);
     const res = await checkTargetsNoSelfdestruct.checkProposal(
       proposal,
-      {} as unknown as TenderlySimulation,
       {} as unknown as TenderlySimulation,
       deps,
     );

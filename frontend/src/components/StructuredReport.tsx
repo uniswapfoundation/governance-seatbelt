@@ -614,8 +614,6 @@ function ExpandableCheckItem({
     return parseTreasuryMovementDetails(check.details);
   }, [isTreasuryMovementCheck, check.data, check.details, check.warnings]);
 
-
-
   // Format the details content as React components
   const FormattedDetails = useMemo(() => {
     if (!check.details) return null;

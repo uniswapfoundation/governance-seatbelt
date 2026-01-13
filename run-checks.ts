@@ -220,7 +220,6 @@ export async function runChecksForChain(
     };
   }
 
-
   // Chain-specific checks
   results.checkTargetsVerifiedOnBlockExplorer = {
     name: ALL_CHECKS.checkTargetsVerifiedOnBlockExplorer.name,
