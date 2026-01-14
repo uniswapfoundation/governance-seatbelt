@@ -1,4 +1,5 @@
 import { getAddress } from 'viem';
+import { SchemaValidationError, parseWithSchema, z } from '../validation/zod';
 
 /**
  * Sourcify verification status values.
@@ -21,6 +22,21 @@ export type SourcifyVerification =
   | { status: 'unverified' };
 // In-memory cache for Sourcify verification results
 const sourcifyCache: Record<string, SourcifyCheckResult> = {};
+
+const sourcifyResponseSchema = z.array(
+  z
+    .object({
+      chainIds: z.array(
+        z
+          .object({
+            chainId: z.union([z.string(), z.number()]),
+            status: z.string(),
+          })
+          .passthrough(),
+      ),
+    })
+    .passthrough(),
+);
 
 function getCacheKey(address: string, chainId: number): string {
   return `${chainId}:${getAddress(address)}`;
@@ -65,11 +81,19 @@ export class SourcifyClient {
         return result;
       }
 
-      const data = await response.json();
+      const rawData = await response.json();
+      const data = parseWithSchema(
+        sourcifyResponseSchema,
+        rawData,
+        'Sourcify check-all-by-addresses response',
+      );
       const result = SourcifyClient.parseResponse(data, chainId);
       sourcifyCache[cacheKey] = result;
       return result;
     } catch (error) {
+      if (error instanceof SchemaValidationError) {
+        throw error;
+      }
       if (error instanceof Error && error.name === 'AbortError') {
         console.warn(`Sourcify API timeout for ${address} on chain ${chainId}`);
       } else {

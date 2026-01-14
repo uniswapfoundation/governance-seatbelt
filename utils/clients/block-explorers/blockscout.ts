@@ -1,15 +1,27 @@
 import { type Abi, getAddress } from 'viem';
+import { SchemaValidationError, parseWithSchema, z } from '../../validation/zod';
 import { CacheManager } from './cache';
 import { BaseBlockExplorer, type VerificationOptions } from './index';
 
 interface BlockscoutContractResponse {
-  status: string;
+  status?: string;
   is_verified: boolean;
   is_partially_verified?: boolean;
   abi: Abi | null;
-  name: string;
-  source_code: string | null;
+  name?: string;
+  source_code?: string | null;
 }
+
+const blockscoutContractSchema: z.ZodType<BlockscoutContractResponse> = z
+  .object({
+    is_verified: z.boolean(),
+    is_partially_verified: z.boolean().optional(),
+    abi: z.custom<Abi>().nullable(),
+    status: z.string().optional(),
+    name: z.string().optional(),
+    source_code: z.string().nullable().optional(),
+  })
+  .passthrough();
 
 export class BlockscoutExplorer extends BaseBlockExplorer {
   private baseUrl: string;
@@ -33,6 +45,8 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
     operation: string,
     chainId: number,
     address: string,
+    schema?: z.ZodType<T>,
+    context?: string,
   ): Promise<T | null> {
     const maxRetries = 3;
     let retryCount = 0;
@@ -45,7 +59,10 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
         const response = await fetch(url);
 
         if (response.ok) {
-          const data = (await response.json()) as T;
+          const rawData = await response.json();
+          const data = schema
+            ? parseWithSchema(schema, rawData, context ?? operation)
+            : (rawData as T);
           // Blockscout API responses don't have a status wrapper, so just return the data
           return data;
         }
@@ -59,6 +76,9 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
           await this.delay(1000 * 2 ** retryCount);
         }
       } catch (error) {
+        if (error instanceof SchemaValidationError) {
+          throw error;
+        }
         this.error(
           `Error ${operation} for ${address} on chain ${chainId} (attempt ${retryCount + 1}/${maxRetries}):`,
           error,
@@ -96,6 +116,8 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
         'fetch ABI',
         chainId,
         normalizedAddress,
+        blockscoutContractSchema,
+        'Blockscout fetch ABI response',
       );
 
       if (!data || !data.abi) {
@@ -110,6 +132,9 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
 
       return data.abi;
     } catch (error) {
+      if (error instanceof SchemaValidationError) {
+        throw error;
+      }
       this.error(`Error fetching ABI for ${address} on chain ${chainId}:`, error);
       return null;
     }
@@ -126,6 +151,8 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
       'fetch verification status',
       chainId,
       normalizedAddress,
+      blockscoutContractSchema,
+      'Blockscout verification status response',
     );
 
     if (!data) {

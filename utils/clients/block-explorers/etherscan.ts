@@ -1,12 +1,44 @@
 import { type Abi, getAddress } from 'viem';
+import { SchemaValidationError, parseWithSchema, z } from '../../validation/zod';
 import { CacheManager } from './cache';
 import { BaseBlockExplorer, type VerificationOptions } from './index';
 
-interface EtherscanApiResponse {
+interface EtherscanAbiResponse {
+  status: string;
+  result: string;
+  message?: string;
+}
+
+interface EtherscanSourceCodeResponse {
   status: string;
   result: string | Array<{ SourceCode?: string }>;
   message?: string;
 }
+
+const etherscanAbiResponseSchema: z.ZodType<EtherscanAbiResponse> = z
+  .object({
+    status: z.string(),
+    result: z.string(),
+    message: z.string().optional(),
+  })
+  .passthrough();
+
+const etherscanSourceCodeResponseSchema: z.ZodType<EtherscanSourceCodeResponse> = z
+  .object({
+    status: z.string(),
+    result: z.union([
+      z.string(),
+      z.array(
+        z
+          .object({
+            SourceCode: z.string().optional(),
+          })
+          .passthrough(),
+      ),
+    ]),
+    message: z.string().optional(),
+  })
+  .passthrough();
 
 export class EtherscanExplorer extends BaseBlockExplorer {
   private apiKey: string;
@@ -37,7 +69,7 @@ export class EtherscanExplorer extends BaseBlockExplorer {
       // Retry mechanism for API requests
       const maxRetries = 3;
       let retryCount = 0;
-      let data: EtherscanApiResponse | undefined;
+      let data: EtherscanAbiResponse | undefined;
 
       while (retryCount < maxRetries) {
         // Add a delay before making the API call to avoid rate limiting
@@ -48,7 +80,8 @@ export class EtherscanExplorer extends BaseBlockExplorer {
           const url = `https://api.etherscan.io/v2/api?chainid=${chainId}&module=contract&action=getabi&address=${normalizedAddress}&apikey=${this.apiKey}`;
 
           const response = await fetch(url);
-          data = (await response.json()) as EtherscanApiResponse;
+          const rawData = await response.json();
+          data = parseWithSchema(etherscanAbiResponseSchema, rawData, 'Etherscan getabi response');
 
           if (data.status === '1' && data.result && typeof data.result === 'string') {
             break; // Success, exit the retry loop
@@ -63,6 +96,9 @@ export class EtherscanExplorer extends BaseBlockExplorer {
             await this.delay(1000 * 2 ** retryCount);
           }
         } catch (error) {
+          if (error instanceof SchemaValidationError) {
+            throw error;
+          }
           this.error(
             `Error fetching ABI for ${normalizedAddress} on chain ${chainId} (attempt ${retryCount + 1}/${maxRetries}):`,
             error,
@@ -118,6 +154,9 @@ export class EtherscanExplorer extends BaseBlockExplorer {
         return null;
       }
     } catch (error) {
+      if (error instanceof SchemaValidationError) {
+        throw error;
+      }
       this.error(`Error fetching ABI for ${address} on chain ${chainId}:`, error);
       return null;
     }
@@ -130,7 +169,12 @@ export class EtherscanExplorer extends BaseBlockExplorer {
     // Use Etherscan v2 API with chainid parameter for unified multichain support
     const url = `https://api.etherscan.io/v2/api?chainid=${chainId}&module=contract&action=getsourcecode&address=${normalizedAddress}&apikey=${this.apiKey}`;
     const response = await fetch(url);
-    const data = (await response.json()) as EtherscanApiResponse;
+    const rawData = await response.json();
+    const data = parseWithSchema(
+      etherscanSourceCodeResponseSchema,
+      rawData,
+      'Etherscan getsourcecode response',
+    );
 
     // For verification, Etherscan returns an array with contract info
     return (
@@ -184,6 +228,9 @@ export class EtherscanExplorer extends BaseBlockExplorer {
 
       return isVerified;
     } catch (error) {
+      if (error instanceof SchemaValidationError) {
+        throw error;
+      }
       this.error(`Error fetching verification status for ${address} on chain ${chainId}:`, error);
       const result = false;
 

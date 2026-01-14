@@ -47,6 +47,7 @@ import {
   hashOperationBatchOz,
   hashOperationOz,
 } from '../contracts/governor';
+import { parseWithSchema, z } from '../validation/zod';
 import { getChainConfig, publicClient } from './client';
 
 const fetchUrl = mftch;
@@ -55,6 +56,93 @@ const TENDERLY_FETCH_OPTIONS = {
   type: 'json' as const,
   headers: { 'X-Access-Key': TENDERLY_ACCESS_TOKEN },
 };
+
+const tenderlyBlockNumberSchema = z
+  .object({
+    block_number: z.number(),
+  })
+  .passthrough();
+
+const tenderlyStorageEncodingSchema = z
+  .object({
+    stateOverrides: z.record(
+      z.string(),
+      z.object({
+        value: z.record(z.string(), z.string()),
+      }),
+    ),
+  })
+  .passthrough();
+
+const tenderlySimulationSchema: z.ZodType<TenderlySimulation> = z
+  .custom<TenderlySimulation>((value) => typeof value === 'object' && value !== null, {
+    message: 'Expected object',
+  })
+  .superRefine((value, ctx) => {
+    const candidate = value as {
+      transaction?: { status?: unknown; addresses?: unknown };
+      contracts?: Array<{ address?: unknown }> | unknown;
+      simulation?: { id?: unknown };
+    };
+
+    if (!candidate.transaction || typeof candidate.transaction !== 'object') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Expected object',
+        path: ['transaction'],
+      });
+    } else {
+      if (typeof candidate.transaction.status !== 'boolean') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Expected boolean',
+          path: ['transaction', 'status'],
+        });
+      }
+      if (
+        !Array.isArray(candidate.transaction.addresses) ||
+        !candidate.transaction.addresses.every((address) => typeof address === 'string')
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Expected string[]',
+          path: ['transaction', 'addresses'],
+        });
+      }
+    }
+
+    if (!Array.isArray(candidate.contracts)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Expected array',
+        path: ['contracts'],
+      });
+    } else {
+      candidate.contracts.forEach((contract, index) => {
+        if (!contract || typeof contract.address !== 'string') {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Expected string',
+            path: ['contracts', index, 'address'],
+          });
+        }
+      });
+    }
+
+    if (!candidate.simulation || typeof candidate.simulation !== 'object') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Expected object',
+        path: ['simulation'],
+      });
+    } else if (typeof candidate.simulation.id !== 'string') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Expected string',
+        path: ['simulation', 'id'],
+      });
+    }
+  });
 
 function parseBooleanEnv(value: string | undefined): boolean | undefined {
   if (!value) return undefined;
@@ -1129,8 +1217,13 @@ async function getLatestBlock(chainId: number): Promise<number> {
       method: 'GET',
       ...TENDERLY_FETCH_OPTIONS,
     };
-    const res = await fetchUrl(url, fetchOptions);
-    return res.block_number as number;
+    const rawRes = await fetchUrl(url, fetchOptions);
+    const res = parseWithSchema(
+      tenderlyBlockNumberSchema,
+      rawRes,
+      'Tenderly block-number response',
+    );
+    return res.block_number;
   } catch (err) {
     console.log('logging getLatestBlock error');
     console.log(JSON.stringify(err, null, 2));
@@ -1149,7 +1242,12 @@ async function sendEncodeRequest(payload: StateOverridesPayload): Promise<Storag
       data: payload,
       ...TENDERLY_FETCH_OPTIONS,
     };
-    const response = await fetchUrl(TENDERLY_ENCODE_URL, fetchOptions);
+    const rawResponse = await fetchUrl(TENDERLY_ENCODE_URL, fetchOptions);
+    const response = parseWithSchema(
+      tenderlyStorageEncodingSchema,
+      rawResponse,
+      'Tenderly storage encoding response',
+    );
 
     return response as StorageEncodingResponse;
   } catch (err) {
@@ -1177,7 +1275,8 @@ async function sendSimulation(payload: TenderlyPayload, delay = 1000): Promise<T
   };
   try {
     // Send simulation request
-    const sim = <TenderlySimulation>await fetchUrl(TENDERLY_SIM_URL, fetchOptions);
+    const rawSim = await fetchUrl(TENDERLY_SIM_URL, fetchOptions);
+    const sim = parseWithSchema(tenderlySimulationSchema, rawSim, 'Tenderly simulate response');
 
     // Post-processing to ensure addresses we use are checksummed (since ethers returns checksummed addresses)
     sim.transaction.addresses = sim.transaction.addresses.map(getAddress);

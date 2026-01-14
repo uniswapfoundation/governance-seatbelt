@@ -121,7 +121,13 @@ export function useSimulationResults() {
       const response = await fetch('/api/simulation-results');
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch simulation results');
+        const issuesSummary =
+          Array.isArray(errorData.issues) && errorData.issues.length > 0
+            ? ` (${errorData.issues.map((issue: { path: string; message: string }) => `${issue.path}: ${issue.message}`).join('; ')})`
+            : '';
+        throw new Error(
+          `${errorData.error || 'Failed to fetch simulation results'}${issuesSummary}`,
+        );
       }
 
       const data = (await response.json()) as SimulationResponse[];

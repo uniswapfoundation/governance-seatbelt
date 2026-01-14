@@ -45,7 +45,8 @@
     "remark": "^14.0.2",
     "remark-rehype": "^10.1.0",
     "remark-toc": "^8.0.1",
-    "viem": "2.24.3"
+    "viem": "2.24.3",
+    "zod": "4.3.5"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
