@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   check-proposals:
@@ -85,9 +86,52 @@ jobs:
           DAO_NAME: "Uniswap"
           GOVERNOR_ADDRESS: "0x408ED6354d4973f66138C91495F2f2FCbd8724C3"
 
+      - name: Package report bundle
+        id: package-report
+        if: always()
+        run: |
+          set -euo pipefail
+          REPORT_DIR="Uniswap/0x408ED6354d4973f66138C91495F2f2FCbd8724C3"
+          if [ ! -d "reports/$REPORT_DIR" ]; then
+            echo "bundle-created=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          tar \
+            --sort=name \
+            --mtime='UTC 1970-01-01' \
+            --owner=0 \
+            --group=0 \
+            --numeric-owner \
+            -C reports \
+            -czf Uniswap-report.tgz \
+            "$REPORT_DIR"
+
+          sha256sum Uniswap-report.tgz > Uniswap-report.tgz.sha256
+          echo "bundle-created=true" >> "$GITHUB_OUTPUT"
+
+      - name: Install cosign
+        if: steps.package-report.outputs.bundle-created == 'true' && github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+
+      - name: Sign report bundle
+        id: sign-report
+        if: steps.package-report.outputs.bundle-created == 'true' && github.event_name != 'pull_request'
+        run: cosign sign-blob Uniswap-report.tgz --yes --bundle Uniswap-report.sigstore.json
+
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Uniswap
           path: reports/Uniswap/0x408ED6354d4973f66138C91495F2f2FCbd8724C3/
+
+      - name: Upload signed report bundle
+        if: always() && steps.package-report.outputs.bundle-created == 'true' && github.event_name != 'pull_request' && steps.sign-report.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Uniswap-signed
+          path: |
+            Uniswap-report.tgz
+            Uniswap-report.tgz.sha256
+            Uniswap-report.sigstore.json
