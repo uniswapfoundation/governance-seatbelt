@@ -102,7 +102,7 @@ export interface SimulationResponse {
   report: {
     structuredReport?: StructuredSimulationReport;
     markdownReport: string;
-    status: 'success' | 'warning' | 'error';
+    status: 'success' | 'warning' | 'error' | 'inconclusive';
     summary: string;
   };
 }

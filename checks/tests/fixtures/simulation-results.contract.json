@@ -1,0 +1,88 @@
+{
+  "proposalData": {
+    "calldatas": ["0x123456"],
+    "description": "# Test Proposal\n\nThis is a test proposal description.",
+    "id": "123",
+    "signatures": ["transfer(address,uint256)"],
+    "targets": ["0xabcdef1234567890abcdef1234567890abcdef12"],
+    "values": ["0"]
+  },
+  "report": {
+    "status": "inconclusive",
+    "structuredReport": {
+      "checks": [
+        {
+          "checkId": "example-warning",
+          "data": null,
+          "errorCount": 0,
+          "skipReason": null,
+          "status": "warning",
+          "warningCount": 1
+        },
+        {
+          "checkId": "example-skipped",
+          "data": null,
+          "errorCount": 0,
+          "skipReason": "not applicable",
+          "status": "skipped",
+          "warningCount": 0
+        }
+      ],
+      "coverage": {
+        "checks": [
+          {
+            "chainId": 1,
+            "checkId": "example-warning",
+            "checkName": "Example Warning Check",
+            "status": "ran",
+            "wasInferred": false
+          },
+          {
+            "chainId": 1,
+            "checkId": "example-skipped",
+            "checkName": "Example Skipped Check",
+            "skipReason": "not applicable",
+            "status": "skipped",
+            "wasInferred": false
+          }
+        ],
+        "metadata": {
+          "bunVersion": "1.2.20",
+          "gitBranch": "marcomariscal/issue-87-doc",
+          "gitCommitHash": "deadbeef",
+          "nodeVersion": "v20.0.0",
+          "runnerOs": "linux",
+          "timestamp": "2026-01-22T00:00:00.000Z"
+        },
+        "summary": {
+          "failed": 0,
+          "inferredSkips": 0,
+          "ran": 1,
+          "skipped": 1,
+          "total": 2
+        }
+      },
+      "crossChain": null,
+      "metadata": {
+        "blockExplorerBaseUrl": "https://etherscan.io",
+        "chainId": 1,
+        "chainName": "Ethereum",
+        "governorAddress": "0x9876543210fedcba9876543210fedcba98765432",
+        "placeholderAddresses": ["0x0000000000000000000000000000000000001234"],
+        "proposalCreatedAtBlockNumber": "18000000",
+        "proposalCreatedAtTimestamp": "1699000000",
+        "proposalId": "123",
+        "proposer": "0x1234567890abcdef1234567890abcdef12345678",
+        "proposerIsPlaceholder": false,
+        "repoCommit": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+        "repoUrl": "https://github.com/uniswapfoundation/governance-seatbelt",
+        "schemaVersion": 1,
+        "simulationBlockNumber": "18200000",
+        "simulationTimestamp": "1700000000",
+        "simulationType": "proposed"
+      },
+      "permissionsDiff": [],
+      "status": "inconclusive"
+    }
+  }
+}

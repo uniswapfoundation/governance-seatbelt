@@ -26,14 +26,18 @@ const sourcifyCache: Record<string, SourcifyCheckResult> = {};
 const sourcifyResponseSchema = z.array(
   z
     .object({
-      chainIds: z.array(
-        z
-          .object({
-            chainId: z.union([z.string(), z.number()]),
-            status: z.string(),
-          })
-          .passthrough(),
-      ),
+      // Sourcify sometimes omits `chainIds` for an address entry; treat as "unverified"
+      // rather than failing schema validation for the entire response.
+      chainIds: z
+        .array(
+          z
+            .object({
+              chainId: z.union([z.string(), z.number()]),
+              status: z.string(),
+            })
+            .passthrough(),
+        )
+        .optional(),
     })
     .passthrough(),
 );

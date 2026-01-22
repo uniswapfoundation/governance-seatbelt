@@ -26,6 +26,8 @@ Some notes on the outputs of reports:
 
 When running simulations locally, Seatbelt writes `public/simulation-results.json` for the frontend. The `report.structuredReport` object is a stable, machine-readable representation of the report.
 
+For the full JSON schema (including cross-chain preview fields) and consumer guidance, see `docs/API.md`.
+
 ### `structuredReport.permissionsDiff`
 
 If present, this is an array of permission changes detected during the simulation. Each entry has a `kind` plus additional fields:
