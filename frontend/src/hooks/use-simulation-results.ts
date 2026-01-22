@@ -10,7 +10,14 @@ export interface Proposal {
   description: string;
 }
 
+export interface AddressLabel {
+  label: string;
+  type?: string;
+  source?: string;
+}
+
 export interface SimulationCheck {
+  checkId?: string;
   title: string;
   status: 'passed' | 'warning' | 'failed' | 'skipped';
   details?: string;
@@ -87,6 +94,7 @@ export interface StructuredSimulationReport {
     repoCommit?: string;
     repoUrl?: string;
     tenderlyUrl?: string;
+    addressLabels?: Record<string, AddressLabel>;
   };
 }
 

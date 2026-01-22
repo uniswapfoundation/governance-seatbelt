@@ -64,6 +64,14 @@ To run the frontend with simulation results:
 
 The frontend will be available at `http://localhost:3000`.
 
+#### Frontend safety limits (artifact hardening)
+
+The frontend reads `frontend/public/simulation-results.json` via `GET /api/simulation-results`.
+To avoid accidentally wedging the dev server/browser with oversized artifacts, the API enforces a max file size
+(override with `SIMULATION_RESULTS_MAX_BYTES`). By default, the API also omits the markdown payload from the
+response (sets `report.markdownReport` to `""`); pass `?includeMarkdown=1` to include it.
+If you deploy the frontend publicly, add platform-level rate limiting + error-rate monitoring for `/api/*`.
+
 ### Creating Proposals
 
 The frontend allows you to:

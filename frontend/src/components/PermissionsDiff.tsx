@@ -12,7 +12,7 @@ type PermissionsDiffItem =
       via: 'event' | 'state_diff' | 'event+state_diff';
     }
   | {
-      kind: 'role_granted' | 'role_revoked';
+      kind: 'role_granted';
       contractAddress: Address;
       contractName?: string;
       role: { id: `0x${string}`; name: string | null };
@@ -20,7 +20,23 @@ type PermissionsDiffItem =
       sender: Address;
     }
   | {
-      kind: 'timelock_admin_changed' | 'timelock_pending_admin_changed';
+      kind: 'role_revoked';
+      contractAddress: Address;
+      contractName?: string;
+      role: { id: `0x${string}`; name: string | null };
+      account: Address;
+      sender: Address;
+    }
+  | {
+      kind: 'timelock_admin_changed';
+      contractAddress: Address;
+      contractName?: string;
+      previous?: Address;
+      next: Address;
+      via: 'event' | 'state_diff' | 'event+state_diff';
+    }
+  | {
+      kind: 'timelock_pending_admin_changed';
       contractAddress: Address;
       contractName?: string;
       previous?: Address;
