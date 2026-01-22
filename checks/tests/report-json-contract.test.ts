@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { writeSimulationResultsJson } from '../../presentation/report';
 import type { AllCheckResults, CoverageData, ProposalEvent, SimulationBlock } from '../../types';
 
 function canonicalize(value: unknown): unknown {
@@ -57,13 +56,23 @@ function toContractView(parsed: unknown) {
 }
 
 describe('Report JSON contract', () => {
-  test('emits a stable machine contract for simulation-results.json', () => {
+  test('emits a stable machine contract for simulation-results.json', async () => {
     const oldEnv = { ...process.env };
     try {
       process.env.GITHUB_SHA = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
       process.env.GITHUB_REPOSITORY = 'uniswapfoundation/governance-seatbelt';
-      process.env.TENDERLY_USER = undefined;
-      process.env.TENDERLY_PROJECT_SLUG = undefined;
+
+      // Keep this contract test hermetic: report code currently asserts these exist at module load.
+      // We set harmless placeholders so the test doesn't require CI secrets or network access.
+      process.env.MAINNET_RPC_URL ??= 'http://localhost:8545';
+      process.env.ARBITRUM_RPC_URL ??= 'http://localhost:8545';
+      process.env.ETHERSCAN_API_KEY ??= 'test';
+      process.env.RPC_URL ??= 'http://localhost:8545';
+      process.env.TENDERLY_ACCESS_TOKEN ??= 'test';
+      process.env.TENDERLY_USER ??= 'test';
+      process.env.TENDERLY_PROJECT_SLUG ??= 'test';
+
+      const { writeSimulationResultsJson } = await import('../../presentation/report');
 
       const proposal: ProposalEvent = {
         id: 123n,
