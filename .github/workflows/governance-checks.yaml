@@ -62,8 +62,42 @@ jobs:
         run: |
           pip3 install -r requirements-ci.txt
           # Required solc versions for analyzing relevant Uniswap contracts
-          solc-select install 0.8.19
-          solc-select install 0.8.20
+          # solc-select uses Python urllib to fetch list.json, which can intermittently fail with HTTP 403 in CI.
+          # Install the required solc binaries deterministically via curl + list.json parsing, then switch via solc-select.
+          SOLC_PLATFORM="linux-amd64"
+          SOLC_LIST_URL="https://binaries.soliditylang.org/${SOLC_PLATFORM}/list.json"
+          SOLC_SELECT_DIR="${HOME}/.solc-select"
+          SOLC_ARTIFACTS_DIR="${SOLC_SELECT_DIR}/artifacts"
+
+          install_solc() {
+            local version="$1"
+            local path sha url dest
+            local list_json
+
+            list_json="$(curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "${SOLC_LIST_URL}")"
+
+            path="$(
+              printf '%s' "${list_json}" \
+                | python3 -c "import sys, json; data=json.load(sys.stdin); v='${version}'; print(next(b['path'] for b in data['builds'] if b.get('version')==v))"
+            )"
+
+            sha="$(
+              printf '%s' "${list_json}" \
+                | python3 -c "import sys, json; data=json.load(sys.stdin); v='${version}'; print(next(b['sha256'] for b in data['builds'] if b.get('version')==v))"
+            )"
+            sha="${sha#0x}"
+
+            url="https://binaries.soliditylang.org/${SOLC_PLATFORM}/${path}"
+            dest="${SOLC_ARTIFACTS_DIR}/solc-${version}/solc-${version}"
+
+            mkdir -p "$(dirname "${dest}")"
+            curl -fsSL --retry 5 --retry-all-errors --retry-delay 2 "${url}" -o "${dest}"
+            chmod +x "${dest}"
+            echo "${sha}  ${dest}" | sha256sum -c -
+          }
+
+          install_solc 0.8.19
+          install_solc 0.8.20
           solc-select use 0.8.20
 
       - name: Run checks

@@ -28,12 +28,12 @@ const sourcifyResponseSchema = z.array(
     .object({
       chainIds: z
         .array(
-        z
-          .object({
-            chainId: z.union([z.string(), z.number()]),
-            status: z.string(),
-          })
-          .passthrough(),
+          z
+            .object({
+              chainId: z.union([z.string(), z.number()]),
+              status: z.string(),
+            })
+            .passthrough(),
         )
         .optional(),
     })
