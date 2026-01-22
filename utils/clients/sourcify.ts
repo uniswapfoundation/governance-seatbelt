@@ -26,14 +26,16 @@ const sourcifyCache: Record<string, SourcifyCheckResult> = {};
 const sourcifyResponseSchema = z.array(
   z
     .object({
-      chainIds: z.array(
+      chainIds: z
+        .array(
         z
           .object({
             chainId: z.union([z.string(), z.number()]),
             status: z.string(),
           })
           .passthrough(),
-      ),
+        )
+        .optional(),
     })
     .passthrough(),
 );
