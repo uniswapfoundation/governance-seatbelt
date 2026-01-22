@@ -10,22 +10,25 @@ export interface Proposal {
   description: string;
 }
 
-export interface AddressLabel {
-  label: string;
-  type?: string;
-  source?: string;
-}
-
 export interface SimulationCheck {
   checkId?: string;
   title: string;
   status: 'passed' | 'warning' | 'failed' | 'skipped';
-  details?: string;
   skipReason?: string;
+  warningCount?: number;
+  errorCount?: number;
+  details?: string;
   info?: string[];
   warnings?: string[];
   errors?: string[];
   data?: unknown;
+  infoItems?: Array<{
+    label: string;
+    value: string;
+    isCode?: boolean;
+    isLink?: boolean;
+    href?: string;
+  }>;
 }
 
 export interface SimulationStateChange {
@@ -57,6 +60,71 @@ export interface SimulationCalldata {
   }>;
 }
 
+export interface AddressLabel {
+  label: string;
+  type?: 'governance' | 'token' | 'bridge' | 'contract' | 'user';
+  source?: 'custom' | 'ens' | 'tenderly';
+}
+
+export type PermissionsDiffItem =
+  | {
+      kind: 'ownership_transferred';
+      contractAddress: Address;
+      contractName?: string;
+      previous?: Address;
+      next: Address;
+      via: 'event' | 'state_diff' | 'event+state_diff';
+    }
+  | {
+      kind: 'role_granted' | 'role_revoked';
+      contractAddress: Address;
+      contractName?: string;
+      role: { id: `0x${string}`; name: string | null };
+      account: Address;
+      sender: Address;
+    }
+  | {
+      kind: 'timelock_admin_changed';
+      contractAddress: Address;
+      contractName?: string;
+      previous?: Address;
+      next: Address;
+      via: 'event' | 'state_diff' | 'event+state_diff';
+    }
+  | {
+      kind: 'timelock_pending_admin_changed';
+      contractAddress: Address;
+      contractName?: string;
+      previous?: Address;
+      next: Address;
+      via: 'event' | 'state_diff' | 'event+state_diff';
+    };
+
+export interface CrossChainDecodedCall {
+  selector: `0x${string}`;
+  signature?: string;
+  args?: unknown[];
+}
+
+export interface CrossChainMessagePreview {
+  chainId: number;
+  chainName: string;
+  blockExplorerBaseUrl: string;
+  bridgeType: string;
+  status: 'success' | 'failure';
+  error?: string;
+  l2FromAddress?: Address;
+  l2TargetAddress?: Address;
+  l2Value?: string;
+  l2InputData?: `0x${string}`;
+  targetLabel?: string;
+  call?: CrossChainDecodedCall;
+}
+
+export interface CrossChainPreview {
+  messages: CrossChainMessagePreview[];
+}
+
 export interface StructuredSimulationReport {
   title: string;
   proposalText: string;
@@ -65,7 +133,9 @@ export interface StructuredSimulationReport {
   checks: SimulationCheck[];
   stateChanges: SimulationStateChange[];
   events: SimulationEvent[];
+  permissionsDiff?: PermissionsDiffItem[];
   calldata?: SimulationCalldata;
+  crossChain?: CrossChainPreview;
   metadata: {
     // Legacy fields for backwards compatibility
     blockNumber?: string;
@@ -94,6 +164,7 @@ export interface StructuredSimulationReport {
     repoCommit?: string;
     repoUrl?: string;
     tenderlyUrl?: string;
+    // Address labels for entity identification (Issue #94)
     addressLabels?: Record<string, AddressLabel>;
   };
 }

@@ -12,15 +12,7 @@ type PermissionsDiffItem =
       via: 'event' | 'state_diff' | 'event+state_diff';
     }
   | {
-      kind: 'role_granted';
-      contractAddress: Address;
-      contractName?: string;
-      role: { id: `0x${string}`; name: string | null };
-      account: Address;
-      sender: Address;
-    }
-  | {
-      kind: 'role_revoked';
+      kind: 'role_granted' | 'role_revoked';
       contractAddress: Address;
       contractName?: string;
       role: { id: `0x${string}`; name: string | null };
