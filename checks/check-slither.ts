@@ -97,7 +97,7 @@ export const checkSlither: ProposalCheck = {
       const addr = getAddress(contract.address);
       if (addressesToSkip.has(addr)) continue;
 
-      const contractName = await getContractName(contract);
+      const contractName = await getContractName(contract, deps.chainConfig.chainId);
 
       // Check contract verification status before running Slither
       const verificationResult = await checkContractVerification(addr, deps.chainConfig.chainId);

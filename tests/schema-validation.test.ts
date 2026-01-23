@@ -83,6 +83,7 @@ describe('Schema validation at API boundaries', () => {
       })) as typeof fetch;
 
     try {
+      SourcifyClient.clearCache();
       await expect(
         SourcifyClient.isContractVerified('0x0000000000000000000000000000000000000001', 1),
       ).rejects.toBeInstanceOf(SchemaValidationError);

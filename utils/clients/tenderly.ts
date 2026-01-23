@@ -48,6 +48,7 @@ import {
   hashOperationOz,
 } from '../contracts/governor';
 import { parseWithSchema, z } from '../validation/zod';
+import { BlockExplorerFactory } from './block-explorers/factory';
 import { getChainConfig, publicClient } from './client';
 
 const fetchUrl = mftch;
@@ -1180,9 +1181,28 @@ export async function getContractName(
   }
 
   // Priority 2: Use Tenderly's contract name (like "TransparentUpgradeableProxy")
-  const contractName = contract?.contract_name || 'Unknown Contract';
+  let contractName = contract?.contract_name?.trim() || 'Unknown Contract';
+
+  // Best-effort fallback: Tenderly may not have indexed a verified contract yet, so try the
+  // chain's configured block explorer for a better name when available.
+  if (chainId && (contractName === 'Unknown Contract' || contractName.length === 0)) {
+    const cacheKey = `${chainId}:${contractAddress}`;
+    const cached = blockExplorerContractNameCache[cacheKey];
+    if (cached) {
+      contractName = cached;
+    } else {
+      const fetched = await BlockExplorerFactory.fetchContractName(contractAddress, chainId);
+      if (fetched) {
+        blockExplorerContractNameCache[cacheKey] = fetched;
+        contractName = fetched;
+      }
+    }
+  }
+
   return `${contractName} at \`${contractAddress}\``;
 }
+
+const blockExplorerContractNameCache: Record<string, string> = {};
 
 /**
  * @notice Uses only Tenderly's contract metadata for naming (no additional API calls)

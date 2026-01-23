@@ -11,8 +11,13 @@ interface EtherscanAbiResponse {
 
 interface EtherscanSourceCodeResponse {
   status: string;
-  result: string | Array<{ SourceCode?: string }>;
+  result: string | EtherscanSourceCodeResultItem[];
   message?: string;
+}
+
+interface EtherscanSourceCodeResultItem {
+  SourceCode?: string;
+  ContractName?: string;
 }
 
 const etherscanAbiResponseSchema: z.ZodType<EtherscanAbiResponse> = z
@@ -32,6 +37,7 @@ const etherscanSourceCodeResponseSchema: z.ZodType<EtherscanSourceCodeResponse> 
         z
           .object({
             SourceCode: z.string().optional(),
+            ContractName: z.string().optional(),
           })
           .passthrough(),
       ),
@@ -162,28 +168,106 @@ export class EtherscanExplorer extends BaseBlockExplorer {
     }
   }
 
+  async fetchContractName(address: string, chainId: number): Promise<string | null> {
+    const normalizedAddress = getAddress(address);
+
+    try {
+      const entry = await this.fetchSourceCodeEntry(normalizedAddress, chainId);
+      const name = entry?.ContractName?.trim();
+      return name && name.length > 0 ? name : null;
+    } catch (error) {
+      if (error instanceof SchemaValidationError) {
+        throw error;
+      }
+      this.warn(
+        `Failed to fetch contract name for ${normalizedAddress} on chain ${chainId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return null;
+    }
+  }
+
+  private async fetchSourceCodeEntry(
+    normalizedAddress: string,
+    chainId: number,
+  ): Promise<EtherscanSourceCodeResultItem> {
+    const maxRetries = 3;
+    let retryCount = 0;
+    let lastError: string | null = null;
+
+    while (retryCount < maxRetries) {
+      await this.delay(1000);
+
+      try {
+        const url = `https://api.etherscan.io/v2/api?chainid=${chainId}&module=contract&action=getsourcecode&address=${normalizedAddress}&apikey=${this.apiKey}`;
+
+        const response = await fetch(url);
+        const rawData = await response.json();
+        const data = parseWithSchema(
+          etherscanSourceCodeResponseSchema,
+          rawData,
+          'Etherscan getsourcecode response',
+        );
+
+        if (data.status === '1' && Array.isArray(data.result) && data.result.length > 0) {
+          return data.result[0];
+        }
+
+        const message = data.message || 'Unknown error';
+        const resultStr =
+          typeof data.result === 'string' ? data.result : JSON.stringify(data.result);
+
+        // Etherscan uses status "0" for API errors (including rate limiting). Treat as retryable.
+        if (data.status !== '1') {
+          lastError = `${message} (${resultStr})`;
+          this.warn(
+            `Etherscan getsourcecode error for ${normalizedAddress} on chain ${chainId} (attempt ${retryCount + 1}/${maxRetries}): ${message} (${resultStr})`,
+          );
+          retryCount++;
+          if (retryCount < maxRetries) {
+            await this.delay(1000 * 2 ** retryCount);
+            continue;
+          }
+          break;
+        }
+
+        // Unexpected successful wrapper but no result array.
+        lastError = `No result array (${message})`;
+        this.warn(
+          `Etherscan getsourcecode returned no result array for ${normalizedAddress} on chain ${chainId} (attempt ${retryCount + 1}/${maxRetries})`,
+        );
+        retryCount++;
+        if (retryCount < maxRetries) {
+          await this.delay(1000 * 2 ** retryCount);
+        }
+      } catch (error) {
+        if (error instanceof SchemaValidationError) {
+          throw error;
+        }
+        lastError = error instanceof Error ? error.message : String(error);
+        this.error(
+          `Error fetching getsourcecode for ${normalizedAddress} on chain ${chainId} (attempt ${retryCount + 1}/${maxRetries}):`,
+          error,
+        );
+        retryCount++;
+        if (retryCount < maxRetries) {
+          await this.delay(1000 * 2 ** retryCount);
+        }
+      }
+    }
+
+    throw new Error(
+      `Etherscan getsourcecode failed for ${normalizedAddress} on chain ${chainId} after ${maxRetries} attempts: ${lastError ?? 'Unknown error'}`,
+    );
+  }
+
   private async fetchVerificationStatus(
     normalizedAddress: string,
     chainId: number,
   ): Promise<boolean> {
-    // Use Etherscan v2 API with chainid parameter for unified multichain support
-    const url = `https://api.etherscan.io/v2/api?chainid=${chainId}&module=contract&action=getsourcecode&address=${normalizedAddress}&apikey=${this.apiKey}`;
-    const response = await fetch(url);
-    const rawData = await response.json();
-    const data = parseWithSchema(
-      etherscanSourceCodeResponseSchema,
-      rawData,
-      'Etherscan getsourcecode response',
-    );
-
-    // For verification, Etherscan returns an array with contract info
-    return (
-      data.status === '1' &&
-      Array.isArray(data.result) &&
-      data.result.length > 0 &&
-      Boolean(data.result[0].SourceCode) &&
-      data.result[0].SourceCode!.trim() !== ''
-    );
+    const entry = await this.fetchSourceCodeEntry(normalizedAddress, chainId);
+    return Boolean(entry.SourceCode) && entry.SourceCode!.trim() !== '';
   }
 
   async isContractVerified(
@@ -232,17 +316,10 @@ export class EtherscanExplorer extends BaseBlockExplorer {
         throw error;
       }
       this.error(`Error fetching verification status for ${address} on chain ${chainId}:`, error);
-      const result = false;
-
-      if (!skipCache) {
-        const cacheMeta = {
-          source: 'block-explorer' as const,
-          blockExplorer: { name: this.getName(), verified: result },
-        };
-        CacheManager.setVerificationInMemory(chainId, address, result, cacheMeta);
-        CacheManager.setVerificationInFile(chainId, address, result, cacheMeta);
+      if (skipCache) {
+        throw error;
       }
-      return result;
+      return false;
     }
   }
 }

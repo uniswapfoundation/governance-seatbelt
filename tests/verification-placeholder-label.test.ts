@@ -43,10 +43,14 @@ describe('Verification checks - placeholder labeling', () => {
     const placeholder = DEFAULT_SIMULATION_ADDRESS;
     const realContract = getAddress('0x1234567890abcdef1234567890abcdef12345678');
 
-    // Monkey-patch isContractVerified to avoid network requests
-    const original = BlockExplorerFactory.isContractVerified;
-    BlockExplorerFactory.isContractVerified = async (addr: string, _chainId: number) => {
-      return getAddress(addr) !== realContract; // placeholder -> true, real -> false
+    // Monkey-patch getContractVerification to avoid network requests
+    const original = BlockExplorerFactory.getContractVerification;
+    BlockExplorerFactory.getContractVerification = async (addr: string, _chainId: number) => {
+      const normalized = getAddress(addr);
+      if (normalized === realContract) {
+        return { status: 'unverified', source: 'none' as const };
+      }
+      return { status: 'verified', source: 'block-explorer' as const };
     };
 
     try {
@@ -63,7 +67,7 @@ describe('Verification checks - placeholder labeling', () => {
       expect(output).toMatch(/Contract \(verified\)/); // placeholder
       expect(output).toMatch(/Contract \(unverified\)/); // realContract
     } finally {
-      BlockExplorerFactory.isContractVerified = original;
+      BlockExplorerFactory.getContractVerification = original;
     }
   });
 });

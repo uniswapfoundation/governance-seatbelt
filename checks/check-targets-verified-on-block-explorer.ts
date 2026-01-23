@@ -34,8 +34,12 @@ export const checkTargetsVerifiedOnBlockExplorer: ProposalCheck = {
         .map(getAddress);
     }
 
-    const info = await checkVerificationStatuses(targets, deps.publicClient, deps.chainConfig);
-    return { info, warnings: [], errors: [] };
+    const { info, warnings } = await checkVerificationStatuses(
+      targets,
+      deps.publicClient,
+      deps.chainConfig,
+    );
+    return { info, warnings, errors: [] };
   },
 };
 
@@ -55,12 +59,12 @@ export const checkTouchedContractsVerifiedOnBlockExplorer: ProposalCheck = {
       };
     }
 
-    const info = await checkVerificationStatuses(
+    const { info, warnings } = await checkVerificationStatuses(
       sim.transaction.addresses.map(getAddress),
       deps.publicClient,
       deps.chainConfig,
     );
-    return { info, warnings: [], errors: [] };
+    return { info, warnings, errors: [] };
   },
 };
 
@@ -71,33 +75,60 @@ async function checkVerificationStatuses(
   addresses: `0x${string}`[],
   publicClient: PublicClient,
   chainConfig: ChainConfig,
-): Promise<string[]> {
+): Promise<{ info: string[]; warnings: string[] }> {
   const info: string[] = [];
+  const warnings: string[] = [];
 
   for (const addr of addresses) {
-    const status = await checkVerificationStatus(addr, publicClient, chainConfig.chainId);
+    const status = await getAddressKind(addr, publicClient);
     const address = toAddressLink(addr, chainConfig.blockExplorer.baseUrl);
 
     const isPlaceholder = getAddress(addr) === getAddress(DEFAULT_SIMULATION_ADDRESS);
     const suffix = isPlaceholder ? ' (simulation placeholder)' : '';
 
-    if (status === 'eoa') info.push(`${address}${suffix}: EOA (verification not applicable)`);
-    else if (status === 'empty')
+    if (status === 'eoa') {
+      info.push(`${address}${suffix}: EOA (verification not applicable)`);
+      continue;
+    }
+
+    if (status === 'empty') {
       info.push(`${address}${suffix}: EOA (may have code later, verification not applicable)`);
-    else if (status === 'verified') info.push(`${address}${suffix}: Contract (verified)`);
-    else info.push(`${address}${suffix}: Contract (unverified)`);
+      continue;
+    }
+
+    const verification = await BlockExplorerFactory.getContractVerification(
+      addr,
+      chainConfig.chainId,
+    );
+
+    if (verification.status === 'verified') {
+      info.push(`${address}${suffix}: Contract (verified)`);
+      continue;
+    }
+
+    if (verification.status === 'unverified') {
+      info.push(`${address}${suffix}: Contract (unverified)`);
+      continue;
+    }
+
+    info.push(`${address}${suffix}: Contract (verification check failed)`);
+    warnings.push(
+      `Could not determine verification status for ${addr} on chain ${chainConfig.chainId}${
+        verification.blockExplorer?.name ? ` (${verification.blockExplorer.name})` : ''
+      }: ${verification.reason || 'Unknown error'}`,
+    );
   }
-  return info;
+
+  return { info, warnings };
 }
 
 /**
- * For a given address, check if it's an EOA, a verified contract, or an unverified contract
+ * For a given address, check if it's an EOA, an empty account, or a contract.
  */
-async function checkVerificationStatus(
+async function getAddressKind(
   addr: `0x${string}`,
   publicClient: PublicClient,
-  chainId: number,
-): Promise<'verified' | 'eoa' | 'unverified' | 'empty'> {
+): Promise<'contract' | 'eoa' | 'empty'> {
   // First check if there's code at the address
   const [code, nonce] = await Promise.all([
     publicClient.getCode({ address: addr }),
@@ -110,9 +141,7 @@ async function checkVerificationStatus(
     return nonce > 0 ? 'eoa' : 'empty';
   }
 
-  // For contracts, check verification status via appropriate block explorer API
-  const isVerified = await BlockExplorerFactory.isContractVerified(addr, chainId);
-  return isVerified ? 'verified' : 'unverified';
+  return 'contract';
 }
 
 /**

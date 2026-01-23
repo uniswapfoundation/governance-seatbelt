@@ -26,14 +26,19 @@ const sourcifyCache: Record<string, SourcifyCheckResult> = {};
 const sourcifyResponseSchema = z.array(
   z
     .object({
-      chainIds: z.array(
-        z
-          .object({
-            chainId: z.union([z.string(), z.number()]),
-            status: z.string(),
-          })
-          .passthrough(),
-      ),
+      // Newer Sourcify responses may omit `chainIds` and return a top-level `status` (e.g. {status:"false"})
+      // when checking a single chain/address pair.
+      status: z.string().optional(),
+      chainIds: z
+        .array(
+          z
+            .object({
+              chainId: z.union([z.string(), z.number()]),
+              status: z.string(),
+            })
+            .passthrough(),
+        )
+        .optional(),
     })
     .passthrough(),
 );
@@ -112,22 +117,33 @@ export class SourcifyClient {
     }
 
     const addressResult = data[0];
-    if (!addressResult || !Array.isArray(addressResult.chainIds)) {
+    if (!addressResult || typeof addressResult !== 'object') {
       return { verified: false, status: 'false' };
     }
 
-    const chainResult = addressResult.chainIds.find(
-      (c: { chainId: string; status: string }) => String(c.chainId) === String(chainId),
-    );
+    const obj = addressResult as {
+      chainIds?: Array<{ chainId: string | number; status: string }>;
+      status?: string;
+    };
 
-    if (!chainResult) {
+    // Prefer chainIds when present (multi-chain shape)
+    if (Array.isArray(obj.chainIds)) {
+      const chainResult = obj.chainIds.find((c) => String(c.chainId) === String(chainId));
+      if (!chainResult) return { verified: false, status: 'false' };
+      const status = chainResult.status as SourcifyVerificationStatus;
+      if (status === 'perfect' || status === 'partial') return { verified: true, status };
       return { verified: false, status: 'false' };
     }
 
-    const status = chainResult.status as SourcifyVerificationStatus;
+    // Fallback to top-level status (single-chain shape)
+    const status = (obj.status ?? 'false') as SourcifyVerificationStatus;
 
     if (status === 'perfect' || status === 'partial') {
       return { verified: true, status };
+    }
+
+    if (status === 'error') {
+      return { verified: false, status: 'error' };
     }
 
     return { verified: false, status: 'false' };

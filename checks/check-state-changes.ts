@@ -75,7 +75,7 @@ export const checkStateChanges: ProposalCheck = {
     for (const [address, diffs] of Object.entries(stateDiffs)) {
       // Use contracts array to get contract name of address
       const contract = sim.contracts.find((c) => c.address === address);
-      info.push(await getContractName(contract));
+      info.push(await getContractName(contract, deps.chainConfig?.chainId));
 
       // Track processed state changes to deduplicate
       const processedChanges = new Set<string>();

@@ -35,6 +35,14 @@ export interface BlockExplorer {
   ): Promise<boolean>;
 
   /**
+   * Fetch the contract name (best-effort).
+   * @param address The contract address
+   * @param chainId The chain ID
+   * @returns The contract name or null if unavailable
+   */
+  fetchContractName(address: string, chainId: number): Promise<string | null>;
+
+  /**
    * Get the name of the block explorer
    */
   getName(): string;
@@ -50,6 +58,7 @@ export abstract class BaseBlockExplorer implements BlockExplorer {
     chainId: number,
     options?: VerificationOptions,
   ): Promise<boolean>;
+  abstract fetchContractName(address: string, chainId: number): Promise<string | null>;
   abstract getName(): string;
 
   /**

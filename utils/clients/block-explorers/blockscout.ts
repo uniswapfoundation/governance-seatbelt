@@ -140,6 +140,35 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
     }
   }
 
+  async fetchContractName(address: string, chainId: number): Promise<string | null> {
+    const normalizedAddress = getAddress(address);
+
+    try {
+      this.log(
+        `Fetching contract name for ${normalizedAddress} from ${this.baseUrl} (Chain ${chainId})`,
+      );
+
+      const url = `${this.apiUrl}/smart-contracts/${normalizedAddress}`;
+      const data = await this.fetchWithRetry<BlockscoutContractResponse>(
+        url,
+        'fetch contract name',
+        chainId,
+        normalizedAddress,
+        blockscoutContractSchema,
+        'Blockscout contract response',
+      );
+
+      const name = data?.name?.trim();
+      return name && name.length > 0 ? name : null;
+    } catch (error) {
+      if (error instanceof SchemaValidationError) {
+        throw error;
+      }
+      this.error(`Error fetching contract name for ${address} on chain ${chainId}:`, error);
+      return null;
+    }
+  }
+
   private async fetchVerificationStatus(
     normalizedAddress: string,
     chainId: number,
@@ -156,7 +185,7 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
     );
 
     if (!data) {
-      return false;
+      throw new Error(`Blockscout verification status unavailable for ${normalizedAddress}`);
     }
 
     // Consider both fully verified and partially verified contracts as verified
