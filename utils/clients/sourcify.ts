@@ -26,17 +26,29 @@ const sourcifyCache: Record<string, SourcifyCheckResult> = {};
 const sourcifyResponseSchema = z.array(
   z
     .object({
-      chainIds: z.array(
-        z
-          .object({
-            chainId: z.union([z.string(), z.number()]),
-            status: z.string(),
-          })
-          .passthrough(),
-      ),
+      /**
+       * Sourcify responses differ depending on verification status:
+       * - Verified: includes `chainIds: [{ chainId, status, ... }]`
+       * - Unverified: can omit `chainIds` and return a top-level `status: "false"`
+       *
+       * We accept both shapes to avoid noisy schema validation errors.
+       */
+      chainIds: z
+        .array(
+          z
+            .object({
+              chainId: z.union([z.string(), z.number()]),
+              status: z.string(),
+            })
+            .passthrough(),
+        )
+        .optional(),
+      status: z.string().optional(),
     })
     .passthrough(),
 );
+
+type SourcifyResponse = z.infer<typeof sourcifyResponseSchema>;
 
 function getCacheKey(address: string, chainId: number): string {
   return `${chainId}:${getAddress(address)}`;
@@ -111,25 +123,37 @@ export class SourcifyClient {
       return { verified: false, status: 'false' };
     }
 
-    const addressResult = data[0];
-    if (!addressResult || !Array.isArray(addressResult.chainIds)) {
+    const addressResult = (data as SourcifyResponse)[0];
+    if (!addressResult) return { verified: false, status: 'false' };
+
+    // Preferred format (when `chainIds` is present)
+    if (Array.isArray(addressResult.chainIds)) {
+      const chainResult = addressResult.chainIds.find(
+        (c: { chainId: string | number; status: string }) => String(c.chainId) === String(chainId),
+      );
+
+      if (!chainResult) return { verified: false, status: 'false' };
+
+      const status = chainResult.status as SourcifyVerificationStatus;
+
+      if (status === 'perfect' || status === 'partial') {
+        return { verified: true, status };
+      }
+
+      if (status === 'error') {
+        return { verified: false, status: 'error' };
+      }
+
       return { verified: false, status: 'false' };
     }
 
-    const chainResult = addressResult.chainIds.find(
-      (c: { chainId: string; status: string }) => String(c.chainId) === String(chainId),
-    );
-
-    if (!chainResult) {
-      return { verified: false, status: 'false' };
+    // Fallback format (top-level `status` when `chainIds` is absent)
+    if (addressResult.status === 'perfect' || addressResult.status === 'partial') {
+      return { verified: true, status: addressResult.status };
     }
-
-    const status = chainResult.status as SourcifyVerificationStatus;
-
-    if (status === 'perfect' || status === 'partial') {
-      return { verified: true, status };
+    if (addressResult.status === 'error') {
+      return { verified: false, status: 'error' };
     }
-
     return { verified: false, status: 'false' };
   }
 

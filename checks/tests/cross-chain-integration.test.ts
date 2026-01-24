@@ -9,6 +9,8 @@ import {
   getOptimismBridgeSourceResult,
 } from './cross-chain-fixtures';
 
+const EXTERNAL_API_TIMEOUT_MS = 120000;
+
 describe('Cross-Chain Integration Tests', () => {
   describe('Arbitrum Cross-Chain Integration', () => {
     test('should complete full Arbitrum cross-chain simulation flow', async () => {
@@ -50,7 +52,7 @@ describe('Cross-Chain Integration Tests', () => {
       // Verify that we received check results (cross-chain info depends on specific checks)
       const checkNames = Object.keys(mainnetResults);
       expect(checkNames.length).toBeGreaterThan(0);
-    }, 60000); // Increased timeout for external API calls // 30 second timeout for integration test
+    }, EXTERNAL_API_TIMEOUT_MS);
 
     test('should handle Arbitrum simulation failures gracefully', async () => {
       const { config: arbSimConfig } = await import('../../sims/arb-distro.sim.ts');
@@ -82,7 +84,7 @@ describe('Cross-Chain Integration Tests', () => {
       );
 
       expect(results).toBeDefined();
-    }, 60000); // Increased timeout for external API calls
+    }, EXTERNAL_API_TIMEOUT_MS);
   });
 
   describe('Optimism Cross-Chain Integration', () => {
@@ -129,7 +131,7 @@ describe('Cross-Chain Integration Tests', () => {
         ),
       );
       expect(hasOptimismInfo).toBe(true);
-    }, 60000); // Increased timeout for external API calls
+    }, EXTERNAL_API_TIMEOUT_MS);
 
     test('should handle multiple chain destinations correctly', async () => {
       const crossChainResult = await getOptimismBridgeCrossChainResult();
@@ -155,7 +157,7 @@ describe('Cross-Chain Integration Tests', () => {
       );
 
       expect(results).toBeDefined();
-    }, 60000); // Increased timeout for external API calls
+    }, EXTERNAL_API_TIMEOUT_MS);
   });
 
   describe('Non-Cross-Chain Integration', () => {
@@ -188,7 +190,7 @@ describe('Cross-Chain Integration Tests', () => {
       );
 
       expect(results).toBeDefined();
-    }, 60000); // Increased timeout for external API calls
+    }, EXTERNAL_API_TIMEOUT_MS);
   });
 
   describe('Error Handling and Edge Cases', () => {
