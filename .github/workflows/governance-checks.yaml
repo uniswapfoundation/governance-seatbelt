@@ -60,10 +60,21 @@ jobs:
       - name: Install Slither dependencies
         run: |
           pip3 install -r requirements-ci.txt
-          # Required solc versions for analyzing relevant Uniswap contracts
-          solc-select install 0.8.19
-          solc-select install 0.8.20
-          solc-select use 0.8.20
+
+      - name: Install solc
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused \
+            -o "$HOME/.local/bin/solc-0.8.19" \
+            https://github.com/ethereum/solidity/releases/download/v0.8.19/solc-static-linux
+          curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused \
+            -o "$HOME/.local/bin/solc-0.8.20" \
+            https://github.com/ethereum/solidity/releases/download/v0.8.20/solc-static-linux
+          chmod +x "$HOME/.local/bin/solc-0.8.19" "$HOME/.local/bin/solc-0.8.20"
+          ln -sf "$HOME/.local/bin/solc-0.8.20" "$HOME/.local/bin/solc"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/solc" --version
 
       - name: Run checks
         uses: nick-fields/retry@14672906e672a08bd6eeb15720e9ed3ce869cdd4 # v2
