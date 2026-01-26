@@ -70,17 +70,16 @@ export const checkSolc: ProposalCheck = {
       const addr = getAddress(contract.address);
       if (addressesToSkip.has(addr)) continue;
 
+      const contractName = await getContractName(contract, deps.chainConfig.chainId);
+
       // Compile the contracts.
       const result = await runCryticCompile(contract.address);
       if (!result.success) {
-        warnings.push(
-          `crytic-compile failed for \`${contract.contract_name}\` at \`${addr}\`: ${result.message}`,
-        );
+        warnings.push(`crytic-compile failed for ${contractName}: ${result.message}`);
         continue;
       }
 
       // Append results to report info.
-      const contractName = await getContractName(contract, deps.chainConfig.chainId);
       if (result.output.stderr === '') {
         info.push(`No compiler warnings for ${contractName}`);
       } else {

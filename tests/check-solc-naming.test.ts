@@ -8,6 +8,8 @@ describe('checkSolc naming', () => {
       /import\s+\{[^}]*getContractName[^}]*\}\s+from\s+['"]\.\.\/utils\/clients\/tenderly['"]/,
     );
     expect(source).not.toMatch(/getContractNameFromTenderly/);
+    // Ensure checkSolc doesn't label contracts using Tenderly-only `contract_name` fields.
+    expect(source).not.toMatch(/contract\.contract_name/);
     expect(source).toMatch(/await\s+getContractName\s*\(/);
   });
 });
