@@ -1,7 +1,7 @@
 import type { Abi } from 'viem';
 import { getAddress } from 'viem';
 import { BlockExplorerSource, getChainConfig } from '../client';
-import { getSourcifyMatch } from '../sourcify';
+import { getSourcifyMatch, type SourcifyMatch } from '../sourcify';
 import { BlockscoutExplorer } from './blockscout';
 import { CacheManager } from './cache';
 import { EtherscanExplorer } from './etherscan';
@@ -102,7 +102,15 @@ export class BlockExplorerFactory {
         };
       }
 
-      const sourcifyMatch = await getSourcifyMatch(normalizedAddress, chainId);
+      let sourcifyMatch: SourcifyMatch = 'error';
+      try {
+        sourcifyMatch = await getSourcifyMatch(normalizedAddress, chainId);
+      } catch (error) {
+        console.warn(
+          `Sourcify check failed for ${normalizedAddress} on chain ${chainId}; falling back to block explorer:`,
+          error,
+        );
+      }
       if (sourcifyMatch === 'exact_match' || sourcifyMatch === 'match') {
         const cacheMeta = { source: 'sourcify' as const, sourcifyMatch };
         CacheManager.setVerificationInMemory(chainId, normalizedAddress, true, cacheMeta);
