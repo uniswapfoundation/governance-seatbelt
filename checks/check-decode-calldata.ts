@@ -153,9 +153,10 @@ function extractMeaningfulL2Calls(
     for (const call of calls || []) {
       // Skip system addresses and empty calls
       if (call.to && call.input && call.input !== '0x') {
-        // Skip Arbitrum system addresses
-        const isSystemAddress =
-          call.to.toLowerCase().includes('fffff') || call.to.toLowerCase().includes('00000');
+        // Skip common precompile/system address ranges (but keep OP Stack predeploys like 0x4200...)
+        const normalizedTo = call.to.toLowerCase();
+        const isLowPrecompileAddress = /^0x0{38}[0-9a-f]{2}$/.test(normalizedTo); // 0x...00xx
+        const isSystemAddress = normalizedTo.startsWith('0xfffff') || isLowPrecompileAddress;
 
         if (!isSystemAddress) {
           meaningfulCalls.push({

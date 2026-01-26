@@ -165,7 +165,15 @@ export type PermissionsDiffItem =
       sender: Address;
     }
   | {
-      kind: 'timelock_admin_changed' | 'timelock_pending_admin_changed';
+      kind: 'timelock_admin_changed';
+      contractAddress: Address;
+      contractName?: string;
+      previous?: Address;
+      next: Address;
+      via: 'event' | 'state_diff' | 'event+state_diff';
+    }
+  | {
+      kind: 'timelock_pending_admin_changed';
       contractAddress: Address;
       contractName?: string;
       previous?: Address;
@@ -670,6 +678,31 @@ export interface AddressLabel {
   source?: 'custom' | 'ens' | 'tenderly';
 }
 
+export interface CrossChainDecodedCall {
+  selector: Hex;
+  signature?: string;
+  args?: unknown[];
+}
+
+export interface CrossChainMessagePreview {
+  chainId: number;
+  chainName: string;
+  blockExplorerBaseUrl: string;
+  bridgeType: string;
+  status: 'success' | 'failure';
+  error?: string;
+  l2FromAddress?: Address;
+  l2TargetAddress?: Address;
+  l2Value?: string;
+  l2InputData?: Hex;
+  targetLabel?: string;
+  call?: CrossChainDecodedCall;
+}
+
+export interface CrossChainPreview {
+  messages: CrossChainMessagePreview[];
+}
+
 export interface StructuredSimulationReport {
   title: string;
   proposalText: string;
@@ -681,6 +714,7 @@ export interface StructuredSimulationReport {
   permissionsDiff?: PermissionsDiffItem[];
   calldata?: SimulationCalldata;
   coverage?: CoverageData;
+  crossChain?: CrossChainPreview;
   metadata: {
     proposalId: string;
     proposer: string;

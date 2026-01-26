@@ -75,6 +75,9 @@ describe('Schema validation at API boundaries', () => {
 
   it('throws for invalid Sourcify response shape', async () => {
     const originalFetch = globalThis.fetch;
+    SourcifyClient.clearCache();
+
+    SourcifyClient.clearCache();
 
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ not: 'an array' }), {

@@ -13,7 +13,7 @@ import remarkToc from 'remark-toc';
 import { unified } from 'unified';
 import { visit } from 'unist-util-visit';
 import type { Visitor } from 'unist-util-visit';
-import { getAddress } from 'viem';
+import { type Abi, getAddress, toFunctionSelector } from 'viem';
 import type {
   AllCheckResults,
   CoverageData,
@@ -32,6 +32,7 @@ import type {
   TenderlySimulation,
   WriteSimulationResultsJsonParams,
 } from '../types';
+import { BlockExplorerFactory } from '../utils/clients/block-explorers/factory';
 import { getChainConfig, publicClient } from '../utils/clients/client';
 import { DEFAULT_SIMULATION_ADDRESS, getContractName } from '../utils/clients/tenderly';
 import { formatProposalId } from '../utils/contracts/governor';
@@ -53,6 +54,175 @@ const CHAIN_NAMES: Record<number, string> = {
 
 function getChainName(chainId: number): string {
   return CHAIN_NAMES[chainId] || `Chain ${chainId}`;
+}
+
+// --- Cross-chain decoding helpers ---
+
+type AbiParameterLike = {
+  type: string;
+  components?: readonly AbiParameterLike[];
+};
+
+function formatAbiParameterType(param: {
+  type: string;
+  components?: readonly AbiParameterLike[];
+}): string {
+  const type = param.type;
+  if (!type.startsWith('tuple')) return type;
+
+  const arraySuffix = type.slice('tuple'.length); // "", "[]", "[2]", etc.
+  const components = param.components ?? [];
+  const inner = components.map((component) => formatAbiParameterType(component)).join(',');
+  return `(${inner})${arraySuffix}`;
+}
+
+function formatAbiFunctionSignature(fn: {
+  name: string;
+  inputs?: ReadonlyArray<{ type: string; components?: readonly AbiParameterLike[] }>;
+}): string {
+  const inputs = fn.inputs ?? [];
+  const formattedInputs = inputs.map((input) => formatAbiParameterType(input)).join(',');
+  return `${fn.name}(${formattedInputs})`;
+}
+
+const KNOWN_FUNCTION_SELECTORS: Record<string, string> = {
+  // ERC-20
+  '0xa9059cbb': 'transfer(address,uint256)',
+  '0x095ea7b3': 'approve(address,uint256)',
+  '0x23b872dd': 'transferFrom(address,address,uint256)',
+  // ERC20Votes / governance tokens
+  '0x5c19a95c': 'delegate(address)',
+  // WETH9-style
+  '0xd0e30db0': 'deposit()',
+  '0x2e1a7d4d': 'withdraw(uint256)',
+};
+
+const CONTRACT_ABI_CACHE = new Map<string, Abi | null>();
+const CONTRACT_ABI_PROMISE_CACHE = new Map<string, Promise<Abi | null>>();
+
+function getContractAbiCacheKey(target: string, chainId: number): string {
+  return `${chainId}:${target.toLowerCase()}`;
+}
+
+async function fetchContractAbiCached(target: string, chainId: number): Promise<Abi | null> {
+  const cacheKey = getContractAbiCacheKey(target, chainId);
+
+  if (CONTRACT_ABI_CACHE.has(cacheKey)) return CONTRACT_ABI_CACHE.get(cacheKey) ?? null;
+
+  const existingPromise = CONTRACT_ABI_PROMISE_CACHE.get(cacheKey);
+  if (existingPromise) return await existingPromise;
+
+  const promise = (async () => {
+    try {
+      return await BlockExplorerFactory.fetchContractAbi(target, chainId);
+    } catch {
+      return null;
+    }
+  })();
+
+  CONTRACT_ABI_PROMISE_CACHE.set(cacheKey, promise);
+
+  const abi = await promise;
+  CONTRACT_ABI_PROMISE_CACHE.delete(cacheKey);
+  CONTRACT_ABI_CACHE.set(cacheKey, abi);
+  return abi;
+}
+
+async function decodeContractCall(
+  target: string,
+  calldata: string,
+  chainId: number,
+): Promise<{ selector: string; signature?: string } | null> {
+  if (!calldata || calldata.length < 10) return null;
+
+  const selector = calldata.slice(0, 10).toLowerCase();
+  const knownSignature = KNOWN_FUNCTION_SELECTORS[selector];
+  if (knownSignature) return { selector, signature: knownSignature };
+
+  const abi = await fetchContractAbiCached(target, chainId);
+  if (!abi) return { selector };
+
+  let signature: string | undefined;
+  for (const item of abi) {
+    if (item.type !== 'function') continue;
+    try {
+      if (toFunctionSelector(item) === selector) {
+        signature = formatAbiFunctionSignature(item);
+        break;
+      }
+    } catch {
+      // Ignore malformed ABI entries.
+    }
+  }
+
+  return { selector, signature };
+}
+
+function getSimulationContractLabel(
+  simulation: TenderlySimulation | undefined,
+  address: string | undefined,
+): string | undefined {
+  if (!simulation || !address) return undefined;
+
+  try {
+    const match = simulation.contracts.find((c) => getAddress(c.address) === getAddress(address));
+
+    if (!match) return undefined;
+
+    if (match.token_data?.name && match.token_data?.symbol) {
+      return `${match.token_data.name} (${match.token_data.symbol})`;
+    }
+
+    if (match.contract_name) return match.contract_name;
+  } catch {
+    // Ignore bad addresses.
+  }
+
+  return undefined;
+}
+
+async function buildCrossChainPreview(
+  destinationSimulations: NonNullable<SimulationResult['destinationSimulations']>,
+): Promise<StructuredSimulationReport['crossChain']> {
+  const messages = await Promise.all(
+    destinationSimulations.map(async (dest) => {
+      const chainId = dest.chainId;
+
+      let blockExplorerBaseUrl = 'https://etherscan.io';
+      try {
+        blockExplorerBaseUrl = getChainConfig(chainId).blockExplorer.baseUrl;
+      } catch {
+        // Ignore unknown chain configs.
+      }
+
+      const l2TargetAddress = dest.l2Params?.l2TargetAddress;
+      const l2InputData = dest.l2Params?.l2InputData;
+
+      const call =
+        l2TargetAddress && l2InputData
+          ? await decodeContractCall(l2TargetAddress, l2InputData, chainId)
+          : undefined;
+
+      return {
+        chainId,
+        chainName: getChainName(chainId),
+        blockExplorerBaseUrl,
+        bridgeType: dest.bridgeType,
+        status: dest.status,
+        error: dest.error,
+        l2FromAddress: dest.l2Params?.l2FromAddress,
+        l2TargetAddress,
+        l2Value: dest.l2Params?.l2Value,
+        l2InputData,
+        targetLabel: getSimulationContractLabel(dest.sim, l2TargetAddress),
+        call: call
+          ? { selector: call.selector as `0x${string}`, signature: call.signature }
+          : undefined,
+      };
+    }),
+  );
+
+  return { messages };
 }
 
 // --- Repository and Tenderly utilities ---
@@ -879,6 +1049,16 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     }
   }
 
+  // Add cross-chain preview data (Issue #101)
+  if (destinationSimulations && destinationSimulations.length > 0) {
+    try {
+      structuredReport.crossChain = await buildCrossChainPreview(destinationSimulations);
+    } catch (error) {
+      console.warn('[Report] Failed to build cross-chain preview:', error);
+      // Continue without cross-chain preview - it's optional.
+    }
+  }
+
   // Save off all reports. The Markdown and PDF reports use the `markdownReport`.
   await Promise.all([
     fsp.writeFile(`${path}.html`, htmlReport),
@@ -1050,12 +1230,32 @@ async function formatCrossChainResults(
       const blockExplorerUrl = chainConfig.blockExplorer.baseUrl;
 
       // Format L1 message details with correct block explorer links
-      const l1Messages = sims
-        .map((sim, index) => {
-          const l2Target = sim.l2Params?.l2TargetAddress;
-          return `  - Message ${index + 1}: ${l2Target ? `Target: ${toAddressLink(l2Target, blockExplorerUrl)}` : 'No target address'}`;
-        })
-        .join('\n');
+      const l1Messages = (
+        await Promise.all(
+          sims.map(async (sim, index) => {
+            const l2Target = sim.l2Params?.l2TargetAddress;
+            const l2InputData = sim.l2Params?.l2InputData;
+
+            if (!l2Target) return `  - Message ${index + 1}: No target address`;
+
+            const statusIcon = sim.status === 'success' ? '✅' : '❌';
+            const label = getSimulationContractLabel(sim.sim, l2Target);
+            const targetText = label
+              ? `Target: ${label} ${toAddressLink(l2Target, blockExplorerUrl)}`
+              : `Target: ${toAddressLink(l2Target, blockExplorerUrl)}`;
+
+            let callText = 'Call: (unknown)';
+            if (l2InputData) {
+              const decoded = await decodeContractCall(l2Target, l2InputData, Number(chainId));
+              if (decoded) {
+                callText = `Call: \`${decoded.signature || decoded.selector}\``;
+              }
+            }
+
+            return `  - Message ${index + 1} ${statusIcon}: ${targetText} • ${callText}`;
+          }),
+        )
+      ).join('\n');
 
       // Get overall chain status
       const allSuccessful = sims.every((sim) => sim.status === 'success');

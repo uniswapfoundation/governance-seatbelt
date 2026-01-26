@@ -4,6 +4,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type {
+  CrossChainMessagePreview,
+  Proposal,
   SimulationCheck,
   SimulationStateChange,
   StructuredSimulationReport,
@@ -43,6 +45,10 @@ function buildAddressLink(
 ): string {
   const baseUrl = getExplorerUrl(metadata);
   return `${baseUrl}/address/${address}`;
+}
+
+function buildAddressLinkForExplorer(address: string, baseUrl: string): string {
+  return `${baseUrl || 'https://etherscan.io'}/address/${address}`;
 }
 
 export function buildBlockLink(
@@ -571,6 +577,7 @@ function ContractCard({ contract, variant }: ContractCardProps) {
 
 interface StructuredReportProps {
   report: StructuredSimulationReport;
+  proposal?: Proposal;
 }
 
 // Helper function for contextual executor labels
@@ -585,6 +592,276 @@ function getExecutorLabel(simulationType?: string): string {
     default:
       return 'Executor';
   }
+}
+
+function formatCrossChainCall(message: CrossChainMessagePreview): string {
+  if (message.call?.signature) return message.call.signature;
+  if (message.call?.selector) return message.call.selector;
+  if (message.l2InputData) return message.l2InputData.slice(0, 10);
+  return '(unknown)';
+}
+
+type CrossChainChainSummary = {
+  chainId: number;
+  chainName: string;
+  explorerBaseUrl: string;
+  bridgeType?: string;
+  total: number;
+  successCount: number;
+  failureCount: number;
+  failures: Array<{
+    index: number;
+    call: string;
+    targetLabel?: string;
+    target?: string;
+  }>;
+};
+
+function summarizeCrossChainMessages(messages: CrossChainMessagePreview[]): {
+  total: number;
+  successCount: number;
+  failureCount: number;
+  chains: CrossChainChainSummary[];
+} {
+  const byChain = new Map<number, CrossChainMessagePreview[]>();
+  for (const msg of messages) {
+    const list = byChain.get(msg.chainId) ?? [];
+    list.push(msg);
+    byChain.set(msg.chainId, list);
+  }
+
+  const chains: CrossChainChainSummary[] = Array.from(byChain.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([chainId, chainMessages]) => {
+      const chainName = chainMessages[0]?.chainName || `Chain ${chainId}`;
+      const explorerBaseUrl = chainMessages[0]?.blockExplorerBaseUrl || 'https://etherscan.io';
+      const bridgeType = chainMessages[0]?.bridgeType;
+      const successCount = chainMessages.filter((m) => m.status === 'success').length;
+      const failureCount = chainMessages.length - successCount;
+
+      return {
+        chainId,
+        chainName,
+        explorerBaseUrl,
+        bridgeType,
+        total: chainMessages.length,
+        successCount,
+        failureCount,
+        failures: chainMessages
+          .map((m, index) => ({
+            index,
+            call: formatCrossChainCall(m),
+            targetLabel: m.targetLabel,
+            target: m.l2TargetAddress,
+            status: m.status,
+          }))
+          .filter((m) => m.status === 'failure')
+          .map(({ index, call, targetLabel, target }) => ({ index, call, targetLabel, target })),
+      };
+    });
+
+  const total = chains.reduce((acc, c) => acc + c.total, 0);
+  const successCount = chains.reduce((acc, c) => acc + c.successCount, 0);
+  const failureCount = total - successCount;
+
+  return { total, successCount, failureCount, chains };
+}
+
+function CrossChainChecksSummary({ messages }: { messages: CrossChainMessagePreview[] }) {
+  const summary = useMemo(() => summarizeCrossChainMessages(messages), [messages]);
+  const hasFailures = summary.failureCount > 0;
+
+  return (
+    <div className="border border-muted rounded-md p-4 bg-card">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex items-start gap-3">
+          {hasFailures ? (
+            <AlertTriangleIcon className="h-5 w-5 text-yellow-500 mt-0.5" />
+          ) : (
+            <CheckCircleIcon className="h-5 w-5 text-green-500 mt-0.5" />
+          )}
+          <div>
+            <div className="font-semibold">Cross-chain messages</div>
+            <div className="text-xs text-muted-foreground">
+              L2 message execution can fail independently of the main-chain checks.
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-300">
+            {summary.successCount}/{summary.total} succeeded
+          </Badge>
+          {hasFailures ? (
+            <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+              {summary.failureCount} failed
+            </Badge>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-2">
+        {summary.chains.map((chain) => (
+          <div key={chain.chainId} className="border border-border/50 rounded-md p-3 bg-muted/20">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="text-sm font-medium">
+                {chain.chainName} ({chain.chainId})
+              </div>
+              <div className="flex items-center gap-2">
+                {chain.bridgeType ? (
+                  <Badge variant="outline" className="text-xs">
+                    {chain.bridgeType}
+                  </Badge>
+                ) : null}
+                <Badge variant="outline" className="text-xs bg-muted-foreground/10">
+                  {chain.successCount}/{chain.total} succeeded
+                </Badge>
+                {chain.failureCount > 0 ? (
+                  <Badge variant="destructive" className="text-xs">
+                    {chain.failureCount} failed
+                  </Badge>
+                ) : null}
+              </div>
+            </div>
+
+            {chain.failures.length ? (
+              <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                {chain.failures.map((m) => (
+                  <div
+                    key={`${chain.chainId}-${m.index}`}
+                    className="flex items-center gap-2 flex-wrap"
+                  >
+                    <span className="text-red-600 font-medium">Message {m.index + 1} failed:</span>
+                    <code className="font-mono bg-muted-foreground/10 px-1 py-0.5 rounded">
+                      {m.call}
+                    </code>
+                    {m.targetLabel ? <span>{m.targetLabel}</span> : null}
+                    {m.target ? (
+                      <a
+                        href={buildAddressLinkForExplorer(m.target, chain.explorerBaseUrl)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                        title={m.target}
+                      >
+                        {m.target.slice(0, 6)}...{m.target.slice(-4)}
+                        <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                      </a>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CrossChainPreview({ messages }: { messages: CrossChainMessagePreview[] }) {
+  const groups = useMemo(() => {
+    const byChain = new Map<number, CrossChainMessagePreview[]>();
+    for (const msg of messages) {
+      const list = byChain.get(msg.chainId) ?? [];
+      list.push(msg);
+      byChain.set(msg.chainId, list);
+    }
+    return Array.from(byChain.entries()).sort(([a], [b]) => a - b);
+  }, [messages]);
+
+  return (
+    <div className="space-y-4">
+      {groups.map(([chainId, chainMessages]) => {
+        const chainName = chainMessages[0]?.chainName || `Chain ${chainId}`;
+        const explorerBaseUrl = chainMessages[0]?.blockExplorerBaseUrl || 'https://etherscan.io';
+        const bridgeType = chainMessages[0]?.bridgeType;
+
+        return (
+          <div key={chainId} className="border border-muted rounded-md p-4 bg-card">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="font-semibold">
+                {chainName} ({chainId})
+              </div>
+              {bridgeType ? (
+                <Badge variant="outline" className="text-xs">
+                  {bridgeType}
+                </Badge>
+              ) : null}
+            </div>
+
+            <div className="mt-3 space-y-3">
+              {chainMessages.map((message, index) => {
+                const messageKey = `${message.chainId}-${message.bridgeType}-${message.l2FromAddress ?? 'unknown'}-${message.l2TargetAddress ?? 'unknown'}-${message.l2InputData ?? 'unknown'}-${message.status}`;
+                const target = message.l2TargetAddress;
+                const targetLabel = message.targetLabel;
+                const call = formatCrossChainCall(message);
+
+                const statusBadge =
+                  message.status === 'success' ? (
+                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-xs">
+                      Succeeded
+                    </Badge>
+                  ) : (
+                    <Badge variant="destructive" className="text-xs">
+                      Failed
+                    </Badge>
+                  );
+
+                return (
+                  <div
+                    key={messageKey}
+                    className="border border-border/50 rounded-md bg-muted/30 p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="text-sm font-medium">Message {index + 1}</div>
+                      {statusBadge}
+                    </div>
+
+                    <div className="mt-2 space-y-1 text-sm">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-muted-foreground">Target:</span>
+                        {targetLabel ? <span>{targetLabel}</span> : null}
+                        {target ? (
+                          <a
+                            href={buildAddressLinkForExplorer(target, explorerBaseUrl)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                            title={target}
+                          >
+                            {target.slice(0, 6)}...{target.slice(-4)}
+                            <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">(unknown)</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-start gap-2 flex-wrap">
+                        <span className="text-muted-foreground">Call:</span>
+                        <code className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded">
+                          {call}
+                        </code>
+                      </div>
+
+                      {message.error ? (
+                        <div className="text-xs text-red-700 mt-1">{message.error}</div>
+                      ) : message.status === 'failure' ? (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Failed (no error details captured)
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export function StructuredReport({ report }: StructuredReportProps) {
@@ -618,6 +895,13 @@ export function StructuredReport({ report }: StructuredReportProps) {
               value="overview"
               className="mt-4 space-y-6 absolute inset-0 overflow-y-auto pb-8 px-1"
             >
+              {report.crossChain?.messages?.length ? (
+                <div className="border border-muted rounded-md p-6 bg-card">
+                  <h3 className="text-lg font-semibold mb-3">Cross-Chain Preview</h3>
+                  <CrossChainPreview messages={report.crossChain.messages} />
+                </div>
+              ) : null}
+
               {report.proposalText && (
                 <div className="border border-muted rounded-md p-6 bg-card">
                   <h3 className="text-lg font-semibold mb-3">Proposal Details</h3>
@@ -723,6 +1007,9 @@ export function StructuredReport({ report }: StructuredReportProps) {
 
             <TabsContent value="checks" className="mt-4 absolute inset-0 overflow-y-auto pb-8 px-1">
               <div className="space-y-4">
+                {report.crossChain?.messages?.length ? (
+                  <CrossChainChecksSummary messages={report.crossChain.messages} />
+                ) : null}
                 {report.checks.length === 0 ? (
                   <div className="flex items-center justify-center p-6 text-muted-foreground border border-muted rounded-md">
                     <InfoIcon className="h-4 w-4 mr-2" />
