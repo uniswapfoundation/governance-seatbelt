@@ -124,7 +124,7 @@ export function formatVerificationSource(result: ContractVerificationResult): st
   }
 
   if (result.source === 'sourcify') {
-    const matchType = result.status === 'perfect' ? 'perfect match' : 'partial match';
+    const matchType = result.status === 'exact_match' ? 'exact match' : 'match';
     return `sourcify [${matchType}]`;
   }
 

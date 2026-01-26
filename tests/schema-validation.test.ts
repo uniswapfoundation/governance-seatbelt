@@ -78,7 +78,7 @@ describe('Schema validation at API boundaries', () => {
     SourcifyClient.clearCache();
 
     globalThis.fetch = (async () =>
-      new Response(JSON.stringify({ not: 'an array' }), {
+      new Response(JSON.stringify({ not: 'a v2 response' }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       })) as typeof fetch;

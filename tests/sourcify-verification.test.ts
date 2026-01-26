@@ -24,10 +24,17 @@ describe('Sourcify-first verification', () => {
 
       if (
         url.origin === 'https://sourcify.dev' &&
-        url.pathname === '/server/check-all-by-addresses'
+        url.pathname === `/server/v2/contract/${chainId}/${address}`
       ) {
         return new Response(
-          JSON.stringify([{ address, chainIds: [{ chainId: '1', status: 'perfect' }] }]),
+          JSON.stringify({
+            match: 'exact_match',
+            creationMatch: 'exact_match',
+            runtimeMatch: 'exact_match',
+            verifiedAt: '2024-01-01T00:00:00Z',
+            chainId: String(chainId),
+            address,
+          }),
           {
             status: 200,
             headers: { 'content-type': 'application/json' },
