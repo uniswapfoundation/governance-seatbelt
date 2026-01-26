@@ -13,6 +13,37 @@ import { fetchTokenMetadata } from '../utils/contracts/erc20';
 // Cache for decoded function data to avoid redundant decoding
 const decodedFunctionCache: Record<string, { name: string; args: unknown[] }> = {};
 
+// Keep this small to avoid rate limiting and reduce ABI/metadata lookup fan-out.
+// If decoding becomes a bottleneck, tune this constant.
+const DECODE_CONCURRENCY = 2;
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+
+  if (!Number.isInteger(concurrency) || concurrency <= 0) {
+    throw new Error(`Invalid concurrency: ${concurrency}`);
+  }
+
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  const workerCount = Math.min(concurrency, items.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const currentIndex = nextIndex++;
+      if (currentIndex >= items.length) return;
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
+
 /**
  * Decodes proposal target calldata into a human-readable format
  */
@@ -45,8 +76,13 @@ export const checkDecodeCalldata: ProposalCheck = {
 
     // Find the call with that calldata and parse it
     const calls = sim.transaction.transaction_info.call_trace.calls;
-    const descriptions = await Promise.all(
-      calldatas.map(async (calldata, i) => {
+    const warningsByCalldataIndex: string[][] = Array.from({ length: calldatas.length }, () => []);
+    const descriptions = await mapWithConcurrency(
+      calldatas,
+      DECODE_CONCURRENCY,
+      async (calldata, i) => {
+        const localWarnings = warningsByCalldataIndex[i];
+
         // Find the first matching call
         let call = findMatchingCall(getAddress(deps.timelock.address), calldata, calls || []);
         if (!call) {
@@ -54,7 +90,7 @@ export const checkDecodeCalldata: ProposalCheck = {
           // Skip the warning for ETH transfers which might not appear in the trace
           if (!(calldata === '0x' && BigInt(proposal.values?.[i].toString() ?? '0') > 0n)) {
             const msg = `Could not find matching call for target ${proposal.targets[i]} with calldata ${calldata}`;
-            warnings.push(msg);
+            localWarnings.push(msg);
           }
 
           // Create a synthetic call
@@ -75,9 +111,17 @@ export const checkDecodeCalldata: ProposalCheck = {
           (c) => getAddress(c.address) === getAddress(targetAddress),
         );
 
-        return prettifyCalldata(call, targetAddress, warnings, contract, deps.chainConfig.chainId);
-      }),
+        return prettifyCalldata(
+          call,
+          targetAddress,
+          localWarnings,
+          contract,
+          deps.chainConfig.chainId,
+        );
+      },
     );
+
+    for (const localWarnings of warningsByCalldataIndex) warnings.push(...localWarnings);
 
     const info = descriptions.filter((d) => d !== null).map((d) => d);
     return { info, warnings, errors: [] };
@@ -116,16 +160,19 @@ async function handleL2CrossChainCalldata(
   }
 
   // Process each meaningful L2 call
-  const descriptions = await Promise.all(
-    allL2Calls.map(async (call) => {
-      // Get contract information from the simulation
-      const contract = sim.contracts.find(
-        (c: TenderlyContract) => getAddress(c.address) === getAddress(call.to),
-      );
+  const warningsByCallIndex: string[][] = Array.from({ length: allL2Calls.length }, () => []);
+  const descriptions = await mapWithConcurrency(allL2Calls, DECODE_CONCURRENCY, async (call, i) => {
+    const localWarnings = warningsByCallIndex[i];
 
-      return prettifyCalldata(call, call.to, warnings, contract, chainId);
-    }),
-  );
+    // Get contract information from the simulation
+    const contract = sim.contracts.find(
+      (c: TenderlyContract) => getAddress(c.address) === getAddress(call.to),
+    );
+
+    return prettifyCalldata(call, call.to, localWarnings, contract, chainId);
+  });
+
+  for (const localWarnings of warningsByCallIndex) warnings.push(...localWarnings);
 
   const validDescriptions = descriptions.filter((d) => d !== null);
   if (validDescriptions.length === 0) {
