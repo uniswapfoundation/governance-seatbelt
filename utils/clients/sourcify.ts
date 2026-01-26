@@ -41,10 +41,10 @@ function getCacheKey(address: string, chainId: number): string {
 /**
  * Sourcify API client for checking contract verification status.
  *
- * Uses the Sourcify check-all-by-addresses endpoint which is efficient
- * for simple verification status checks without retrieving full source code.
+ * Uses the Sourcify v2 contract lookup endpoint which is efficient for simple verification status
+ * checks without retrieving full source code.
  *
- * @see https://docs.sourcify.dev/docs/api/server/check-all-by-addresses/
+ * @see https://docs.sourcify.dev/docs/api/
  */
 // biome-ignore lint/complexity/noStaticOnlyClass: Consistent with BlockExplorerFactory pattern
 export class SourcifyClient {
