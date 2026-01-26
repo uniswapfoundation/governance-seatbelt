@@ -22,6 +22,19 @@ Some notes on the outputs of reports:
 - ETH balance changes are reported in a dedicated section, showing transfers and net balance changes for each address involved
 - Permission changes (ownership transfers, role grants/revokes, timelock admin changes) are detected and surfaced as warnings, and also emitted as structured data in `structuredReport.permissionsDiff`
 
+## Caching
+
+Seatbelt writes a local `cache/` directory to reduce repeated calls to external services (block explorers, Sourcify, etc.). This is used both locally and in CI (the Governance Checks workflow caches `cache/` between runs).
+
+- `cache/abis/`: ABI JSON fetched from the configured block explorer
+- `cache/verification/`: contract verification status (Sourcify / block explorer)
+- `cache/contract-names/`: contract names fetched from the block explorer (used when Tenderly metadata is missing)
+
+Cache refresh behavior:
+- Verification results are re-checked over time (unverified entries expire after ~24h; verified entries after ~30d)
+- Contract-name entries expire after ~30d
+- Stale cache entries are deleted opportunistically when read
+
 ## Structured Report JSON
 
 When running simulations locally, Seatbelt writes `public/simulation-results.json` for the frontend. The `report.structuredReport` object is a stable, machine-readable representation of the report.

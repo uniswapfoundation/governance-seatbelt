@@ -48,6 +48,7 @@ import {
   hashOperationOz,
 } from '../contracts/governor';
 import { parseWithSchema, z } from '../validation/zod';
+import { CacheManager } from './block-explorers/cache';
 import { BlockExplorerFactory } from './block-explorers/factory';
 import { getChainConfig, publicClient } from './client';
 
@@ -1186,23 +1187,27 @@ export async function getContractName(
   // Best-effort fallback: Tenderly may not have indexed a verified contract yet, so try the
   // chain's configured block explorer for a better name when available.
   if (chainId && (contractName === 'Unknown Contract' || contractName.length === 0)) {
-    const cacheKey = `${chainId}:${contractAddress}`;
-    const cached = blockExplorerContractNameCache[cacheKey];
-    if (cached) {
-      contractName = cached;
+    const memoryCached = CacheManager.getContractNameFromMemory(chainId, contractAddress);
+    if (memoryCached) {
+      contractName = memoryCached;
     } else {
-      const fetched = await BlockExplorerFactory.fetchContractName(contractAddress, chainId);
-      if (fetched) {
-        blockExplorerContractNameCache[cacheKey] = fetched;
-        contractName = fetched;
+      const fileCached = CacheManager.getContractNameFromFile(chainId, contractAddress);
+      if (fileCached) {
+        CacheManager.setContractNameInMemory(chainId, contractAddress, fileCached);
+        contractName = fileCached;
+      } else {
+        const fetched = await BlockExplorerFactory.fetchContractName(contractAddress, chainId);
+        if (fetched) {
+          CacheManager.setContractNameInMemory(chainId, contractAddress, fetched);
+          CacheManager.setContractNameInFile(chainId, contractAddress, fetched);
+          contractName = fetched;
+        }
       }
     }
   }
 
   return `${contractName} at \`${contractAddress}\``;
 }
-
-const blockExplorerContractNameCache: Record<string, string> = {};
 
 /**
  * @notice Uses only Tenderly's contract metadata for naming (no additional API calls)
