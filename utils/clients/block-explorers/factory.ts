@@ -1,7 +1,7 @@
 import type { Abi } from 'viem';
 import { getAddress } from 'viem';
 import { BlockExplorerSource, getChainConfig } from '../client';
-import { getSourcifyMatch, type SourcifyMatch } from '../sourcify';
+import { type SourcifyMatch, getSourcifyMatch } from '../sourcify';
 import { BlockscoutExplorer } from './blockscout';
 import { CacheManager } from './cache';
 import { EtherscanExplorer } from './etherscan';
