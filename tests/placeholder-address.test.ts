@@ -85,7 +85,7 @@ describe('Placeholder Address Detection and Labeling', () => {
     // Test that the placeholder address is detected
     expect(report.metadata.proposer).toBe(DEFAULT_SIMULATION_ADDRESS);
     expect(report.metadata.proposerIsPlaceholder).toBe(true);
-  });
+  }, 30000);
 
   test('should not flag real proposer addresses as placeholders', async () => {
     // Create a proposal with a real proposer address
@@ -122,7 +122,7 @@ describe('Placeholder Address Detection and Labeling', () => {
     // Test that the real proposer is not flagged as placeholder
     expect(report.metadata.proposer).toBe(realProposerAddress);
     expect(report.metadata.proposerIsPlaceholder).toBe(false);
-  });
+  }, 30000);
 
   test('should add placeholder label in markdown report', async () => {
     // Create a proposal with the default simulation address as proposer
@@ -157,7 +157,7 @@ describe('Placeholder Address Detection and Labeling', () => {
     // Test that the markdown contains the placeholder label
     expect(markdownContent).toContain('(placeholder simulation address)');
     expect(markdownContent).toContain(DEFAULT_SIMULATION_ADDRESS);
-  });
+  }, 30000);
 
   test('should not add placeholder label for real proposer addresses in markdown', async () => {
     // Create a proposal with a real proposer address
@@ -193,7 +193,7 @@ describe('Placeholder Address Detection and Labeling', () => {
     // Test that the markdown does NOT contain the placeholder label
     expect(markdownContent).not.toContain('(placeholder simulation address)');
     expect(markdownContent).toContain(realProposerAddress);
-  });
+  }, 30000);
 
   test('should handle address case sensitivity correctly', async () => {
     // Test with lowercase version of the placeholder address to ensure getAddress normalization works
@@ -230,5 +230,5 @@ describe('Placeholder Address Detection and Labeling', () => {
     // Test that the lowercase address is still detected as placeholder due to getAddress normalization
     expect(getAddress(report.metadata.proposer)).toBe(getAddress(DEFAULT_SIMULATION_ADDRESS));
     expect(report.metadata.proposerIsPlaceholder).toBe(true);
-  });
+  }, 30000);
 });

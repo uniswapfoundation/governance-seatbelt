@@ -1,1 +1,4 @@
-bunx secretlint .
+files=$(git diff --cached --name-only --diff-filter=ACMR)
+if [ -n "$files" ]; then
+  bunx secretlint $files
+fi

@@ -5,28 +5,57 @@ export type ZodIssueSummary = {
   message: string;
 };
 
-const simulationResultSchema = z
+const MAX_CALLS_PER_PROPOSAL = 250;
+const MAX_DESCRIPTION_CHARS = 500_000;
+const MAX_REPORT_SUMMARY_CHARS = 100_000;
+const MAX_REPORT_MARKDOWN_CHARS = 5_000_000;
+
+const simulationResultSchemaBase = z
   .object({
     proposalData: z
       .object({
         id: z.string().optional(),
-        targets: z.array(z.string()),
-        values: z.array(z.string()),
-        signatures: z.array(z.string()),
-        calldatas: z.array(z.string()),
-        description: z.string(),
+        targets: z.array(z.string()).max(MAX_CALLS_PER_PROPOSAL),
+        values: z.array(z.string()).max(MAX_CALLS_PER_PROPOSAL),
+        signatures: z.array(z.string()).max(MAX_CALLS_PER_PROPOSAL),
+        calldatas: z.array(z.string()).max(MAX_CALLS_PER_PROPOSAL),
+        description: z.string().max(MAX_DESCRIPTION_CHARS),
       })
       .passthrough(),
     report: z
       .object({
         status: z.string(),
-        summary: z.string(),
-        markdownReport: z.string(),
+        summary: z.string().max(MAX_REPORT_SUMMARY_CHARS),
+        markdownReport: z.string().max(MAX_REPORT_MARKDOWN_CHARS),
         structuredReport: z.unknown().optional(),
       })
       .passthrough(),
   })
   .passthrough();
+
+type SimulationResult = z.infer<typeof simulationResultSchemaBase>;
+
+const simulationResultSchema = simulationResultSchemaBase.superRefine(
+  (value: SimulationResult, ctx: z.RefinementCtx) => {
+    const { targets, values, signatures, calldatas } = value.proposalData;
+    const lengths = [
+      { key: 'targets', len: targets.length },
+      { key: 'values', len: values.length },
+      { key: 'signatures', len: signatures.length },
+      { key: 'calldatas', len: calldatas.length },
+    ];
+
+    const uniqueLengths = new Set(lengths.map((l) => l.len));
+    if (uniqueLengths.size === 1) return;
+
+    const lengthsText = lengths.map((l) => `${l.key}=${l.len}`).join(', ');
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['proposalData'],
+      message: `Proposal call arrays must be the same length (${lengthsText})`,
+    });
+  },
+);
 
 const simulationResultsSchema = z.array(simulationResultSchema);
 

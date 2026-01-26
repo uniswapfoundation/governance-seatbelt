@@ -20,6 +20,7 @@
       }
     },
     "ignore": [
+      ".context/**",
       "node_modules/**",
       "frontend/src/components/ui/",
       "frontend/node_modules/",
@@ -32,6 +33,7 @@
     "indentWidth": 2,
     "lineWidth": 100,
     "ignore": [
+      ".context/**",
       "node_modules/**",
       "frontend/src/components/ui/",
       "frontend/node_modules/",
@@ -46,6 +48,7 @@
   },
   "files": {
     "ignore": [
+      ".context",
       "node_modules",
       "frontend/src/components/ui/",
       "frontend/node_modules/",
