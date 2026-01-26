@@ -20,7 +20,15 @@ type PermissionsDiffItem =
       sender: Address;
     }
   | {
-      kind: 'timelock_admin_changed' | 'timelock_pending_admin_changed';
+      kind: 'timelock_admin_changed';
+      contractAddress: Address;
+      contractName?: string;
+      previous?: Address;
+      next: Address;
+      via: 'event' | 'state_diff' | 'event+state_diff';
+    }
+  | {
+      kind: 'timelock_pending_admin_changed';
       contractAddress: Address;
       contractName?: string;
       previous?: Address;

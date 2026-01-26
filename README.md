@@ -26,6 +26,8 @@ Some notes on the outputs of reports:
 
 When running simulations locally, Seatbelt writes `public/simulation-results.json` for the frontend. The `report.structuredReport` object is a stable, machine-readable representation of the report.
 
+For the full JSON schema (including cross-chain preview fields) and consumer guidance, see `docs/API.md`.
+
 ### `structuredReport.permissionsDiff`
 
 If present, this is an array of permission changes detected during the simulation. Each entry has a `kind` plus additional fields:
@@ -63,6 +65,14 @@ To run the frontend with simulation results:
    ```
 
 The frontend will be available at `http://localhost:3000`.
+
+#### Frontend safety limits (artifact hardening)
+
+The frontend reads `frontend/public/simulation-results.json` via `GET /api/simulation-results`.
+To avoid accidentally wedging the dev server/browser with oversized artifacts, the API enforces a max file size
+(override with `SIMULATION_RESULTS_MAX_BYTES`). By default, the API also omits the markdown payload from the
+response (sets `report.markdownReport` to `""`); pass `?includeMarkdown=1` to include it.
+If you deploy the frontend publicly, add platform-level rate limiting + error-rate monitoring for `/api/*`.
 
 ### Creating Proposals
 

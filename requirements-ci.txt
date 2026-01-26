@@ -1,2 +1,1 @@
-solc-select==1.2.0
 slither-analyzer==0.10.4

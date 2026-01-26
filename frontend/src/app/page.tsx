@@ -119,7 +119,7 @@ function ProposalSection({ isConnected }: { isConnected: boolean }) {
         {/* Report Card - Left on desktop, Bottom on mobile */}
         <div className="md:col-span-3 md:order-1 order-2 md:sticky md:top-4 h-fit min-w-0">
           {report.structuredReport ? (
-            <StructuredReport report={report.structuredReport} proposal={proposalData} />
+            <StructuredReport report={report.structuredReport} />
           ) : (
             <Alert>
               <InfoIcon className="h-4 w-4" />

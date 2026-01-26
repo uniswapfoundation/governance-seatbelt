@@ -17,7 +17,7 @@ export interface ContractVerificationResult {
   verified: boolean;
   /** Which source the contract was verified on */
   source: VerificationSource;
-  /** Detailed status (e.g., 'perfect', 'partial', 'verified') */
+  /** Detailed status (e.g., 'exact_match', 'match', 'verified') */
   status?: string;
   /** Human-readable reason when not verified */
   reason?: string;
@@ -116,7 +116,7 @@ export function formatSourcesChecked(blockExplorerName = 'block explorer'): stri
  * Format the verification source for display in reports.
  *
  * @param result - The verification result
- * @returns Formatted string like "sourcify [perfect match]" or "block explorer"
+ * @returns Formatted string like "sourcify [exact match]" or "block explorer"
  */
 export function formatVerificationSource(result: ContractVerificationResult): string {
   if (!result.verified) {
@@ -124,7 +124,7 @@ export function formatVerificationSource(result: ContractVerificationResult): st
   }
 
   if (result.source === 'sourcify') {
-    const matchType = result.status === 'perfect' ? 'perfect match' : 'partial match';
+    const matchType = result.status === 'exact_match' ? 'exact match' : 'match';
     return `sourcify [${matchType}]`;
   }
 
