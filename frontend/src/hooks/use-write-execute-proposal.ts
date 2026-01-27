@@ -1,17 +1,86 @@
+import { DEFAULT_GOVERNOR_ADDRESS, GOVERNOR_ABI } from '@/config';
+import { parseWeb3Error } from '@/lib/errors';
 import { useMutation } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
+import { useSimulationResults } from './use-simulation-results';
 
+const HIGH_GAS_LIMIT = BigInt(10000000); // 10M gas limit for complex governance operations
+const TOAST_ID = 'execute-tx'; // Consistent toast ID for updates
+
+/**
+ * Hook for executing a queued proposal
+ */
 export function useWriteExecuteProposal() {
-  useMutation({
+  const publicClient = usePublicClient();
+  const { chain } = useAccount();
+  const { data: simulationData } = useSimulationResults();
+  const { writeContractAsync, isPending: isPendingConfirmation } = useWriteContract();
+
+  // Get block explorer URL from connected chain, fallback to Etherscan
+  const getExplorerTxUrl = (hash: string) => {
+    const baseUrl = chain?.blockExplorers?.default?.url || 'https://etherscan.io';
+    return `${baseUrl}/tx/${hash}`;
+  };
+
+  const mutation = useMutation({
     mutationFn: async () => {
-      // TODO: Implement proposal execution and tx sending
-      // get the proposal id
-      // call the execute proposal function with the proposal id
-      // wait for the tx to be mined
-      // return the proposal data
+      if (!publicClient) throw new Error('Public client not found');
+      if (!simulationData) throw new Error('Simulation data not found');
+
+      const proposalId = simulationData.report.structuredReport?.metadata.proposalId;
+      if (!proposalId) throw new Error('Proposal ID not found in simulation data');
+
+      // Clear any existing toasts and show initial state
+      toast.dismiss();
+      toast.loading('Waiting for wallet signature...', { id: TOAST_ID });
+
+      const hash = await writeContractAsync({
+        address: DEFAULT_GOVERNOR_ADDRESS,
+        abi: GOVERNOR_ABI,
+        functionName: 'execute',
+        args: [BigInt(proposalId)],
+        gas: HIGH_GAS_LIMIT,
+      });
+
+      // Update toast for transaction confirmation
+      toast.loading('Transaction submitted - waiting for confirmation...', {
+        id: TOAST_ID,
+        description: `Transaction hash: ${hash}`,
+      });
+
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+
+      // Check if transaction was successful
+      if (receipt.status === 'reverted') {
+        throw new Error('Transaction reverted', { cause: receipt });
+      }
+
+      return { hash, receipt };
     },
-    onSuccess: () => {
-      // TODO: Implement success callback
-      // invalidate any queries that need to be invalidated
+    onSuccess: (data) => {
+      const explorerUrl = getExplorerTxUrl(data.hash);
+      const explorerName = chain?.blockExplorers?.default?.name || 'Explorer';
+      toast.success('Proposal executed successfully!', {
+        id: TOAST_ID,
+        description: `Transaction confirmed in block ${data.receipt.blockNumber}.`,
+        duration: 8000,
+        action: {
+          label: `View on ${explorerName}`,
+          onClick: () => window.open(explorerUrl, '_blank'),
+        },
+      });
+    },
+    onError: (error) => {
+      toast.error('Transaction failed', {
+        id: TOAST_ID,
+        description: parseWeb3Error(error as Error),
+      });
     },
   });
+
+  return {
+    ...mutation,
+    isPendingConfirmation,
+  };
 }
