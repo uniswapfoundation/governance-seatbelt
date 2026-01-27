@@ -54,21 +54,15 @@ async function mapWithConcurrency<T, R>(
  */
 export const checkDecodeCalldata: ProposalCheck = {
   name: 'Decodes target calldata into a human-readable format',
-  async checkProposal(proposal, sim, deps, l2Simulations) {
+  async checkProposal(proposal, sim, deps, _l2Simulations) {
     const warnings: string[] = [];
 
     // Check if we're running on L2 and have cross-chain message data available
     const isL2Chain = deps.chainConfig?.chainId !== 1;
-    const hasL2Data = l2Simulations && l2Simulations.length > 0;
 
-    if (isL2Chain && hasL2Data) {
-      // Handle L2 cross-chain calldata decoding
-      return await handleL2CrossChainCalldata(
-        l2Simulations,
-        sim,
-        warnings,
-        deps.chainConfig.chainId,
-      );
+    if (isL2Chain) {
+      // Handle L2 calldata decoding (destination simulation for this chain only)
+      return await handleL2CrossChainCalldata(sim, warnings, deps.chainConfig.chainId);
     }
 
     // Handle regular L1 calldata decoding (existing logic)
@@ -137,27 +131,15 @@ export const checkDecodeCalldata: ProposalCheck = {
  * Handle L2 cross-chain calldata decoding using the actual L2 execution data
  */
 async function handleL2CrossChainCalldata(
-  l2Simulations: Array<{ chainId: number; sim: TenderlySimulation }>,
   sim: TenderlySimulation,
   warnings: string[],
   chainId: number,
 ) {
-  // We need to access the destination simulations to get l2Params
-  // Since l2Simulations doesn't include l2Params, we need to get it from the global result
-  // For now, let's extract L2 calldata from the simulation traces and decode what we can find
-
   const allL2Calls: DecodedCall[] = [];
 
-  // Extract calls from all L2 simulations
-  for (const l2Sim of l2Simulations) {
-    if (l2Sim.sim?.transaction?.transaction_info?.call_trace?.calls) {
-      // Find calls that aren't just system calls
-      const meaningfulCalls = extractMeaningfulL2Calls(
-        l2Sim.sim.transaction.transaction_info.call_trace,
-      );
-      allL2Calls.push(...meaningfulCalls);
-    }
-  }
+  // Extract calls from this destination simulation only
+  const trace = sim.transaction.transaction_info.call_trace;
+  if (trace) allL2Calls.push(...extractMeaningfulL2Calls(trace));
 
   if (allL2Calls.length === 0) {
     warnings.push('No meaningful L2 execution calls found in cross-chain simulation');

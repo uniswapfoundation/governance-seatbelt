@@ -8,28 +8,20 @@ import { DEFAULT_SIMULATION_ADDRESS } from '../utils/clients/tenderly';
  */
 export const checkTargetsNoSelfdestruct: ProposalCheck = {
   name: 'Check all targets do not contain selfdestruct',
-  async checkProposal(proposal, _, deps, l2Simulations) {
+  async checkProposal(proposal, sim, deps) {
     const isL2Chain = deps.chainConfig?.chainId !== 1;
-    const hasL2Data = l2Simulations && l2Simulations.length > 0;
 
-    let targets: `0x${string}`[];
+    const targets: `0x${string}`[] = isL2Chain
+      ? extractTargetsFromSimulation(sim)
+      : proposal.targets.filter((addr, i, targets) => targets.indexOf(addr) === i).map(getAddress);
 
-    if (isL2Chain && hasL2Data) {
-      // For L2 chains, extract targets from cross-chain simulation data
-      targets = extractL2Targets(l2Simulations);
-      if (targets.length === 0) {
-        return {
-          info: [],
-          warnings: [],
-          errors: [],
-          skipped: { reason: 'No L2 targets found in cross-chain simulation' },
-        };
-      }
-    } else {
-      // For mainnet, use proposal targets
-      targets = proposal.targets
-        .filter((addr, i, targets) => targets.indexOf(addr) === i)
-        .map(getAddress);
+    if (isL2Chain && targets.length === 0) {
+      return {
+        info: [],
+        warnings: [],
+        errors: [],
+        skipped: { reason: 'No L2 targets found in destination simulation' },
+      };
     }
 
     const blockExplorerUrl = deps.chainConfig.blockExplorer.baseUrl;
@@ -197,24 +189,15 @@ async function checkNoSelfdestruct(
   return delegatecall ? 'delegatecall' : 'safe';
 }
 
-/**
- * Extract unique target addresses from L2 simulations
- */
-function extractL2Targets(
-  l2Simulations: Array<{ chainId: number; sim: TenderlySimulation }>,
-): `0x${string}`[] {
+function extractTargetsFromSimulation(sim: TenderlySimulation): `0x${string}`[] {
   const targets = new Set<string>();
 
-  for (const l2Sim of l2Simulations) {
-    if (l2Sim.sim?.transaction?.transaction_info?.call_trace?.calls) {
-      // Extract target addresses from L2 calls
-      extractTargetsFromCalls(l2Sim.sim.transaction.transaction_info.call_trace.calls, targets);
-    }
+  if (sim.transaction.transaction_info.call_trace?.calls) {
+    extractTargetsFromCalls(sim.transaction.transaction_info.call_trace.calls, targets);
+  }
 
-    // Also include the main transaction target if it exists
-    if (l2Sim.sim?.transaction?.to) {
-      targets.add(l2Sim.sim.transaction.to.toLowerCase());
-    }
+  if (sim.transaction?.to) {
+    targets.add(sim.transaction.to.toLowerCase());
   }
 
   return Array.from(targets).map((addr) => getAddress(addr));

@@ -96,15 +96,14 @@ function mergeTimelockAdminChanges(items: PermissionsDiffItem[]): PermissionsDif
 
 export const checkPermissionDiff: ProposalCheck = {
   name: 'Detects permission changes (ownership, roles, timelock admin)',
-  async checkProposal(_, sim, deps, l2Simulations) {
+  async checkProposal(_, sim, deps, _l2Simulations) {
     const warnings: string[] = [];
     const info: string[] = [];
     const permissionsDiff: PermissionsDiffItem[] = [];
 
-    const simulations =
-      l2Simulations && deps.chainConfig?.chainId !== 1
-        ? l2Simulations.filter((s) => s.sim).map((s) => s.sim!)
-        : [sim];
+    // For L2 reports, only evaluate permission diffs within the destination simulation for this chain.
+    // Cross-chain destination simulations are rendered under their own chain sections.
+    const simulations = deps.chainConfig?.chainId !== 1 ? [sim] : [sim];
 
     const contractNameByAddress = new Map<string, string>();
     const getContractLabel = (address: string) => {

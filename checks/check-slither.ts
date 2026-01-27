@@ -49,6 +49,17 @@ export const checkSlither: ProposalCheck = {
     const info: string[] = [];
     const warnings: string[] = [];
 
+    if (deps.chainConfig.chainId !== 1) {
+      return {
+        info: [],
+        warnings: [],
+        errors: [],
+        skipped: {
+          reason: 'Slither check currently runs mainnet-only; skipped for L2 simulations',
+        },
+      };
+    }
+
     // Skip existing timelock and governor contracts to reduce noise. These contracts are already
     // deployed and in use, and if they are being updated, the new contract will be one of the
     // touched contracts that gets analyzed.

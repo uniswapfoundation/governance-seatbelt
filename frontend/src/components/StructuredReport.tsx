@@ -1616,9 +1616,11 @@ function StateChangeItem({
   const oldValueCleaned = cleanValue(stateChange.oldValue);
   const newValueCleaned = cleanValue(stateChange.newValue);
 
+  const isHex32 = (value: string) => /^0x[0-9a-fA-F]{64}$/.test(value);
+  const isDecimalInteger = (value: string) => /^-?\d+$/.test(value);
+
   // Determine if the change is a simple value change or a complex one
-  const isNumericChange =
-    !Number.isNaN(Number(oldValueCleaned)) && !Number.isNaN(Number(newValueCleaned));
+  const isNumericChange = isDecimalInteger(oldValueCleaned) && isDecimalInteger(newValueCleaned);
   const isAddressChange = oldValueCleaned.startsWith('0x') && newValueCleaned.startsWith('0x');
   const isBooleanChange =
     (oldValueCleaned === 'true' || oldValueCleaned === 'false') &&
@@ -1626,6 +1628,40 @@ function StateChangeItem({
 
   // Calculate difference for numeric values
   const getDifference = () => {
+    // Special-case: Uniswap V3 Pool `slot0` packing can be decoded for a readable delta (feeProtocol/unlocked).
+    if (
+      stateChange.contract.toLowerCase().includes('uniswapv3pool') &&
+      isHex32(oldValueCleaned) &&
+      isHex32(newValueCleaned) &&
+      /^0x0{64}$/i.test(stateChange.key)
+    ) {
+      try {
+        const oldSlot0 = BigInt(oldValueCleaned);
+        const newSlot0 = BigInt(newValueCleaned);
+
+        const feeProtocolOld = Number((oldSlot0 >> 232n) & 0xffn);
+        const feeProtocolNew = Number((newSlot0 >> 232n) & 0xffn);
+        const unlockedOld = ((oldSlot0 >> 240n) & 0xffn) === 1n;
+        const unlockedNew = ((newSlot0 >> 240n) & 0xffn) === 1n;
+
+        return (
+          <div className="bg-muted p-3 rounded-md mt-4 space-y-2">
+            <div className="text-sm flex items-center justify-between">
+              <span className="text-muted-foreground">Decoded (Uniswap V3 slot0)</span>
+            </div>
+            <div className="text-xs font-mono">
+              feeProtocol: {feeProtocolOld} → {feeProtocolNew}
+            </div>
+            <div className="text-xs font-mono">
+              unlocked: {String(unlockedOld)} → {String(unlockedNew)}
+            </div>
+          </div>
+        );
+      } catch {
+        // fall through to generic rendering
+      }
+    }
+
     if (isNumericChange) {
       try {
         // Parse the values as BigInt to handle very large numbers
@@ -1772,6 +1808,16 @@ function StateChangeItem({
       );
     }
 
+    // Avoid misleading diffs for raw storage slots (hex32 values).
+    if (isHex32(oldValueCleaned) && isHex32(newValueCleaned)) {
+      return (
+        <div className="bg-muted p-3 rounded-md mt-4">
+          <div className="text-sm text-muted-foreground">Change</div>
+          <div className="font-medium text-xs">Storage slot value changed</div>
+        </div>
+      );
+    }
+
     // For other types of changes, show a generic difference indicator
     return (
       <div className="bg-muted p-3 rounded-md mt-4">
@@ -1790,33 +1836,16 @@ function StateChangeItem({
         aria-expanded={isExpanded}
       >
         <div className="flex items-start gap-2">
-          {stateChange.key.startsWith('0x') && (
+          {isHex32(stateChange.key) ? (
             <div className="text-xs bg-muted-foreground/10 px-2 py-1 rounded text-muted-foreground">
-              Balance
+              Slot
             </div>
-          )}
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           <code className="text-xs bg-muted-foreground/20 px-2 py-1 rounded">
-            {stateChange.key.startsWith('0x') ? (
-              <a
-                href={buildAddressLink(stateChange.key, effectiveMetadata)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:underline inline-flex items-center"
-                onClick={(e) => e.stopPropagation()} // Prevent toggling when clicking the link
-              >
-                {stateChange.key}
-                <ExternalLinkIcon className="h-3 w-3 ml-1" />
-              </a>
-            ) : (
-              stateChange.key
-            )}
+            {stateChange.key}
           </code>
-          {stateChange.key.startsWith('0x') &&
-            isPlaceholderAddress(stateChange.key, effectiveMetadata) && (
-              <SimulationPlaceholderBadge />
-            )}
           {isExpanded ? (
             <ChevronUpIcon className="h-4 w-4 text-muted-foreground" />
           ) : (

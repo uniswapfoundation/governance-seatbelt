@@ -7,14 +7,12 @@ import { getContractName } from '../utils/clients/tenderly';
  */
 export const checkLogs: ProposalCheck = {
   name: 'Reports all events emitted from the proposal',
-  async checkProposal(_, sim, deps, l2Simulations) {
+  async checkProposal(_, sim, deps, _l2Simulations) {
     const info: string[] = [];
 
-    // For L2 checks, we want to process all L2 simulations, not just the current one
-    const simulations =
-      l2Simulations && deps.chainConfig?.chainId !== 1
-        ? l2Simulations.filter((s) => s.sim).map((s) => s.sim!)
-        : [sim];
+    // For L2 reports, only show logs from the destination simulation for this chain.
+    // Cross-chain destination simulations are rendered under their own chain sections.
+    const simulations = deps.chainConfig?.chainId !== 1 ? [sim] : [sim];
 
     // Process all logs from all relevant simulations
     const allEvents: Record<string, Log[]> = {};
