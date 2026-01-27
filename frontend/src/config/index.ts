@@ -1,5 +1,5 @@
 import { GOVERNOR_ABI } from './abis';
-import { projectId, queryClient, config as wagmiConfig } from './wagmi';
+import { projectId, queryClient, config as wagmiConfig, walletConnectEnabled } from './wagmi';
 
 // State names for readability
 export const PROPOSAL_STATES = [
@@ -22,4 +22,4 @@ export const REPORTS_DIR = process.env.REPORTS_DIR || '../reports';
 export const SIMS_DIR = process.env.SIMS_DIR || '../sims';
 
 export { GOVERNOR_ABI };
-export { wagmiConfig, projectId, queryClient };
+export { wagmiConfig, queryClient, projectId, walletConnectEnabled };

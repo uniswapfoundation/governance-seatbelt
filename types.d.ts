@@ -711,6 +711,7 @@ export interface StructuredSimulationReport {
   checks: SimulationCheck[];
   stateChanges: SimulationStateChange[];
   events: SimulationEvent[];
+  chainReports?: ChainSimulationReport[];
   permissionsDiff?: PermissionsDiffItem[];
   calldata?: SimulationCalldata;
   coverage?: CoverageData;
@@ -742,6 +743,16 @@ export interface StructuredSimulationReport {
     // Address labels for entity identification (Issue #94)
     addressLabels?: Record<string, AddressLabel>;
   };
+}
+
+export interface ChainSimulationReport {
+  chainId: number;
+  chainName: string;
+  blockExplorerBaseUrl?: string;
+  status: 'success' | 'warning' | 'error';
+  checks: SimulationCheck[];
+  stateChanges: SimulationStateChange[];
+  events: SimulationEvent[];
 }
 
 export interface GenerateReportsParams {

@@ -8,6 +8,10 @@
     "type": "bridge"
   },
   "0x4200000000000000000000000000000000000006": {
+    "label": "WETH (OP Stack predeploy)",
+    "type": "token"
+  },
+  "0x4200000000000000000000000000000000000010": {
     "label": "L2 Standard Bridge",
     "type": "bridge"
   },

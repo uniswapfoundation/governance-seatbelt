@@ -2,14 +2,12 @@ import { getAddress } from 'viem';
 
 // Load environment variables.
 export const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY!;
-export const RPC_URL = process.env.RPC_URL!;
 export const TENDERLY_ACCESS_TOKEN = process.env.TENDERLY_ACCESS_TOKEN!;
 export const TENDERLY_USER = process.env.TENDERLY_USER!;
 export const TENDERLY_PROJECT_SLUG = process.env.TENDERLY_PROJECT_SLUG!;
 
 // Validate them.
 if (!ETHERSCAN_API_KEY) throw new Error('ETHERSCAN_API_KEY is not defined');
-if (!RPC_URL) throw new Error('RPC_URL is not defined');
 if (!TENDERLY_ACCESS_TOKEN) throw new Error('TENDERLY_ACCESS_TOKEN is not defined');
 if (!TENDERLY_USER) throw new Error('TENDERLY_USER is not defined');
 if (!TENDERLY_PROJECT_SLUG) throw new Error('TENDERLY_PROJECT_SLUG is not defined');

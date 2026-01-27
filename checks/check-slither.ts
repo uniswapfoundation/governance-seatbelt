@@ -62,7 +62,7 @@ export const checkSlither: ProposalCheck = {
       );
       if (implementation) addressesToSkip.add(implementation);
     } catch (e) {
-      const msg = `Could not read address of governor implementation at block \`${sim.transaction.block_number}\`. Make sure the \`RPC_URL\` is an archive node. As a result the Slither check will show warnings on the governor's implementation contract.`;
+      const msg = `Could not read address of governor implementation at block \`${sim.transaction.block_number}\`. Make sure \`MAINNET_RPC_URL\` is an archive node. As a result the Slither check will show warnings on the governor's implementation contract.`;
       console.warn(`WARNING: ${msg}. Details:`);
       console.warn(e);
       warnings.push(msg);
@@ -150,17 +150,29 @@ export const checkSlither: ProposalCheck = {
       // Append results to report info.
       // Note that slither supports a `--json` flag  we could use, but directly printing the formatted
       // results in a code block is simpler and sufficient for now.
+      const reportText = [slitherResult.output.stdout, slitherResult.output.stderr]
+        .filter((value) => Boolean(value?.trim()))
+        .join('\n')
+        .trim();
       const verificationInfo = verificationResult.verified
         ? ` (verified via ${formatVerificationSource(verificationResult)})`
         : ' (UNVERIFIED - override flag set)';
-      info.push(
-        `Slither report for ${contractName}${verificationInfo}${codeBlock(slitherResult.output.stderr.trim())}`,
-      );
+      info.push(`Slither report for ${contractName}${verificationInfo}${codeBlock(reportText)}`);
     }
 
     return { info, warnings, errors: [] };
   },
 };
+
+function looksLikeSlitherCrash(stderr: string): boolean {
+  const normalized = stderr.toLowerCase();
+  return (
+    normalized.includes('traceback (most recent call last)') ||
+    normalized.includes('valueerror:') ||
+    normalized.includes('exception') ||
+    normalized.includes('unknown language')
+  );
+}
 
 /**
  * Tries to run slither via python installation in the specified directory.
@@ -198,6 +210,14 @@ async function runSlither(address: string): Promise<SlitherResult> {
     }
     // Slither reports findings via stderr and non-zero exit, which throws
     if (e && typeof e === 'object' && 'stderr' in e) {
+      const stderr = String((e as { stderr?: unknown }).stderr ?? '');
+      if (looksLikeSlitherCrash(stderr)) {
+        return {
+          success: false,
+          reason: 'execution_error',
+          message: stderr.split('\n').find((line) => line.trim()) || 'Slither crashed',
+        };
+      }
       return { success: true, output: e as ExecOutput };
     }
     return {

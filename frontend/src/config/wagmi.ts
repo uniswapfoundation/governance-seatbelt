@@ -1,26 +1,37 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
 import { QueryClient } from '@tanstack/react-query';
 import { http } from 'viem';
+import { createConfig } from 'wagmi';
 import { mainnet } from 'wagmi/chains';
+import { injected } from 'wagmi/connectors';
 
-const mainnetRpcUrl = process.env.NEXT_PUBLIC_MAINNET_RPC_URL;
-if (!mainnetRpcUrl) {
-  throw new Error('Mainnet RPC URL is not defined');
-}
+const isProduction = process.env.NODE_ENV === 'production';
 
-export const projectId = process.env.NEXT_PUBLIC_PROJECT_ID;
-if (!projectId) {
-  throw new Error('Project ID is not defined');
-}
+const mainnetRpcUrl =
+  process.env.NEXT_PUBLIC_MAINNET_RPC_URL ??
+  (isProduction ? undefined : 'https://eth.llamarpc.com');
+if (!mainnetRpcUrl) throw new Error('Mainnet RPC URL is not defined');
 
 export const queryClient = new QueryClient();
 
-export const config = getDefaultConfig({
-  appName: 'Governance Seatbelt',
-  projectId,
-  chains: [mainnet],
-  transports: {
-    [mainnet.id]: http(mainnetRpcUrl),
-  },
-  ssr: true,
-});
+export const projectId = process.env.NEXT_PUBLIC_PROJECT_ID;
+export const walletConnectEnabled = Boolean(projectId && projectId !== 'demo');
+
+export const config = walletConnectEnabled
+  ? getDefaultConfig({
+      appName: 'Governance Seatbelt',
+      projectId: projectId as string,
+      chains: [mainnet],
+      transports: {
+        [mainnet.id]: http(mainnetRpcUrl),
+      },
+      ssr: true,
+    })
+  : createConfig({
+      chains: [mainnet],
+      transports: {
+        [mainnet.id]: http(mainnetRpcUrl),
+      },
+      connectors: [injected()],
+      ssr: true,
+    });

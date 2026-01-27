@@ -8,7 +8,7 @@
     "values": ["0"]
   },
   "report": {
-    "status": "inconclusive",
+    "status": "warning",
     "structuredReport": {
       "checks": [
         {
@@ -82,7 +82,7 @@
         "simulationType": "proposed"
       },
       "permissionsDiff": [],
-      "status": "inconclusive"
+      "status": "warning"
     }
   }
 }

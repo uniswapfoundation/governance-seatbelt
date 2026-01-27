@@ -79,11 +79,27 @@ export const checkTreasuryMovement: ProposalCheck = {
 
     const outgoing = getOutgoingTreasuryAssetChanges({ sim, treasuryAddresses });
     if (outgoing.length === 0) {
+      const data: TreasuryMovementCheckDataV1 = {
+        type: 'treasuryMovement/v1',
+        blockExplorerBaseUrl: deps.chainConfig.blockExplorer.baseUrl,
+        treasuryAddresses: treasuryAddresses.map((a) => getAddress(a)),
+        thresholds,
+        totalOutgoingUsd: 0,
+        transferCount: 0,
+        topRecipients: [],
+        unpricedTransferCount: 0,
+      };
+
       return {
-        info: [],
+        info: [
+          'Treasury addresses considered:',
+          ...treasuryAddresses.map((addr) => `• \`${getAddress(addr)}\``),
+          '',
+          'No outgoing treasury transfers detected',
+        ],
         warnings,
         errors,
-        skipped: { reason: 'No outgoing treasury transfers detected' },
+        data,
       };
     }
 

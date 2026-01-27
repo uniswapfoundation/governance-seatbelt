@@ -57,10 +57,10 @@ This repository also includes a frontend application that allows you to visualiz
 
 To run the frontend with simulation results:
 
-1. Run a simulation first:
+1. Provide simulation results (choose one):
 
    ```sh
-   # run a specific simulation
+   # Option A (recommended): run a real simulation (requires Tenderly + RPCs)
    SIM_NAME=uni-transfer bun run sim
    ```
 
@@ -115,8 +115,11 @@ First, create a file called `.env` with the following environment variables:
 # Etherscan API Key, used when running Slither.
 ETHERSCAN_API_KEY=yourEtherscanApiKey
 
-# URL to your node, e.g. Infura or Alchemy endpoint.
-RPC_URL=yourNodeUrl
+# URL to your Ethereum mainnet RPC (required).
+MAINNET_RPC_URL=yourMainnetRpcUrl
+
+# URL to your Arbitrum mainnet RPC (required for cross-chain).
+ARBITRUM_RPC_URL=yourArbitrumRpcUrl
 
 # Tenderly access token.
 # Access token is obtained from the Tenderly UI via Account > Authorization > Generate Access Token.

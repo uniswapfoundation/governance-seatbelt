@@ -686,78 +686,66 @@ function generateStructuredReport(
   // Determine overall status
   let status: 'success' | 'warning' | 'error' | 'inconclusive' = 'success';
 
-  // Check for inconclusive conditions first
-  let hasSkippedChecks = false;
-  let hasErrors = false;
-  let hasWarnings = false;
+  const getStatusForChecks = (value: AllCheckResults): 'success' | 'warning' | 'error' => {
+    let hasErrors = false;
+    let hasWarnings = false;
 
-  for (const checkId in checks) {
-    const { result } = checks[checkId];
-
-    // Check if this check was skipped (indicates partial execution)
-    if ('skipped' in result && result.skipped) {
-      hasSkippedChecks = true;
+    for (const checkId in value) {
+      const { result } = value[checkId];
+      if (result.errors.length > 0) hasErrors = true;
+      if (result.warnings.length > 0) hasWarnings = true;
     }
 
-    if (result.errors.length > 0) {
-      hasErrors = true;
-    }
-    if (result.warnings.length > 0) {
-      hasWarnings = true;
-    }
-  }
+    if (hasErrors) return 'error';
+    if (hasWarnings) return 'warning';
+    return 'success';
+  };
 
-  // Set status based on conditions
-  if (hasErrors) {
-    status = 'error';
-  } else if (hasSkippedChecks) {
-    // If some checks were skipped, the result is inconclusive
-    status = 'inconclusive';
-  } else if (hasWarnings) {
-    status = 'warning';
-  } else {
-    status = 'success';
-  }
+  // Set status based on conditions (skips are informational and do not make the report inconclusive)
+  status = getStatusForChecks(checks);
+
+  const formatChecks = (value: AllCheckResults): SimulationCheck[] =>
+    Object.entries(value).map(([checkId, check]) => {
+      const { name, result } = check;
+      const { errors, warnings, info, skipped } = result;
+
+      let checkStatus: 'passed' | 'warning' | 'failed' | 'skipped' = 'passed';
+      let skipReason: string | undefined;
+
+      if (skipped) {
+        checkStatus = 'skipped';
+        skipReason = skipped.reason;
+      } else if (errors.length > 0) {
+        checkStatus = 'failed';
+      } else if (warnings.length > 0) {
+        checkStatus = 'warning';
+      }
+
+      // Combine all messages into details
+      const details = [
+        ...(skipped ? [`**Skipped**: ${skipped.reason}`] : []),
+        ...errors.map((msg) => `**Error**: ${msg}`),
+        ...warnings.map((msg) => `**Warning**: ${msg}`),
+        ...info.map((msg) => `**Info**: ${msg}`),
+      ].join('\n\n');
+
+      return {
+        checkId,
+        title: name,
+        status: checkStatus,
+        skipReason,
+        warningCount: warnings.length,
+        errorCount: errors.length,
+        details,
+        info,
+        warnings,
+        errors,
+        data: result.data,
+      };
+    });
 
   // Format checks
-  const formattedChecks: SimulationCheck[] = Object.entries(checks).map(([checkId, check]) => {
-    const { name, result } = check;
-    const { errors, warnings, info, skipped } = result;
-
-    let checkStatus: 'passed' | 'warning' | 'failed' | 'skipped' = 'passed';
-    let skipReason: string | undefined;
-
-    if (skipped) {
-      checkStatus = 'skipped';
-      skipReason = skipped.reason;
-    } else if (errors.length > 0) {
-      checkStatus = 'failed';
-    } else if (warnings.length > 0) {
-      checkStatus = 'warning';
-    }
-
-    // Combine all messages into details
-    const details = [
-      ...(skipped ? [`**Skipped**: ${skipped.reason}`] : []),
-      ...errors.map((msg) => `**Error**: ${msg}`),
-      ...warnings.map((msg) => `**Warning**: ${msg}`),
-      ...info.map((msg) => `**Info**: ${msg}`),
-    ].join('\n\n');
-
-    return {
-      checkId,
-      title: name,
-      status: checkStatus,
-      skipReason,
-      warningCount: warnings.length,
-      errorCount: errors.length,
-      details,
-      info,
-      warnings,
-      errors,
-      data: result.data,
-    };
-  });
+  const formattedChecks: SimulationCheck[] = formatChecks(checks);
 
   // Get chain configuration for explorer URL
   const targetChainId = chainId ?? 1; // Default to mainnet
@@ -798,9 +786,42 @@ function generateStructuredReport(
       ? 'completed successfully'
       : status === 'warning'
         ? 'completed with warnings'
-        : status === 'inconclusive'
-          ? 'completed with inconclusive results'
-          : 'completed with errors';
+        : 'completed with errors';
+
+  const mainStateChanges = extractStateChanges(checks);
+  const mainEvents = extractEvents(checks);
+
+  const chainReports: StructuredSimulationReport['chainReports'] = [
+    {
+      chainId: targetChainId,
+      chainName: getChainName(targetChainId),
+      blockExplorerBaseUrl,
+      status: getStatusForChecks(checks),
+      checks: formattedChecks,
+      stateChanges: mainStateChanges,
+      events: mainEvents,
+    },
+    ...Object.entries(destinationChecks ?? {}).map(([chainIdStr, destChecks]) => {
+      const destChainId = Number(chainIdStr);
+
+      let destBlockExplorerBaseUrl = 'https://etherscan.io';
+      try {
+        destBlockExplorerBaseUrl = getChainConfig(destChainId).blockExplorer.baseUrl;
+      } catch {
+        // Ignore unknown chain configs.
+      }
+
+      return {
+        chainId: destChainId,
+        chainName: getChainName(destChainId),
+        blockExplorerBaseUrl: destBlockExplorerBaseUrl,
+        status: getStatusForChecks(destChecks),
+        checks: formatChecks(destChecks),
+        stateChanges: extractStateChanges(destChecks),
+        events: extractEvents(destChecks),
+      };
+    }),
+  ];
 
   return {
     title,
@@ -808,8 +829,9 @@ function generateStructuredReport(
     status,
     summary: `${plainLanguageSummary}. Simulation ${statusText}.`,
     checks: formattedChecks,
-    stateChanges: extractStateChanges(checks),
-    events: extractEvents(checks),
+    stateChanges: mainStateChanges,
+    events: mainEvents,
+    chainReports,
     permissionsDiff: extractPermissionsDiff(checks),
     calldata: extractCalldata(checks, proposal),
     metadata: {
@@ -1147,6 +1169,13 @@ async function toMarkdownProposalReport(
   // Generate the report. We insert an empty table of contents header which is populated later using remark-toc.
   const isPlaceholderProposer = getAddress(proposer) === getAddress(DEFAULT_SIMULATION_ADDRESS);
 
+  const execSummary = await formatExecutiveSummary(
+    proposal,
+    checks,
+    destinationSimulations,
+    destinationChecks,
+  );
+
   const report = `
 # ${getProposalTitle(description.trim())}
 
@@ -1167,6 +1196,10 @@ _Updated as of block [${blocks.current.number}](https://etherscan.io/block/${blo
       : formatTime(estimateTime(blocks.current, endBlock))
   })
 - Targets: ${targets.map((target) => toAddressLink(target)).join('; ')}
+
+## Executive Summary
+
+${execSummary}
 
 ## Table of contents
 
@@ -1193,6 +1226,110 @@ ${
 
   // Add table of contents and return report.
   return (await remark().use(remarkToc, { tight: true }).process(report)).toString();
+}
+
+function getOverallStatusFromChecks(checks: AllCheckResults): {
+  status: 'success' | 'warning' | 'error' | 'inconclusive';
+  skipped: Array<{ checkId: string; name: string; reason: string }>;
+  warningCount: number;
+  errorCount: number;
+} {
+  const skipped: Array<{ checkId: string; name: string; reason: string }> = [];
+  let warningCount = 0;
+  let errorCount = 0;
+
+  for (const checkId in checks) {
+    const { name, result } = checks[checkId];
+    if (result.skipped) skipped.push({ checkId, name, reason: result.skipped.reason });
+    warningCount += result.warnings.length;
+    errorCount += result.errors.length;
+  }
+
+  if (errorCount > 0) {
+    return { status: 'error', skipped, warningCount, errorCount };
+  }
+  if (warningCount > 0) {
+    return { status: 'warning', skipped, warningCount, errorCount };
+  }
+  return { status: 'success', skipped, warningCount, errorCount };
+}
+
+async function formatExecutiveSummary(
+  proposal: ProposalEvent,
+  checks: AllCheckResults,
+  destinationSimulations?: SimulationResult['destinationSimulations'],
+  destinationChecks?: Record<number, AllCheckResults>,
+): Promise<string> {
+  const { status, skipped, warningCount, errorCount } = getOverallStatusFromChecks(checks);
+
+  const statusLabel =
+    status === 'success'
+      ? 'SUCCESS'
+      : status === 'warning'
+        ? 'WARNING'
+        : status === 'error'
+          ? 'ERROR'
+          : 'SUCCESS';
+
+  const skippedText =
+    skipped.length > 0
+      ? ` • skipped checks: ${skipped
+          .slice(0, 3)
+          .map((s) => `${s.name} (${s.reason})`)
+          .join('; ')}${skipped.length > 3 ? `; +${skipped.length - 3} more` : ''}`
+      : '';
+
+  const actionSummary = generateProposalSummary(proposal, checks, undefined, destinationChecks);
+
+  const crossChainSummary = destinationSimulations?.length
+    ? await formatCrossChainExecutiveSummary(destinationSimulations)
+    : null;
+
+  return [
+    `- Action: ${actionSummary}`,
+    `- Result: **${statusLabel}** (errors: ${errorCount}, warnings: ${warningCount}, skipped: ${skipped.length})${skippedText}`,
+    ...(crossChainSummary ? [`- Cross-chain: ${crossChainSummary}`] : []),
+  ].join('\n');
+}
+
+async function formatCrossChainExecutiveSummary(
+  destinationSimulations: NonNullable<SimulationResult['destinationSimulations']>,
+): Promise<string> {
+  const byChain = destinationSimulations.reduce(
+    (acc, sim) => {
+      if (!acc[sim.chainId]) acc[sim.chainId] = [];
+      acc[sim.chainId].push(sim);
+      return acc;
+    },
+    {} as Record<number, NonNullable<SimulationResult['destinationSimulations']>>,
+  );
+
+  const chainSummaries = await Promise.all(
+    Object.entries(byChain).map(async ([chainIdStr, sims]) => {
+      const chainId = Number(chainIdStr);
+      const chainName = getChainName(chainId);
+
+      const total = sims.length;
+      const succeeded = sims.filter((s) => s.status === 'success').length;
+      const statusIcon = succeeded === total ? '✅' : succeeded === 0 ? '❌' : '⚠️';
+
+      const uniqueCalls = new Set<string>();
+      for (const sim of sims) {
+        const target = sim.l2Params?.l2TargetAddress;
+        const input = sim.l2Params?.l2InputData;
+        if (!target || !input) continue;
+        const decoded = await decodeContractCall(target, input, chainId);
+        uniqueCalls.add(decoded?.signature || decoded?.selector || '(unknown)');
+      }
+
+      const callsText =
+        uniqueCalls.size > 0 ? ` • ${Array.from(uniqueCalls).slice(0, 3).join(', ')}` : '';
+
+      return `${statusIcon} ${chainName} (${chainId}) ${succeeded}/${total} succeeded${callsText}`;
+    }),
+  );
+
+  return chainSummaries.join(' • ');
 }
 
 /**

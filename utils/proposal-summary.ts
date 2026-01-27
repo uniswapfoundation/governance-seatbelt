@@ -102,6 +102,17 @@ const CHAIN_NAMES: Record<number, string> = {
   60808: 'BOB',
 };
 
+function formatHumanList(items: string[]): string {
+  if (items.length === 0) return '';
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+}
+
+function formatEthForGasSuffix(ethForGas?: bigint): string {
+  return ethForGas && ethForGas > 0n ? ` (with ${formatUnits(ethForGas, 18)} ETH for L2 gas)` : '';
+}
+
 /**
  * Detect cross-chain operations from check results
  */
@@ -150,15 +161,24 @@ function detectCrossChainOperations(
       ) {
         if (!detectedChains.has('Optimism')) {
           detectedChains.add('Optimism');
-          // Try Optimism first, then Base, Unichain, etc.
-          const opStackChainId = findOpStackChainId(l2Checks);
-          const chainName = opStackChainId ? CHAIN_NAMES[opStackChainId] || 'L2' : 'Optimism';
-          const description = buildCrossChainDescription(
-            chainName,
-            opStackChainId,
-            l2Checks,
-            totalEthForGas,
-          );
+          const opStackChainIds = findOpStackChainIds(l2Checks);
+          const description =
+            opStackChainIds.length > 1
+              ? `Sends via OP Stack bridge to ${formatHumanList(
+                  opStackChainIds.map((chainId) => CHAIN_NAMES[chainId] || `chainId ${chainId}`),
+                )}${formatEthForGasSuffix(totalEthForGas)}`
+              : (() => {
+                  const opStackChainId = opStackChainIds[0];
+                  const chainName = opStackChainId
+                    ? CHAIN_NAMES[opStackChainId] || 'L2'
+                    : 'Optimism';
+                  return buildCrossChainDescription(
+                    chainName,
+                    opStackChainId,
+                    l2Checks,
+                    totalEthForGas,
+                  );
+                })();
           operations.push({
             type: 'crossChain',
             description,
@@ -191,15 +211,12 @@ function detectCrossChainOperations(
 /**
  * Find the OP Stack chain ID from L2 checks (for sendMessage calls that could go to multiple chains)
  */
-function findOpStackChainId(l2Checks?: Record<number, AllCheckResults>): number | undefined {
-  if (!l2Checks) return undefined;
+function findOpStackChainIds(l2Checks?: Record<number, AllCheckResults>): number[] {
+  if (!l2Checks) return [];
 
   // OP Stack chains in order of priority
   const opStackChains = [10, 8453, 1301, 57073, 1868, 60808];
-  for (const chainId of opStackChains) {
-    if (l2Checks[chainId]) return chainId;
-  }
-  return undefined;
+  return opStackChains.filter((chainId) => Boolean(l2Checks[chainId]));
 }
 
 /**

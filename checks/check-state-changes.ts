@@ -9,7 +9,8 @@ export const checkStateChanges: ProposalCheck = {
   name: 'Reports all state changes from the proposal',
   async checkProposal(_, sim, deps) {
     const info: string[] = [];
-    const warnings = [];
+    const warnings: string[] = [];
+    const warningsSeen = new Set<string>();
     // Check if the transaction reverted, and if so return revert reason
     if (!sim.transaction.status) {
       const txInfo = sim.transaction.transaction_info;
@@ -28,8 +29,18 @@ export const checkStateChanges: ProposalCheck = {
     // (2) the `proposal.executed` change of the governor, because this will be consistent across
     // all proposals and mainly add noise to the output
     if (!sim.transaction.transaction_info.state_diff) {
-      const warnings = 'State diff is empty';
-      return { info: [], warnings: [warnings], errors: [] };
+      const chainId = deps.chainConfig?.chainId ?? 1;
+      if (chainId !== 1) {
+        return {
+          info: [
+            'No state diff captured for this L2 simulation (this is common); rely on emitted logs + decoded calldata instead.',
+          ],
+          warnings: [],
+          errors: [],
+        };
+      }
+
+      return { info: [], warnings: ['State diff is empty'], errors: [] };
     }
 
     const stateDiffs = sim.transaction.transaction_info.state_diff.reduce(
@@ -79,6 +90,10 @@ export const checkStateChanges: ProposalCheck = {
 
       // Track processed state changes to deduplicate
       const processedChanges = new Set<string>();
+      const formatRawValue = (value: unknown) => {
+        if (typeof value === 'string') return value;
+        return JSON.stringify(value);
+      };
 
       // Parse each diff. A single diff may involve multiple storage changes, e.g. a proposal that
       // executes three transactions will show three state changes to the `queuedTransactions`
@@ -89,8 +104,8 @@ export const checkStateChanges: ProposalCheck = {
           // In this branch, state change is not decoded, so return raw data of each storage write
           // (all other branches have decoded state changes)
           for (const w of diff.raw) {
-            const oldVal = JSON.stringify(w.original);
-            const newVal = JSON.stringify(w.dirty);
+            const oldVal = formatRawValue(w.original);
+            const newVal = formatRawValue(w.dirty);
             const changeKey = `${w.key}:${oldVal}:${newVal}`;
             if (!processedChanges.has(changeKey)) {
               info.push(`    Slot \`${w.key}\` changed from \`${oldVal}\` to \`${newVal}\``);
@@ -121,8 +136,8 @@ export const checkStateChanges: ProposalCheck = {
           const original = diff.original as Record<string, string>;
           const dirty = diff.dirty as Record<string, string>;
           for (const k of keys) {
-            const oldVal = JSON.stringify(original && k in original ? original[k] : '');
-            const newVal = JSON.stringify(dirty && k in dirty ? dirty[k] : '');
+            const oldVal = formatRawValue(original && k in original ? original[k] : '');
+            const newVal = formatRawValue(dirty && k in dirty ? dirty[k] : '');
             const changeKey = `${diff.soltype?.name}:${k}:${oldVal}:${newVal}`;
             if (!processedChanges.has(changeKey)) {
               info.push(
@@ -137,14 +152,18 @@ export const checkStateChanges: ProposalCheck = {
           // handle it accordingly. In the meantime we show the raw state changes and print a
           // warning about decoding the data
           for (const w of diff.raw) {
-            const oldVal = JSON.stringify(w.original);
-            const newVal = JSON.stringify(w.dirty);
+            const oldVal = formatRawValue(w.original);
+            const newVal = formatRawValue(w.dirty);
             const changeKey = `${w.key}:${oldVal}:${newVal}`;
             if (!processedChanges.has(changeKey)) {
               info.push(`    Slot \`${w.key}\` changed from \`${oldVal}\` to \`${newVal}\``);
-              warnings.push(
-                `Could not parse state: add support for formatting type ${diff.soltype?.type} (slot ${w.key})`,
-              );
+              const warningKey = `unsupported:${diff.soltype?.type ?? 'unknown'}`;
+              if (!warningsSeen.has(warningKey)) {
+                warnings.push(
+                  `Could not decode structured state changes for type ${diff.soltype?.type ?? 'unknown'}; showing raw slot writes instead.`,
+                );
+                warningsSeen.add(warningKey);
+              }
               processedChanges.add(changeKey);
             }
           }
@@ -152,6 +171,6 @@ export const checkStateChanges: ProposalCheck = {
       }
     }
 
-    return { info, warnings: [], errors: [] };
+    return { info, warnings, errors: [] };
   },
 };

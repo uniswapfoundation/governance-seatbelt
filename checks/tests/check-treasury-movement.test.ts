@@ -47,7 +47,7 @@ const proposal = {
 } satisfies ProposalEvent;
 
 describe('checkTreasuryMovement', () => {
-  test('skips when no outgoing treasury transfers', async () => {
+  test('passes when no outgoing treasury transfers', async () => {
     const sim = createMockSimulation([]);
     sim.transaction.transaction_info.asset_changes =
       [] as unknown as TenderlySimulation['transaction']['transaction_info']['asset_changes'];
@@ -61,7 +61,10 @@ describe('checkTreasuryMovement', () => {
       }),
     );
 
-    expect(result.skipped?.reason).toBe('No outgoing treasury transfers detected');
+    expect(result.skipped).toBeUndefined();
+    expect(result.info.join('\n')).toContain('No outgoing treasury transfers detected');
+    expect(result.data).toBeDefined();
+    expect((result.data as { type?: string }).type).toBe('treasuryMovement/v1');
   });
 
   test('lists top recipients and emits warnings when thresholds exceeded', async () => {
@@ -167,7 +170,8 @@ describe('checkTreasuryMovement', () => {
       }),
     );
 
-    expect(result.skipped?.reason).toBe('No outgoing treasury transfers detected');
+    expect(result.skipped).toBeUndefined();
+    expect(result.info.join('\n')).toContain('No outgoing treasury transfers detected');
   });
 
   test('warns when USD pricing is missing', async () => {

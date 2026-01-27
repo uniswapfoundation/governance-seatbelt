@@ -870,6 +870,26 @@ export function StructuredReport({ report }: StructuredReportProps) {
     report.metadata.simulationBlockNumber || report.metadata.blockNumber || 'unknown';
   const timestamp = report.metadata.simulationTimestamp || report.metadata.timestamp || '0';
 
+  const mainChainId = report.metadata.chainId ?? 1;
+  const chainReports = report.chainReports?.length
+    ? report.chainReports
+    : [
+        {
+          chainId: mainChainId,
+          chainName: report.metadata.chainName || 'Ethereum',
+          blockExplorerBaseUrl: report.metadata.blockExplorerBaseUrl,
+          status:
+            report.status === 'error'
+              ? 'error'
+              : report.status === 'warning'
+                ? 'warning'
+                : 'success',
+          checks: report.checks,
+          stateChanges: report.stateChanges,
+          events: report.events,
+        },
+      ];
+
   return (
     <div className="w-full">
       <DecisionHeader report={report} />
@@ -1016,14 +1036,68 @@ export function StructuredReport({ report }: StructuredReportProps) {
                     <span>No checks found in the report</span>
                   </div>
                 ) : (
-                  report.checks.map((check: SimulationCheck, index: number) => (
-                    <ExpandableCheckItem
-                      key={`check-${check.title}-${index}`}
-                      check={check}
-                      stateChanges={report.stateChanges}
-                      metadata={report.metadata}
-                    />
-                  ))
+                  chainReports.map((chainReport) => {
+                    const isMainChain = chainReport.chainId === mainChainId;
+                    const effectiveMetadata = {
+                      ...report.metadata,
+                      chainId: chainReport.chainId,
+                      chainName: chainReport.chainName,
+                      blockExplorerBaseUrl:
+                        chainReport.blockExplorerBaseUrl || report.metadata.blockExplorerBaseUrl,
+                    };
+
+                    return (
+                      <div
+                        key={`chain-checks-${chainReport.chainId}`}
+                        className="border border-muted rounded-md p-6 bg-card"
+                      >
+                        <div className="flex items-center justify-between gap-4 mb-4">
+                          <div>
+                            <h3 className="text-lg font-semibold">
+                              {chainReport.chainName}{' '}
+                              <span className="text-sm font-normal text-muted-foreground">
+                                ({chainReport.chainId}){isMainChain ? ' • main chain' : ''}
+                              </span>
+                            </h3>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={
+                              chainReport.status === 'error'
+                                ? 'bg-red-100 text-red-800 border-red-300'
+                                : chainReport.status === 'warning'
+                                  ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
+                                  : 'bg-green-100 text-green-800 border-green-300'
+                            }
+                          >
+                            {chainReport.status === 'error'
+                              ? 'Errors'
+                              : chainReport.status === 'warning'
+                                ? 'Warnings'
+                                : 'Passed'}
+                          </Badge>
+                        </div>
+
+                        {chainReport.checks.length === 0 ? (
+                          <div className="flex items-center justify-center p-6 text-muted-foreground border border-muted rounded-md">
+                            <InfoIcon className="h-4 w-4 mr-2" />
+                            <span>No checks found for this chain</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {chainReport.checks.map((check: SimulationCheck, index: number) => (
+                              <ExpandableCheckItem
+                                key={`check-${chainReport.chainId}-${check.title}-${index}`}
+                                check={check}
+                                stateChanges={chainReport.stateChanges}
+                                metadata={effectiveMetadata}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </TabsContent>
@@ -1033,7 +1107,34 @@ export function StructuredReport({ report }: StructuredReportProps) {
               className="mt-4 absolute inset-0 overflow-y-auto pb-8 px-1"
             >
               <div className="space-y-4">
-                <StateChanges stateChanges={report.stateChanges} metadata={report.metadata} />
+                {chainReports.map((chainReport) => {
+                  const isMainChain = chainReport.chainId === mainChainId;
+                  const effectiveMetadata = {
+                    ...report.metadata,
+                    chainId: chainReport.chainId,
+                    chainName: chainReport.chainName,
+                    blockExplorerBaseUrl:
+                      chainReport.blockExplorerBaseUrl || report.metadata.blockExplorerBaseUrl,
+                  };
+
+                  return (
+                    <div
+                      key={`chain-state-changes-${chainReport.chainId}`}
+                      className="border border-muted rounded-md p-6 bg-card"
+                    >
+                      <h3 className="text-lg font-semibold mb-4">
+                        {chainReport.chainName}{' '}
+                        <span className="text-sm font-normal text-muted-foreground">
+                          ({chainReport.chainId}){isMainChain ? ' • main chain' : ''}
+                        </span>
+                      </h3>
+                      <StateChanges
+                        stateChanges={chainReport.stateChanges}
+                        metadata={effectiveMetadata}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             </TabsContent>
           </div>

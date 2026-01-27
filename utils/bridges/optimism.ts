@@ -18,6 +18,22 @@ const SEND_MESSAGE_ABI = parseAbi([
   'function sendMessage(address _target, bytes _message, uint32 _minGasLimit)',
 ]);
 
+// Uniswap-specific pattern: L1 messages often target an L2 "CrossChainAccount" forwarder which then
+// executes the real call. Simulating the forwarded call directly (from the forwarder) produces a
+// much more accurate outcome for access-controlled targets (e.g., Uniswap v3 pools/factories).
+//
+// If you add additional OP Stack chains, extend this mapping when the forwarder addresses are known.
+const L2_CROSS_CHAIN_ACCOUNTS: Partial<Record<string, Address>> = {
+  // Optimism v3 factory owner (L2CrossChainAccount)
+  '10': '0xa1dD330d602c32622AA270Ea73d078B803Cb3518',
+  // Base v3 factory owner (L2CrossChainAccount)
+  '8453': '0x31FAfd4889FA1269F7a13A66eE0fB458f27D72A9',
+};
+
+const L2_CROSS_CHAIN_ACCOUNT_FORWARD_ABI = parseAbi([
+  'function forward(address target, bytes data)',
+]);
+
 // Constants for validation
 const VALIDATION_CONSTANTS = {
   MIN_SEND_MESSAGE_INPUT_LENGTH: 138, // Minimum length for valid sendMessage call (4 + 32 + 32 + 64 + 4 + 2)
@@ -135,18 +151,43 @@ export function parseOptimismL1L2Messages(
       // Extract value from the call
       const l2Value = call.value || '0';
 
-      // Create the message
-      // TEMP: For Unichain testing, use an address that likely has ETH balance
-      const l2FromAddress =
+      // Determine the simulated caller + target.
+      // Default behavior: preserve original sender for OP Stack chains.
+      // TEMP: For Unichain testing, use an address that likely has ETH balance.
+      let l2FromAddress =
         destinationChainId === '130'
-          ? ('0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D' as Address) // Use Uniswap V2 Router for Unichain
-          : getAddress(call.from); // Preserve original sender for other chains
+          ? ('0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D' as Address) // Uniswap V2 Router
+          : getAddress(call.from);
+
+      let l2TargetAddress = getAddress(targetAddress);
+      let l2InputData = messageData as Hex;
+
+      // Unwrap L2CrossChainAccount.forward(...) when the message targets a known forwarder.
+      // This avoids false negatives where the forwarder enforces cross-domain auth that Seatbelt
+      // doesn't currently model, while still accurately simulating the *effective* call.
+      const expectedForwarder = L2_CROSS_CHAIN_ACCOUNTS[destinationChainId];
+      if (expectedForwarder && getAddress(targetAddress) === getAddress(expectedForwarder)) {
+        try {
+          const decodedForward = decodeFunctionData({
+            abi: L2_CROSS_CHAIN_ACCOUNT_FORWARD_ABI,
+            data: messageData as Hex,
+          });
+          if (decodedForward.functionName === 'forward') {
+            const [forwardTarget, forwardData] = decodedForward.args;
+            l2FromAddress = getAddress(expectedForwarder);
+            l2TargetAddress = getAddress(forwardTarget);
+            l2InputData = forwardData as Hex;
+          }
+        } catch {
+          // If decoding fails, fall back to simulating the direct call to the forwarder.
+        }
+      }
 
       const message: ExtractedCrossChainMessage = {
         bridgeType: 'OptimismL1L2',
         destinationChainId,
-        l2TargetAddress: getAddress(targetAddress),
-        l2InputData: messageData as Hex,
+        l2TargetAddress,
+        l2InputData,
         l2Value: l2Value.toString(),
         l2FromAddress,
       };
@@ -156,7 +197,7 @@ export function parseOptimismL1L2Messages(
       messagesByTargetAndCalldata.set(key, message);
 
       console.log(
-        `[Optimism Parser] Found message to ${targetAddress} on chain ${destinationChainId} (gas: ${minGasLimit})`,
+        `[Optimism Parser] Found message to ${l2TargetAddress} on chain ${destinationChainId} (gas: ${minGasLimit})`,
       );
     } catch (error) {
       // This will catch calls that don't match the sendMessage ABI or have invalid data

@@ -125,6 +125,16 @@ export interface CrossChainPreview {
   messages: CrossChainMessagePreview[];
 }
 
+export interface ChainSimulationReport {
+  chainId: number;
+  chainName: string;
+  blockExplorerBaseUrl?: string;
+  status: 'success' | 'warning' | 'error';
+  checks: SimulationCheck[];
+  stateChanges: SimulationStateChange[];
+  events: SimulationEvent[];
+}
+
 export interface StructuredSimulationReport {
   title: string;
   proposalText: string;
@@ -133,6 +143,7 @@ export interface StructuredSimulationReport {
   checks: SimulationCheck[];
   stateChanges: SimulationStateChange[];
   events: SimulationEvent[];
+  chainReports?: ChainSimulationReport[];
   permissionsDiff?: PermissionsDiffItem[];
   calldata?: SimulationCalldata;
   crossChain?: CrossChainPreview;

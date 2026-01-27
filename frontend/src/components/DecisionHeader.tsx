@@ -23,7 +23,10 @@ interface DecisionHeaderProps {
 
 export function DecisionHeader({ report }: DecisionHeaderProps) {
   const checks = report.checks ?? [];
-  const ranChecks = checks.length;
+  const skippedChecks = checks.filter((check) => check.status === 'skipped');
+  const skippedCount = skippedChecks.length;
+  const totalChecks = checks.length;
+  const ranChecks = Math.max(0, totalChecks - skippedCount);
 
   // Count warnings and failures for display
   const warningCount = checks.filter((check) => check.status === 'warning').length;
@@ -48,6 +51,23 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
 
   // Extract repo name if available
   const repoName = repoUrl ? repoUrl.split('/').slice(-2).join('/') : 'Repository';
+
+  const statusExplanation =
+    report.status === 'warning' && warningCount > 0
+      ? `Warnings in ${warningCount} check${warningCount === 1 ? '' : 's'}`
+      : report.status === 'error' && failureCount > 0
+        ? `Failed ${failureCount} check${failureCount === 1 ? '' : 's'}`
+        : skippedCount > 0
+          ? `${skippedCount} check${skippedCount === 1 ? ' was' : 's were'} skipped (not applicable)`
+          : null;
+
+  const statusExplanationDetails =
+    skippedCount > 0
+      ? skippedChecks
+          .slice(0, 10)
+          .map((c) => `${c.title}${c.skipReason ? ` — ${c.skipReason}` : ''}`)
+          .join('\n')
+      : null;
 
   return (
     <Card className="mb-6 overflow-hidden border-border/60 shadow-none p-0 gap-0">
@@ -88,6 +108,22 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
                 {/* Show only the action summary, not the simulation status */}
               </p>
             )}
+            {statusExplanation ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="inline-flex items-center gap-1 text-xs text-muted-foreground w-fit cursor-help">
+                      <HelpCircleIcon className="h-3.5 w-3.5" />
+                      <span>{statusExplanation}</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-sm whitespace-pre-line">
+                    {statusExplanationDetails ??
+                      'This status is derived from check results. Skipped checks usually indicate the check was not applicable to this proposal.'}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : null}
           </div>
         </div>
       </div>
@@ -100,9 +136,11 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
             Checks
           </div>
           <div className="flex flex-col items-start gap-1">
-            <span className="text-sm font-medium">{ranChecks} executed</span>
-            {warningCount > 0 || failureCount > 0 ? (
-              <div className="flex gap-1.5">
+            <span className="text-sm font-medium">
+              {ranChecks}/{totalChecks} ran
+            </span>
+            {warningCount > 0 || failureCount > 0 || skippedCount > 0 ? (
+              <div className="flex gap-1.5 flex-wrap">
                 {warningCount > 0 && (
                   <Badge
                     variant="secondary"
@@ -117,6 +155,14 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
                     className="bg-red-100 text-red-800 hover:bg-red-100 border-red-200 h-5 px-1.5 text-[10px]"
                   >
                     {failureCount} fail
+                  </Badge>
+                )}
+                {skippedCount > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className="bg-slate-200 text-slate-800 hover:bg-slate-200 border-slate-300 h-5 px-1.5 text-[10px]"
+                  >
+                    {skippedCount} skipped
                   </Badge>
                 )}
               </div>

@@ -17,6 +17,11 @@ const decodedFunctionCache: Record<string, { name: string; args: unknown[] }> = 
 // If decoding becomes a bottleneck, tune this constant.
 const DECODE_CONCURRENCY = 2;
 
+const KNOWN_ABI_ITEMS_BY_SELECTOR: Record<string, string> = {
+  [toFunctionSelector('sendMessage(address,bytes,uint32)')]:
+    'function sendMessage(address target, bytes message, uint32 gasLimit)',
+};
+
 async function mapWithConcurrency<T, R>(
   items: readonly T[],
   concurrency: number,
@@ -317,7 +322,7 @@ function getDescription(contractIdentifier: string, sig: string, call: DecodedCa
 /**
  * Format arguments for human-readable display
  */
-function formatArgs(args: unknown[]): string {
+function formatArgs(args: readonly unknown[]): string {
   if (!args.length) return '';
 
   // If there's only one argument and it's undefined, return an empty string
@@ -383,6 +388,7 @@ async function prettifyCalldata(
   }
 
   // Try to decode using Etherscan ABI first
+  let abiDecodeError: string | null = null;
   try {
     const decoded = await BlockExplorerFactory.decodeFunctionWithAbi(
       target,
@@ -408,14 +414,38 @@ async function prettifyCalldata(
       return description;
     }
 
-    warnings.push(
-      `Failed to decode function with selector ${selector} for contract ${target} using Etherscan ABI`,
-    );
+    abiDecodeError = `Failed to decode function with selector ${selector} for contract ${target} using block explorer ABI`;
   } catch (error) {
     console.warn(`Failed to decode using Etherscan ABI for ${target}:`, error);
-    warnings.push(
-      `Error decoding function with selector ${selector} for contract ${target}: ${error}`,
-    );
+    abiDecodeError = `Error decoding function with selector ${selector} for contract ${target}: ${error}`;
+  }
+
+  // Fallback: decode using known function signatures (useful for proxies where ABI lookup fails)
+  const knownAbiItem = KNOWN_ABI_ITEMS_BY_SELECTOR[selector];
+  if (knownAbiItem) {
+    try {
+      const parsed = parseAbiItem(knownAbiItem);
+      if (parsed.type !== 'function') {
+        throw new Error(`Known ABI item for selector ${selector} is not a function`);
+      }
+      const { args } = decodeFunctionData({
+        abi: [parsed],
+        data: call.input as `0x${string}`,
+      });
+
+      const fnName = parsed.name;
+      decodedFunctionCache[cacheKey] = { name: fnName, args: Array.from(args) };
+
+      let description = `\`${call.from}\` calls \`${fnName}(`;
+      const formattedArgs = formatArgs(args);
+      if (formattedArgs) description += formattedArgs;
+      description += `)\` on ${contractIdentifier} (decoded from signature)`;
+      return description;
+    } catch (error) {
+      warnings.push(
+        `Error decoding function with selector ${selector} for contract ${target} using known signature: ${error}`,
+      );
+    }
   }
 
   // Handle token-related actions
@@ -424,6 +454,8 @@ async function prettifyCalldata(
     const { symbol, decimals } = await fetchTokenMetadata(call.to as `0x${string}`);
     return TOKEN_HANDLERS[selector](call, decimals || 0, symbol ?? null, contractIdentifier);
   }
+
+  if (abiDecodeError) warnings.push(abiDecodeError);
 
   // Generic handling for non-token actions
   const sig = getSignature(call);
