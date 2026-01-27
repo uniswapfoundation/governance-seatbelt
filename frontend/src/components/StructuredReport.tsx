@@ -964,7 +964,8 @@ export function StructuredReport({ report }: StructuredReportProps) {
                     >
                       <span className="hidden sm:inline">{report.metadata.executor}</span>
                       <span className="sm:hidden">
-                        {report.metadata.executor.slice(0, 10)}...{report.metadata.executor.slice(-8)}
+                        {report.metadata.executor.slice(0, 10)}...
+                        {report.metadata.executor.slice(-8)}
                       </span>
                       <ExternalLinkIcon className="h-3 w-3 shrink-0" />
                     </a>
@@ -1293,8 +1294,6 @@ function ExpandableCheckItem({
           // Process line to replace addresses with links
           const parts: React.ReactNode[] = [];
           let lastIndex = 0;
-          const addressRegex = /`(0x[a-fA-F0-9]{40})`/g;
-          let match: RegExpExecArray | null;
 
           // Check if this is a target line with contract status
           const isTargetLine =
@@ -1334,7 +1333,7 @@ function ExpandableCheckItem({
 
               // Format the target with proper styling
               return (
-                <div key={`target-${address}-${index}`} className="mb-2">
+                <div key={`target-${address}`} className="mb-2">
                   <div className="flex items-center flex-wrap gap-2 p-2 bg-muted/30 rounded-md">
                     <a
                       href={buildAddressLink(address, effectiveMetadata)}

@@ -63,7 +63,11 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
 
             {repoCommit && repoUrl && (
               <Button variant="outline" size="sm" className="h-7 sm:h-8 gap-1.5 text-xs" asChild>
-                <a href={`${repoUrl}/commit/${repoCommit}`} target="_blank" rel="noopener noreferrer">
+                <a
+                  href={`${repoUrl}/commit/${repoCommit}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   <GithubIcon className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline font-medium">{repoName}</span>
                 </a>
