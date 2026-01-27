@@ -993,7 +993,7 @@ export function StructuredReport({ report }: StructuredReportProps) {
           </section>
         </TabsContent>
 
-        <TabsContent value="checks" className="mt-4 space-y-3">
+        <TabsContent value="checks" className="mt-4 space-y-4">
           {report.crossChain?.messages?.length ? (
             <CrossChainChecksSummary messages={report.crossChain.messages} />
           ) : null}
@@ -1003,14 +1003,11 @@ export function StructuredReport({ report }: StructuredReportProps) {
               <span>No checks found in the report</span>
             </div>
           ) : (
-            report.checks.map((check: SimulationCheck, index: number) => (
-              <ExpandableCheckItem
-                key={`check-${check.title}-${index}`}
-                check={check}
-                stateChanges={report.stateChanges}
-                metadata={report.metadata}
-              />
-            ))
+            <ChecksSection
+              checks={report.checks}
+              stateChanges={report.stateChanges}
+              metadata={report.metadata}
+            />
           )}
         </TabsContent>
 
@@ -1038,6 +1035,79 @@ function MetadataItem({
         {label}
       </div>
       <div className="text-sm font-medium">{children}</div>
+    </div>
+  );
+}
+
+// Checks section with grouping and summary
+interface ChecksSectionProps {
+  checks: SimulationCheck[];
+  stateChanges?: SimulationStateChange[];
+  metadata?: StructuredSimulationReport['metadata'];
+}
+
+function ChecksSection({ checks, stateChanges, metadata }: ChecksSectionProps) {
+  // Group checks by status
+  const grouped = useMemo(() => {
+    const failed = checks.filter((c) => c.status === 'failed');
+    const warning = checks.filter((c) => c.status === 'warning');
+    const skipped = checks.filter((c) => c.status === 'skipped');
+    const passed = checks.filter((c) => c.status === 'passed');
+    return { failed, warning, skipped, passed };
+  }, [checks]);
+
+  const failedCount = grouped.failed.length;
+  const warningCount = grouped.warning.length;
+  const passedCount = grouped.passed.length;
+  const skippedCount = grouped.skipped.length;
+
+  // Render checks in priority order: failed, warning, skipped, passed
+  const orderedChecks = useMemo(() => {
+    return [...grouped.failed, ...grouped.warning, ...grouped.skipped, ...grouped.passed];
+  }, [grouped]);
+
+  return (
+    <div className="space-y-4">
+      {/* Summary bar */}
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 p-3 bg-muted/30 rounded-lg border border-border/50">
+        <span className="text-sm font-medium text-muted-foreground">Summary:</span>
+        {passedCount > 0 && (
+          <div className="flex items-center gap-1.5">
+            <CheckCircleIcon className="h-4 w-4 text-green-500" />
+            <span className="text-sm font-medium text-green-700">{passedCount} passed</span>
+          </div>
+        )}
+        {warningCount > 0 && (
+          <div className="flex items-center gap-1.5">
+            <AlertTriangleIcon className="h-4 w-4 text-yellow-500" />
+            <span className="text-sm font-medium text-yellow-700">{warningCount} warning</span>
+          </div>
+        )}
+        {failedCount > 0 && (
+          <div className="flex items-center gap-1.5">
+            <AlertTriangleIcon className="h-4 w-4 text-red-500" />
+            <span className="text-sm font-medium text-red-700">{failedCount} failed</span>
+          </div>
+        )}
+        {skippedCount > 0 && (
+          <div className="flex items-center gap-1.5">
+            <SkipForwardIcon className="h-4 w-4 text-gray-400" />
+            <span className="text-sm font-medium text-gray-500">{skippedCount} skipped</span>
+          </div>
+        )}
+      </div>
+
+      {/* Checks list */}
+      <div className="space-y-2">
+        {orderedChecks.map((check, index) => (
+          <ExpandableCheckItem
+            key={`check-${check.title}-${index}`}
+            check={check}
+            stateChanges={stateChanges}
+            metadata={metadata}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -1427,20 +1497,52 @@ function ExpandableCheckItem({
     );
   }, [check.details, isStateChangesCheck, stateChanges, metadata]);
 
+  // Status-based styling
+  const getStatusStyles = () => {
+    switch (check.status) {
+      case 'failed':
+        return {
+          border: 'border-l-4 border-l-red-500 border-t border-r border-b border-red-200',
+          bg: 'bg-red-50/50',
+          hoverBg: 'hover:bg-red-50',
+        };
+      case 'warning':
+        return {
+          border: 'border-l-4 border-l-yellow-500 border-t border-r border-b border-yellow-200',
+          bg: 'bg-yellow-50/50',
+          hoverBg: 'hover:bg-yellow-50',
+        };
+      case 'skipped':
+        return {
+          border: 'border-l-4 border-l-gray-300 border-t border-r border-b border-gray-200',
+          bg: 'bg-gray-50/30',
+          hoverBg: 'hover:bg-gray-50',
+        };
+      default:
+        return {
+          border: 'border-l-4 border-l-green-500 border-t border-r border-b border-muted',
+          bg: '',
+          hoverBg: 'hover:bg-muted/50',
+        };
+    }
+  };
+
+  const statusStyles = getStatusStyles();
+
   return (
-    <div className="border border-muted rounded-md overflow-hidden">
+    <div className={`rounded-md overflow-hidden ${statusStyles.border} ${statusStyles.bg}`}>
       <button
         type="button"
-        className="w-full p-4 text-left hover:bg-muted/50 transition-colors cursor-pointer flex justify-between items-start"
+        className={`w-full p-3 sm:p-4 text-left ${statusStyles.hoverBg} transition-colors cursor-pointer flex justify-between items-start gap-2`}
         onClick={toggleExpanded}
         aria-expanded={isExpanded}
       >
-        <div className="flex items-start gap-2">
-          {getStatusIcon()}
-          <h4 className="font-medium">{check.title}</h4>
+        <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
+          <span className="shrink-0 mt-0.5">{getStatusIcon()}</span>
+          <h4 className="font-medium text-sm sm:text-base leading-snug">{check.title}</h4>
         </div>
-        <div className="flex items-center gap-2">
-          {getStatusBadge()}
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="hidden sm:block">{getStatusBadge()}</span>
           {(check.details || check.skipReason || isTreasuryMovementCheck) &&
             (isExpanded ? (
               <ChevronUpIcon className="h-4 w-4 text-muted-foreground" />
@@ -1450,7 +1552,7 @@ function ExpandableCheckItem({
         </div>
       </button>
       {isExpanded && (check.details || check.skipReason || isTreasuryMovementCheck) && (
-        <div className="p-5 pt-0 pl-11 text-sm border-t border-muted bg-muted/10">
+        <div className="px-3 pb-4 sm:px-4 sm:pb-4 sm:pl-12 text-sm border-t border-muted/50 bg-background/50">
           {check.status === 'skipped' && check.skipReason ? (
             <div className="mt-4">
               <p className="text-muted-foreground italic">{check.skipReason}</p>
