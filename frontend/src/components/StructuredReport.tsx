@@ -1296,46 +1296,61 @@ function ExpandableCheckItem({
           const addressRegex = /`(0x[a-fA-F0-9]{40})`/g;
           let match: RegExpExecArray | null;
 
-          // Check if this is a target line
+          // Check if this is a target line with contract status
           const isTargetLine =
             processedLine.includes('Contract (verified)') ||
             processedLine.includes('EOA (verification not applicable)') ||
             processedLine.includes('Contract (looks safe)') ||
+            processedLine.includes('Contract (unverified)') ||
             processedLine.includes('Trusted contract');
 
           if (isTargetLine) {
-            // Extract target address from the line - handle different formats
-            const targetMatch =
+            // Extract target address from markdown link format [address](url) or backtick format
+            const markdownLinkMatch = processedLine.match(
+              /\[(0x[a-fA-F0-9]{40})\]\(https?:\/\/[^)]+\)/,
+            );
+            const backtickMatch =
               processedLine.match(/\[`(0x[a-fA-F0-9]{40})`\]/) ||
               processedLine.match(/at `(0x[a-fA-F0-9]{40})`/);
+            const targetMatch = markdownLinkMatch || backtickMatch;
+
             if (targetMatch) {
               const address = targetMatch[1];
               // Get the contract status
               let status = 'Unknown';
-              if (processedLine.includes('Contract (verified)')) status = 'Contract (verified)';
+              if (processedLine.includes('Contract (verified)')) status = 'Verified';
+              else if (processedLine.includes('Contract (unverified)')) status = 'Unverified';
               else if (processedLine.includes('EOA (verification not applicable)')) status = 'EOA';
-              else if (processedLine.includes('Contract (looks safe)'))
-                status = 'Contract (looks safe)';
-              else if (processedLine.includes('Trusted contract')) status = 'Trusted contract';
+              else if (processedLine.includes('Contract (looks safe)')) status = 'Looks Safe';
+              else if (processedLine.includes('Trusted contract')) status = 'Trusted';
+
+              // Determine status badge color
+              const statusColor =
+                status === 'Verified' || status === 'Looks Safe' || status === 'Trusted'
+                  ? 'bg-green-100 text-green-800 border-green-300'
+                  : status === 'Unverified'
+                    ? 'bg-red-100 text-red-800 border-red-300'
+                    : 'bg-gray-100 text-gray-700 border-gray-300';
 
               // Format the target with proper styling
               return (
-                <div key={`target-${address}`} className="mb-3">
-                  <div className="flex items-center flex-wrap gap-2">
-                    <span className="mr-2">{processedLine.includes('at `') ? '' : 'Target:'}</span>
+                <div key={`target-${address}-${index}`} className="mb-2">
+                  <div className="flex items-center flex-wrap gap-2 p-2 bg-muted/30 rounded-md">
                     <a
                       href={buildAddressLink(address, effectiveMetadata)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-mono text-xs bg-muted p-2 rounded hover:underline inline-flex items-center"
+                      className="font-mono text-xs hover:underline inline-flex items-center gap-1"
                     >
                       {address}
-                      <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                      <ExternalLinkIcon className="h-3 w-3" />
                     </a>
                     {isPlaceholderAddress(address, effectiveMetadata) && (
                       <SimulationPlaceholderBadge />
                     )}
-                    <span className="text-muted-foreground text-xs">{status}</span>
+                    <Badge variant="outline" className={`text-xs ${statusColor}`}>
+                      {status}
+                    </Badge>
                   </div>
                 </div>
               );
@@ -1433,20 +1448,25 @@ function ExpandableCheckItem({
             }
           }
 
-          // Use a different approach to avoid assignment in the while condition
-          match = addressRegex.exec(processedLine);
-          while (match !== null) {
+          // Parse markdown links [address](url) and backtick addresses `address`
+          // Combined regex to match both formats
+          const combinedRegex =
+            /\[(0x[a-fA-F0-9]{40})\]\(https?:\/\/[^)]+\)|`(0x[a-fA-F0-9]{40})`/g;
+          let combinedMatch: RegExpExecArray | null;
+
+          combinedMatch = combinedRegex.exec(processedLine);
+          while (combinedMatch !== null) {
             // Add text before the match
-            if (match.index > lastIndex) {
-              parts.push(processedLine.substring(lastIndex, match.index));
+            if (combinedMatch.index > lastIndex) {
+              parts.push(processedLine.substring(lastIndex, combinedMatch.index));
             }
 
-            // Add the address as a link with optional placeholder badge
-            const address = match[1];
+            // Get address from either capture group (markdown link or backtick)
+            const address = combinedMatch[1] || combinedMatch[2];
             const isPlaceholder = isPlaceholderAddress(address, effectiveMetadata);
             parts.push(
               <span
-                key={`address-wrapper-${address}-${match.index}`}
+                key={`address-wrapper-${address}-${combinedMatch.index}`}
                 className="inline-flex items-center gap-1"
               >
                 <a
@@ -1462,8 +1482,8 @@ function ExpandableCheckItem({
               </span>,
             );
 
-            lastIndex = match.index + match[0].length;
-            match = addressRegex.exec(processedLine);
+            lastIndex = combinedMatch.index + combinedMatch[0].length;
+            combinedMatch = combinedRegex.exec(processedLine);
           }
 
           // Add remaining text
