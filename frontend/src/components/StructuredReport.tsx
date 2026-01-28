@@ -1885,6 +1885,101 @@ function ExpandableCheckItem({
             }
           }
 
+          // Check if this is a decoded calldata line (from check-decode-calldata)
+          const isDecodedCalldataLine =
+            processedLine.includes('calls `') &&
+            processedLine.includes('` on ') &&
+            (processedLine.includes('(decoded from ABI)') ||
+              processedLine.includes('(decoded from signature)'));
+
+          if (isDecodedCalldataLine) {
+            // Parse the line: `0xAddress` calls `functionName(args)` on ContractName at `0xTarget` (decoded from ...)
+            const callerMatch = processedLine.match(/`(0x[a-fA-F0-9]{40})`\s*calls/);
+            const functionMatch = processedLine.match(/calls\s*`([^`]+)`\s*on/);
+            const targetMatch = processedLine.match(/on\s+(\S+)\s+at\s+`(0x[a-fA-F0-9]{40})`/);
+            const decodedFromMatch = processedLine.match(/\((decoded from [^)]+)\)/);
+
+            const caller = callerMatch?.[1];
+            const functionCall = functionMatch?.[1];
+            const contractName = targetMatch?.[1];
+            const targetAddress = targetMatch?.[2];
+            const decodedFrom = decodedFromMatch?.[1] || 'decoded';
+
+            // Truncate long function calls (especially hex args)
+            const truncateFunctionCall = (fn: string) => {
+              if (fn.length <= 60) return fn;
+              // Find the function name and opening paren
+              const parenIndex = fn.indexOf('(');
+              if (parenIndex === -1) return fn.slice(0, 60) + '...';
+              const fnName = fn.slice(0, parenIndex);
+              const args = fn.slice(parenIndex + 1, -1);
+              // Truncate each arg if it's a long hex string
+              const truncatedArgs = args.split(', ').map((arg) => {
+                if (arg.startsWith('0x') && arg.length > 20) {
+                  return arg.slice(0, 10) + '...' + arg.slice(-6);
+                }
+                return arg;
+              });
+              return `${fnName}(${truncatedArgs.join(', ')})`;
+            };
+
+            return (
+              <div key={`calldata-${index}`} className="mb-2">
+                <div className="flex items-start justify-between gap-3 p-3 bg-muted/30 rounded-md">
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {caller && (
+                        <a
+                          href={buildAddressLink(caller, effectiveMetadata)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded hover:underline inline-flex items-center gap-1"
+                        >
+                          {caller.slice(0, 10)}...{caller.slice(-8)}
+                          <ExternalLinkIcon className="h-3 w-3" />
+                        </a>
+                      )}
+                      <span className="text-muted-foreground text-sm">calls</span>
+                      {functionCall && (
+                        <code className="font-mono text-xs bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded break-all">
+                          {truncateFunctionCall(functionCall)}
+                        </code>
+                      )}
+                    </div>
+                    {(contractName || targetAddress) && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                        <span>on</span>
+                        {contractName && (
+                          <span className="font-medium text-foreground">{contractName}</span>
+                        )}
+                        {targetAddress && (
+                          <>
+                            <span>at</span>
+                            <a
+                              href={buildAddressLink(targetAddress, effectiveMetadata)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-xs hover:underline inline-flex items-center gap-1"
+                            >
+                              {targetAddress.slice(0, 10)}...{targetAddress.slice(-8)}
+                              <ExternalLinkIcon className="h-3 w-3" />
+                            </a>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="text-xs bg-green-100 text-green-800 border-green-300 shrink-0"
+                  >
+                    {decodedFrom}
+                  </Badge>
+                </div>
+              </div>
+            );
+          }
+
           // Check if this is an event line
           const isEventLine =
             processedLine.includes('`') &&
