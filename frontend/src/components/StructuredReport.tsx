@@ -2201,6 +2201,43 @@ function ExpandableCheckItem({
       </button>
       {isExpanded && (check.details || check.skipReason || isTreasuryMovementCheck) && (
         <div className="px-3 pb-4 sm:px-4 sm:pb-4 sm:pl-12 text-sm border-t border-muted/50 bg-background/50">
+          {/* Show warning/error reason at the top if it's a meaningful summary (not just listing items) */}
+          {check.status === 'warning' &&
+            check.warnings &&
+            check.warnings.length > 0 &&
+            // Only show if warnings are short summaries, not long lists of items
+            check.warnings.some((w) => !w.includes('0x') && w.length < 200) && (
+              <div className="mt-4 mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                <div className="flex items-start gap-2">
+                  <AlertTriangleIcon className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
+                  <div className="text-yellow-800 text-sm">
+                    <span className="font-medium">Why this check has warnings:</span>
+                    <ul className="mt-1 list-disc list-inside space-y-1">
+                      {check.warnings
+                        .filter((w) => !w.includes('0x') && w.length < 200)
+                        .map((w, i) => (
+                          <li key={`reason-${i}`}>{w}</li>
+                        ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+          {check.status === 'failed' && check.errors && check.errors.length > 0 && (
+            <div className="mt-4 mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+              <div className="flex items-start gap-2">
+                <AlertTriangleIcon className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+                <div className="text-red-800 text-sm">
+                  <span className="font-medium">Why this check failed:</span>
+                  <ul className="mt-1 list-disc list-inside space-y-1">
+                    {check.errors.map((e, i) => (
+                      <li key={`error-${i}`}>{e}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
           {check.status === 'skipped' && check.skipReason ? (
             <div className="mt-4">
               <p className="text-muted-foreground italic">{check.skipReason}</p>
