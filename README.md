@@ -4,6 +4,57 @@ This repository contains tools that make on-chain governance safer,
 including automated scripts that apply checks to live proposals to allow
 for better informed voting.
 
+## Quick Start
+
+### 1. Setup
+
+```bash
+# Install dependencies
+bun install
+
+# Copy and configure environment variables
+cp .env.example .env
+# Edit .env with your Tenderly credentials and RPC URLs
+```
+
+### 2. Run a test simulation
+
+```bash
+# Run a simple simulation to verify setup
+SIM_NAME=uni-transfer bun start
+```
+
+Reports are saved to `reports/` folder.
+
+### 3. View results in the frontend
+
+```bash
+# Run simulation and start the frontend UI
+SIM_NAME=uni-transfer bun run propose
+```
+
+Open http://localhost:3000 to view the simulation results.
+
+### 4. Create your own simulation
+
+Copy `sims/uni-transfer.sim.ts` as a template:
+
+```bash
+cp sims/uni-transfer.sim.ts sims/my-proposal.sim.ts
+# Edit my-proposal.sim.ts with your proposal details
+SIM_NAME=my-proposal bun run propose
+```
+
+### 5. Check an existing on-chain proposal
+
+```bash
+# Check a specific Uniswap proposal by ID
+./run-proposal.sh 94
+
+# Or for other DAOs, set environment variables
+DAO_NAME=Compound GOVERNOR_ADDRESS=0xc0Da02939E1441F497fd74F78cE7Decb17B66529 bun run check-proposal 43
+```
+
 ## Reports
 
 Every few hours a GitHub workflow is run which simulates all proposals for each DAO defined in [`governance-checks.yaml`](https://github.com/Uniswap/governance-seatbelt/blob/main/.github/workflows/governance-checks.yaml).
