@@ -1806,13 +1806,18 @@ function ExpandableCheckItem({
           const parts: React.ReactNode[] = [];
           let lastIndex = 0;
 
-          // Check if this is a target line with contract status
+          // Check if this is a target line with contract status (verification or selfdestruct checks)
           const isTargetLine =
             processedLine.includes('Contract (verified)') ||
             processedLine.includes('EOA (verification not applicable)') ||
             processedLine.includes('Contract (looks safe)') ||
             processedLine.includes('Contract (unverified)') ||
-            processedLine.includes('Trusted contract');
+            processedLine.includes('Trusted contract') ||
+            processedLine.includes('Contract (with DELEGATECALL)') ||
+            processedLine.includes('Contract (with SELFDESTRUCT)') ||
+            processedLine.includes('EOA (may have code later)') ||
+            processedLine.includes(': EOA') ||
+            processedLine.includes('Trusted contract (not checked)');
 
           if (isTargetLine) {
             // Extract target address from markdown link format [address](url) or backtick format
@@ -1826,41 +1831,54 @@ function ExpandableCheckItem({
 
             if (targetMatch) {
               const address = targetMatch[1];
-              // Get the contract status
+              // Get the contract status - handle both verification and selfdestruct checks
               let status = 'Unknown';
               if (processedLine.includes('Contract (verified)')) status = 'Verified';
               else if (processedLine.includes('Contract (unverified)')) status = 'Unverified';
               else if (processedLine.includes('EOA (verification not applicable)')) status = 'EOA';
               else if (processedLine.includes('Contract (looks safe)')) status = 'Looks Safe';
+              else if (processedLine.includes('Trusted contract (not checked)')) status = 'Trusted';
               else if (processedLine.includes('Trusted contract')) status = 'Trusted';
+              else if (processedLine.includes('Contract (with DELEGATECALL)'))
+                status = 'Contract (with DELEGATECALL)';
+              else if (processedLine.includes('Contract (with SELFDESTRUCT)'))
+                status = 'Contract (with SELFDESTRUCT)';
+              else if (processedLine.includes('EOA (may have code later)'))
+                status = 'EOA (may have code later)';
+              else if (processedLine.includes(': EOA')) status = 'EOA';
 
               // Determine status badge color
               const statusColor =
                 status === 'Verified' || status === 'Looks Safe' || status === 'Trusted'
                   ? 'bg-green-100 text-green-800 border-green-300'
-                  : status === 'Unverified'
+                  : status === 'Unverified' || status === 'Contract (with SELFDESTRUCT)'
                     ? 'bg-red-100 text-red-800 border-red-300'
-                    : 'bg-gray-100 text-gray-700 border-gray-300';
+                    : status === 'Contract (with DELEGATECALL)' ||
+                        status === 'EOA (may have code later)'
+                      ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
+                      : 'bg-gray-100 text-gray-700 border-gray-300';
 
-              // Format the target with proper styling
+              // Format the target with proper styling - badges right-aligned
               return (
-                <div key={`target-${address}`} className="mb-2">
-                  <div className="flex items-center flex-wrap gap-2 p-2 bg-muted/30 rounded-md">
+                <div key={`target-${address}-${index}`} className="mb-2">
+                  <div className="flex items-center justify-between gap-2 p-2 bg-muted/30 rounded-md">
                     <a
                       href={buildAddressLink(address, effectiveMetadata)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-mono text-xs hover:underline inline-flex items-center gap-1"
+                      className="font-mono text-xs hover:underline inline-flex items-center gap-1 min-w-0 truncate"
                     >
                       {address}
-                      <ExternalLinkIcon className="h-3 w-3" />
+                      <ExternalLinkIcon className="h-3 w-3 shrink-0" />
                     </a>
-                    {isPlaceholderAddress(address, effectiveMetadata) && (
-                      <SimulationPlaceholderBadge />
-                    )}
-                    <Badge variant="outline" className={`text-xs ${statusColor}`}>
-                      {status}
-                    </Badge>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {isPlaceholderAddress(address, effectiveMetadata) && (
+                        <SimulationPlaceholderBadge />
+                      )}
+                      <Badge variant="outline" className={`text-xs ${statusColor}`}>
+                        {status}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
               );
