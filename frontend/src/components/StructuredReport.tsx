@@ -2069,24 +2069,6 @@ function ExpandableCheckItem({
       </button>
       {isExpanded && (check.details || check.skipReason || isTreasuryMovementCheck) && (
         <div className="px-3 pb-4 sm:px-4 sm:pb-4 sm:pl-12 text-sm border-t border-muted/50 bg-background/50">
-          {/* Display warnings if present */}
-          {check.warnings && check.warnings.length > 0 && (
-            <div className="mt-4 mb-4">
-              <Alert className="bg-yellow-50 border-yellow-200">
-                <AlertTriangleIcon className="h-4 w-4 text-yellow-600" />
-                <AlertTitle className="text-yellow-800 text-sm font-medium">
-                  {check.warnings.length === 1 ? 'Warning' : `${check.warnings.length} Warnings`}
-                </AlertTitle>
-                <AlertDescription className="text-yellow-700 text-sm">
-                  <ul className="list-disc list-inside space-y-1 mt-1">
-                    {check.warnings.map((warning, idx) => (
-                      <li key={`warning-${idx}`}>{warning}</li>
-                    ))}
-                  </ul>
-                </AlertDescription>
-              </Alert>
-            </div>
-          )}
           {check.status === 'skipped' && check.skipReason ? (
             <div className="mt-4">
               <p className="text-muted-foreground italic">{check.skipReason}</p>
