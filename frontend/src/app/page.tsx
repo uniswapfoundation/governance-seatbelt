@@ -4,6 +4,7 @@ import type { SimulationType } from '@/components/ProposalCard';
 import { ProposalSummary } from '@/components/ProposalSummary';
 import { StructuredReport } from '@/components/StructuredReport';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Toaster } from '@/components/ui/sonner';
 import { useSimulationResults } from '@/hooks/use-simulation-results';
 import { AlertTriangleIcon, InfoIcon } from 'lucide-react';
@@ -37,8 +38,53 @@ export default function Home() {
   );
 }
 
+function LoadingSkeleton() {
+  return (
+    <div className="w-full space-y-4">
+      {/* Header skeleton */}
+      <div className="rounded-lg border border-border/60 bg-card/50 p-4 sm:p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <Skeleton className="h-6 w-6 rounded-full" />
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-5 w-20 ml-auto" />
+        </div>
+        <Skeleton className="h-8 w-3/4 mb-2" />
+        <Skeleton className="h-4 w-1/2" />
+      </div>
+
+      {/* Stats skeleton */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="rounded-lg border border-border/60 bg-card/50 p-4">
+            <Skeleton className="h-4 w-16 mb-2" />
+            <Skeleton className="h-6 w-24" />
+          </div>
+        ))}
+      </div>
+
+      {/* Tabs skeleton */}
+      <div className="rounded-lg border border-border/60 bg-card/50 p-4 sm:p-6">
+        <div className="flex gap-4 border-b pb-2 mb-4">
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-24" />
+          <Skeleton className="h-8 w-32" />
+        </div>
+        <div className="space-y-3">
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ReportSection() {
-  const { data: simulationData, error: simulationError } = useSimulationResults();
+  const { data: simulationData, error: simulationError, isPending } = useSimulationResults();
+
+  if (isPending) {
+    return <LoadingSkeleton />;
+  }
 
   if (simulationError) {
     return (

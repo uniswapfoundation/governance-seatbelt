@@ -15,6 +15,7 @@ import {
   ArrowRightIcon,
   CheckCircleIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   ChevronUpIcon,
   ExternalLinkIcon,
   InfoIcon,
@@ -69,13 +70,37 @@ function isPlaceholderAddress(
   );
 }
 
+function getAddressLabel(
+  address: string,
+  metadata: StructuredSimulationReport['metadata'],
+): string | null {
+  if (!metadata.addressLabels) return null;
+  const normalizedAddress = address.toLowerCase();
+  for (const [addr, labelInfo] of Object.entries(metadata.addressLabels)) {
+    if (addr.toLowerCase() === normalizedAddress) {
+      return labelInfo.label;
+    }
+  }
+  return null;
+}
+
+function formatAddressWithLabel(
+  address: string,
+  metadata: StructuredSimulationReport['metadata'],
+  truncate = false,
+): { label: string | null; displayAddress: string } {
+  const label = getAddressLabel(address, metadata);
+  const displayAddress = truncate ? `${address.slice(0, 6)}...${address.slice(-4)}` : address;
+  return { label, displayAddress };
+}
+
 // --- Simulation warning components ---
 
 function SimulationPlaceholderBadge({ className }: { className?: string }) {
   return (
     <Badge
       variant="outline"
-      className={`bg-orange-100 text-orange-800 border-orange-300 text-xs ${className || ''}`}
+      className={`bg-slate-100 text-slate-600 border-slate-300 text-xs ${className || ''}`}
     >
       Simulation Placeholder
     </Badge>
@@ -958,15 +983,22 @@ export function StructuredReport({ report }: StructuredReportProps) {
               <MetadataItem label="Network">{report.metadata.chainName || 'Ethereum'}</MetadataItem>
               <MetadataItem label="Proposer" fullWidth>
                 <div className="flex items-center gap-2 flex-wrap">
+                  {getAddressLabel(report.metadata.proposer, report.metadata) && (
+                    <span className="font-medium text-sm">
+                      {getAddressLabel(report.metadata.proposer, report.metadata)}
+                    </span>
+                  )}
                   <a
                     href={buildAddressLink(report.metadata.proposer, report.metadata)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-mono text-xs hover:underline inline-flex items-center gap-1 break-all"
+                    className="font-mono text-xs hover:underline inline-flex items-center gap-1 break-all text-muted-foreground"
                   >
-                    <span className="hidden sm:inline">{report.metadata.proposer}</span>
+                    <span className="hidden sm:inline">
+                      {report.metadata.proposer.slice(0, 6)}...{report.metadata.proposer.slice(-4)}
+                    </span>
                     <span className="sm:hidden">
-                      {report.metadata.proposer.slice(0, 10)}...{report.metadata.proposer.slice(-8)}
+                      {report.metadata.proposer.slice(0, 6)}...{report.metadata.proposer.slice(-4)}
                     </span>
                     <ExternalLinkIcon className="h-3 w-3 shrink-0" />
                   </a>
@@ -976,16 +1008,20 @@ export function StructuredReport({ report }: StructuredReportProps) {
               {report.metadata.executor && (
                 <MetadataItem label={getExecutorLabel(report.metadata.simulationType)} fullWidth>
                   <div className="flex items-center gap-2 flex-wrap">
+                    {getAddressLabel(report.metadata.executor, report.metadata) && (
+                      <span className="font-medium text-sm">
+                        {getAddressLabel(report.metadata.executor, report.metadata)}
+                      </span>
+                    )}
                     <a
                       href={buildAddressLink(report.metadata.executor, report.metadata)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-mono text-xs hover:underline inline-flex items-center gap-1 break-all"
+                      className="font-mono text-xs hover:underline inline-flex items-center gap-1 break-all text-muted-foreground"
                     >
-                      <span className="hidden sm:inline">{report.metadata.executor}</span>
-                      <span className="sm:hidden">
-                        {report.metadata.executor.slice(0, 10)}...
-                        {report.metadata.executor.slice(-8)}
+                      <span>
+                        {report.metadata.executor.slice(0, 6)}...
+                        {report.metadata.executor.slice(-4)}
                       </span>
                       <ExternalLinkIcon className="h-3 w-3 shrink-0" />
                     </a>
@@ -995,19 +1031,25 @@ export function StructuredReport({ report }: StructuredReportProps) {
               )}
               {report.metadata.governorAddress && (
                 <MetadataItem label="Governor" fullWidth>
-                  <a
-                    href={buildAddressLink(report.metadata.governorAddress, report.metadata)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-mono text-xs hover:underline inline-flex items-center gap-1 break-all"
-                  >
-                    <span className="hidden sm:inline">{report.metadata.governorAddress}</span>
-                    <span className="sm:hidden">
-                      {report.metadata.governorAddress.slice(0, 10)}...
-                      {report.metadata.governorAddress.slice(-8)}
-                    </span>
-                    <ExternalLinkIcon className="h-3 w-3 shrink-0" />
-                  </a>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {getAddressLabel(report.metadata.governorAddress, report.metadata) && (
+                      <span className="font-medium text-sm">
+                        {getAddressLabel(report.metadata.governorAddress, report.metadata)}
+                      </span>
+                    )}
+                    <a
+                      href={buildAddressLink(report.metadata.governorAddress, report.metadata)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-xs hover:underline inline-flex items-center gap-1 break-all text-muted-foreground"
+                    >
+                      <span>
+                        {report.metadata.governorAddress.slice(0, 6)}...
+                        {report.metadata.governorAddress.slice(-4)}
+                      </span>
+                      <ExternalLinkIcon className="h-3 w-3 shrink-0" />
+                    </a>
+                  </div>
                 </MetadataItem>
               )}
             </div>
@@ -1097,7 +1139,10 @@ export function StructuredReport({ report }: StructuredReportProps) {
                     ({chainReport.chainId}){isMainChain ? ' • main chain' : ''}
                   </span>
                 </h3>
-                <StateChanges stateChanges={chainReport.stateChanges} metadata={effectiveMetadata} />
+                <StateChanges
+                  stateChanges={chainReport.stateChanges}
+                  metadata={effectiveMetadata}
+                />
               </section>
             );
           })}
@@ -1200,6 +1245,315 @@ function ChecksSection({ checks, stateChanges, metadata }: ChecksSectionProps) {
   );
 }
 
+// Security analysis output parser for Slither/Solc
+interface ParsedSecurityFinding {
+  severity: 'high' | 'medium' | 'low' | 'info' | 'optimization';
+  title: string;
+  description: string;
+  location?: string;
+}
+
+interface ParsedSecurityOutput {
+  summary: {
+    contractsAnalyzed: number;
+    highCount: number;
+    mediumCount: number;
+    lowCount: number;
+    infoCount: number;
+  };
+  findings: ParsedSecurityFinding[];
+  rawOutput: string;
+}
+
+function parseSecurityOutput(details: string): ParsedSecurityOutput {
+  const findings: ParsedSecurityFinding[] = [];
+  const lines = details.split('\n');
+
+  // Count contracts analyzed
+  const contractMatches = details.match(/INFO:CryticCompile:Source-code/g);
+  const contractsAnalyzed = contractMatches?.length || 0;
+
+  // Find actual slither findings (they have patterns like "Reference:" or detector names)
+  let highCount = 0;
+  let mediumCount = 0;
+  let lowCount = 0;
+  let infoCount = 0;
+
+  // Look for severity indicators in slither output
+  const highPattern = /Impact: High|severity: High/gi;
+  const mediumPattern = /Impact: Medium|severity: Medium/gi;
+  const lowPattern = /Impact: Low|severity: Low/gi;
+
+  highCount = (details.match(highPattern) || []).length;
+  mediumCount = (details.match(mediumPattern) || []).length;
+  lowCount = (details.match(lowPattern) || []).length;
+
+  // Count INFO messages (excluding CryticCompile noise)
+  const infoLines = lines.filter(
+    (line) =>
+      line.includes('INFO:') &&
+      !line.includes('CryticCompile') &&
+      !line.includes('Slither:') &&
+      !line.includes('Detectors:'),
+  );
+  infoCount = infoLines.length;
+
+  return {
+    summary: {
+      contractsAnalyzed,
+      highCount,
+      mediumCount,
+      lowCount,
+      infoCount,
+    },
+    findings,
+    rawOutput: details,
+  };
+}
+
+function SecurityAnalysisOutput({
+  details,
+  checkTitle,
+}: {
+  details: string;
+  checkTitle: string;
+}) {
+  const [showRawOutput, setShowRawOutput] = useState(false);
+  const parsed = useMemo(() => parseSecurityOutput(details), [details]);
+
+  const isSlither = checkTitle.toLowerCase().includes('slither');
+  const isSolc = checkTitle.toLowerCase().includes('solc');
+  const toolName = isSlither ? 'Slither' : isSolc ? 'Solc' : 'Security Analysis';
+
+  const { summary } = parsed;
+  const hasFindings = summary.highCount + summary.mediumCount + summary.lowCount > 0;
+
+  return (
+    <div className="space-y-4">
+      {/* Summary Card */}
+      <div className="bg-muted/30 rounded-lg p-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <ShieldCheckIcon className="h-5 w-5 text-muted-foreground" />
+            <span className="text-sm font-medium">{toolName} Analysis</span>
+          </div>
+          <div className="flex flex-wrap gap-3 text-sm">
+            <span className="text-muted-foreground">
+              {summary.contractsAnalyzed} contract{summary.contractsAnalyzed !== 1 ? 's' : ''}{' '}
+              analyzed
+            </span>
+            {!hasFindings && (
+              <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                No issues found
+              </Badge>
+            )}
+            {summary.highCount > 0 && <Badge variant="destructive">{summary.highCount} High</Badge>}
+            {summary.mediumCount > 0 && (
+              <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300">
+                {summary.mediumCount} Medium
+              </Badge>
+            )}
+            {summary.lowCount > 0 && (
+              <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+                {summary.lowCount} Low
+              </Badge>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Raw Output Toggle */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowRawOutput(!showRawOutput)}
+          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {showRawOutput ? (
+            <ChevronDownIcon className="h-4 w-4" />
+          ) : (
+            <ChevronRightIcon className="h-4 w-4" />
+          )}
+          <span>{showRawOutput ? 'Hide' : 'View'} raw output</span>
+        </button>
+        {showRawOutput && (
+          <div className="mt-3 max-h-96 overflow-auto rounded-md bg-muted/50 p-3">
+            <pre className="text-xs font-mono whitespace-pre-wrap break-all text-muted-foreground">
+              {parsed.rawOutput}
+            </pre>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Events display component for cleaner event rendering
+interface ParsedEvent {
+  contractName: string;
+  contractAddress?: string;
+  events: Array<{
+    name: string;
+    params: Array<{ name: string; value: string }>;
+  }>;
+}
+
+function parseEventsFromDetails(details: string): ParsedEvent[] {
+  const lines = details.split('\n').filter((line) => line.trim());
+  const result: ParsedEvent[] = [];
+  let currentContract: ParsedEvent | null = null;
+
+  for (const line of lines) {
+    // Remove **Info**: prefix if present
+    const cleanLine = line.replace(/^\*\*Info\*\*:\s*/, '').trim();
+
+    // Check if this is a contract header (e.g., "Proxy at `0x...`" or "ContractName at 0x...")
+    const contractMatch = cleanLine.match(/^([A-Za-z0-9_]+(?:\s*\([^)]+\))?)\s+at\s+[`']?(0x[a-fA-F0-9]{40})[`']?/);
+    if (contractMatch) {
+      if (currentContract) {
+        result.push(currentContract);
+      }
+      currentContract = {
+        contractName: contractMatch[1].trim(),
+        contractAddress: contractMatch[2],
+        events: [],
+      };
+      continue;
+    }
+
+    // Check if this is an event line (e.g., "    `EventName(param: value, ...)`")
+    // Handles both backtick-wrapped and plain formats
+    const eventMatch = cleanLine.match(/^\s*`?(\w+)\((.+)\)`?\s*$/);
+    if (eventMatch && currentContract) {
+      const eventName = eventMatch[1];
+      const paramsString = eventMatch[2];
+
+      // Parse parameters - handle comma-separated key:value pairs
+      const params: Array<{ name: string; value: string }> = [];
+      if (paramsString.trim()) {
+        // Split by comma followed by a parameter name (word followed by colon)
+        const paramParts = paramsString.split(/,\s*(?=[a-zA-Z_]\w*:)/);
+        for (const part of paramParts) {
+          const paramMatch = part.match(/^(\w+):\s*(.+)$/);
+          if (paramMatch) {
+            params.push({ name: paramMatch[1], value: paramMatch[2].trim() });
+          }
+        }
+      }
+
+      currentContract.events.push({ name: eventName, params });
+    }
+  }
+
+  if (currentContract) {
+    result.push(currentContract);
+  }
+
+  return result;
+}
+
+function truncateHex(value: string, maxLength = 20): string {
+  if (!value.startsWith('0x') || value.length <= maxLength) return value;
+  return `${value.slice(0, 10)}...${value.slice(-8)}`;
+}
+
+function isHexValue(value: string): boolean {
+  return /^0x[a-fA-F0-9]+$/.test(value);
+}
+
+function EventsDisplay({
+  details,
+  metadata,
+}: {
+  details: string;
+  metadata?: StructuredSimulationReport['metadata'];
+}) {
+  const parsedEvents = useMemo(() => parseEventsFromDetails(details), [details]);
+  const effectiveMetadata = metadata || { proposalId: '', proposer: '' as `0x${string}` };
+
+  if (parsedEvents.length === 0) {
+    return <p className="text-muted-foreground text-sm">No events to display</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {parsedEvents.map((contract, contractIndex) => (
+        <div key={`contract-${contract.contractAddress || contractIndex}`} className="space-y-3">
+          {/* Contract Header */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-sm">{contract.contractName}</span>
+            {contract.contractAddress && (
+              <a
+                href={buildAddressLink(contract.contractAddress, effectiveMetadata)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-xs bg-muted/50 px-2 py-0.5 rounded hover:underline inline-flex items-center gap-1 text-muted-foreground"
+              >
+                {contract.contractAddress.slice(0, 6)}...{contract.contractAddress.slice(-4)}
+                <ExternalLinkIcon className="h-3 w-3" />
+              </a>
+            )}
+          </div>
+
+          {/* Events */}
+          <div className="space-y-2 pl-4 border-l-2 border-muted">
+            {contract.events.map((event, eventIndex) => (
+              <div
+                key={`event-${contractIndex}-${eventIndex}`}
+                className="bg-muted/30 rounded-md p-3"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {event.name}
+                  </Badge>
+                </div>
+                {event.params.length > 0 && (
+                  <div className="space-y-1">
+                    {event.params.map((param, paramIndex) => {
+                      const isLongHex = isHexValue(param.value) && param.value.length > 42;
+                      const displayValue = isLongHex ? truncateHex(param.value) : param.value;
+                      const isAddress = isHexValue(param.value) && param.value.length === 42;
+
+                      return (
+                        <div
+                          key={`param-${contractIndex}-${eventIndex}-${paramIndex}`}
+                          className="flex items-start gap-2 text-sm"
+                        >
+                          <span className="text-muted-foreground min-w-[100px] flex-shrink-0">
+                            {param.name}:
+                          </span>
+                          {isAddress ? (
+                            <a
+                              href={buildAddressLink(param.value, effectiveMetadata)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-xs hover:underline inline-flex items-center gap-1 text-blue-600"
+                            >
+                              {truncateHex(param.value, 16)}
+                              <ExternalLinkIcon className="h-3 w-3" />
+                            </a>
+                          ) : (
+                            <span
+                              className={`font-mono text-xs break-all ${isLongHex ? 'text-muted-foreground' : ''}`}
+                              title={isLongHex ? param.value : undefined}
+                            >
+                              {displayValue}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Helper components
 function ExpandableCheckItem({
   check,
@@ -1265,6 +1619,13 @@ function ExpandableCheckItem({
   // Check if this is a treasury movement check
   const isTreasuryMovementCheck = check.title.toLowerCase().includes('treasury movement');
 
+  // Check if this is a security analysis check (slither/solc)
+  const isSecurityCheck =
+    check.title.toLowerCase().includes('slither') || check.title.toLowerCase().includes('solc');
+
+  // Check if this is an events check
+  const isEventsCheck = check.title.toLowerCase().includes('events emitted');
+
   // Parse treasury movement data if applicable
   const treasuryData = useMemo(() => {
     if (!isTreasuryMovementCheck) return null;
@@ -1282,6 +1643,16 @@ function ExpandableCheckItem({
   // Format the details content as React components
   const FormattedDetails = useMemo(() => {
     if (!check.details) return null;
+
+    // Use SecurityAnalysisOutput for slither/solc checks
+    if (isSecurityCheck) {
+      return <SecurityAnalysisOutput details={check.details} checkTitle={check.title} />;
+    }
+
+    // Use EventsDisplay for events checks
+    if (isEventsCheck) {
+      return <EventsDisplay details={check.details} metadata={metadata} />;
+    }
 
     // Pre-process the raw details to remove all instances of "**Info**:" and similar patterns
     let preprocessedDetails = check.details;
@@ -1584,10 +1955,7 @@ function ExpandableCheckItem({
             (parts.length === 1 && typeof parts[0] === 'string' && !processedLine.includes('`'))
           ) {
             return (
-              <div
-                key={`info-${processedLine.substring(0, 30).replace(/\s+/g, '-')}`}
-                className="mb-3"
-              >
+              <div key={`info-line-${index}`} className="mb-3">
                 <p className="text-muted-foreground">{parts.length > 0 ? parts : processedLine}</p>
               </div>
             );
@@ -1601,7 +1969,7 @@ function ExpandableCheckItem({
         })}
       </>
     );
-  }, [check.details, isStateChangesCheck, stateChanges, metadata]);
+  }, [check.details, check.title, isStateChangesCheck, isSecurityCheck, isEventsCheck, stateChanges, metadata]);
 
   // Status-based styling
   const getStatusStyles = () => {
