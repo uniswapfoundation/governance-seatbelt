@@ -6,10 +6,10 @@ import type { ChainConfig } from '../utils/clients/client';
 import { DEFAULT_SIMULATION_ADDRESS } from '../utils/clients/tenderly';
 
 /**
- * Check all targets with code are verified on block explorer
+ * Check all targets with code are verified on Sourcify or block explorer
  */
 export const checkTargetsVerifiedOnBlockExplorer: ProposalCheck = {
-  name: 'Check all targets are verified on block explorer',
+  name: 'Check all targets are verified on Sourcify or block explorer',
   async checkProposal(proposal, sim, deps) {
     const isL2Chain = deps.chainConfig?.chainId !== 1;
 
@@ -36,10 +36,10 @@ export const checkTargetsVerifiedOnBlockExplorer: ProposalCheck = {
 };
 
 /**
- * Check all touched contracts with code are verified on Etherscan
+ * Check all touched contracts with code are verified on Sourcify or block explorer
  */
 export const checkTouchedContractsVerifiedOnBlockExplorer: ProposalCheck = {
-  name: 'Check all touched contracts are verified on block explorer',
+  name: 'Check all touched contracts are verified on Sourcify or block explorer',
   async checkProposal(_, sim, deps) {
     // Only check touched contracts on the main chain (chain 1), not on L2 simulations
     if (deps.chainConfig.chainId !== 1) {

@@ -98,6 +98,48 @@ function SimulationPlaceholderBadge({ className }: { className?: string }) {
   );
 }
 
+// --- Chain Logo Component ---
+// Official logos stored in /public/chain-logos/
+// Sources:
+// - Ethereum: https://github.com/0xa3k5/web3icons
+// - Optimism: https://github.com/0xa3k5/web3icons
+// - Base: https://github.com/base/brand-kit (The Square)
+// - Arbitrum: https://github.com/0xa3k5/web3icons
+
+function ChainLogo({ chainId, size = 20 }: { chainId: number; size?: number }) {
+  // Map chain IDs to logo file paths
+  const logoFiles: Record<number, string> = {
+    1: '/chain-logos/ethereum.svg',
+    10: '/chain-logos/optimism.svg',
+    8453: '/chain-logos/base.svg',
+    42161: '/chain-logos/arbitrum.svg',
+  };
+
+  const logoPath = logoFiles[chainId];
+
+  if (!logoPath) {
+    // Fallback: generic chain icon with chain ID
+    return (
+      <div
+        className="rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground"
+        style={{ width: size, height: size }}
+      >
+        {chainId}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={logoPath}
+      alt={`Chain ${chainId} logo`}
+      width={size}
+      height={size}
+      className="shrink-0"
+    />
+  );
+}
+
 interface SimulationWarningBannerProps {
   metadata: StructuredSimulationReport['metadata'];
 }
@@ -735,8 +777,9 @@ function CrossChainChecksSummary({ messages }: { messages: CrossChainMessagePrev
         {summary.chains.map((chain) => (
           <div key={chain.chainId} className="border border-border/50 rounded-md p-3 bg-muted/20">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="text-sm font-medium">
-                {chain.chainName} ({chain.chainId})
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <ChainLogo chainId={chain.chainId} size={18} />
+                {chain.chainName}
               </div>
               <div className="flex items-center gap-2">
                 {chain.bridgeType ? (
@@ -811,8 +854,9 @@ function CrossChainPreview({ messages }: { messages: CrossChainMessagePreview[] 
         return (
           <div key={chainId} className="border border-muted rounded-md p-4 bg-card">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="font-semibold">
-                {chainName} ({chainId})
+              <div className="flex items-center gap-2 font-semibold">
+                <ChainLogo chainId={chainId} size={20} />
+                {chainName}
               </div>
               {bridgeType ? (
                 <Badge variant="outline" className="text-xs">
@@ -1080,8 +1124,9 @@ export function StructuredReport({ report }: StructuredReportProps) {
                 className="rounded-lg border border-border/60 bg-card/50 p-4 sm:p-6 space-y-4"
               >
                 <div className="flex items-center justify-between gap-4">
-                  <h3 className="text-base sm:text-lg font-semibold">
-                    {chainReport.chainName}{' '}
+                  <h3 className="flex items-center gap-2 text-base sm:text-lg font-semibold">
+                    <ChainLogo chainId={chainReport.chainId} size={24} />
+                    {chainReport.chainName}
                     <span className="text-sm font-normal text-muted-foreground">
                       ({chainReport.chainId}){isMainChain ? ' • main chain' : ''}
                     </span>
@@ -1137,8 +1182,9 @@ export function StructuredReport({ report }: StructuredReportProps) {
                 key={`chain-state-changes-${chainReport.chainId}`}
                 className="rounded-lg border border-border/60 bg-card/50 p-4 sm:p-6 space-y-4"
               >
-                <h3 className="text-base sm:text-lg font-semibold">
-                  {chainReport.chainName}{' '}
+                <h3 className="flex items-center gap-2 text-base sm:text-lg font-semibold">
+                  <ChainLogo chainId={chainReport.chainId} size={24} />
+                  {chainReport.chainName}
                   <span className="text-sm font-normal text-muted-foreground">
                     ({chainReport.chainId}){isMainChain ? ' • main chain' : ''}
                   </span>
@@ -1273,8 +1319,8 @@ function parseSecurityOutput(details: string): ParsedSecurityOutput {
   const findings: ParsedSecurityFinding[] = [];
   const lines = details.split('\n');
 
-  // Count contracts analyzed
-  const contractMatches = details.match(/INFO:CryticCompile:Source-code/g);
+  // Count contracts analyzed - look for "Compiler warnings for" pattern
+  const contractMatches = details.match(/Compiler warnings for/g);
   const contractsAnalyzed = contractMatches?.length || 0;
 
   // Find actual slither findings (they have patterns like "Reference:" or detector names)
@@ -1658,8 +1704,10 @@ function ExpandableCheckItem({
   // Check if this is a state changes check
   const isStateChangesCheck = check.title.toLowerCase().includes('state changes');
 
-  // Check if this is a verification check (touched or targets verified on block explorer)
-  const isVerificationCheck = check.title.toLowerCase().includes('verified on block explorer');
+  // Check if this is a verification check (touched or targets verified on Sourcify/block explorer)
+  const isVerificationCheck =
+    check.title.toLowerCase().includes('verified on sourcify') ||
+    check.title.toLowerCase().includes('verified on block explorer');
   // Check if this is a proxy resolution check
   const isProxyResolutionCheck = check.title.toLowerCase().includes('proxy implementation');
 
