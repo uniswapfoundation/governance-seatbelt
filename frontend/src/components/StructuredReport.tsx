@@ -1125,11 +1125,20 @@ export function StructuredReport({ report }: StructuredReportProps) {
               >
                 <div className="flex items-center justify-between gap-4">
                   <h3 className="flex items-center gap-2 text-base sm:text-lg font-semibold">
-                    <ChainLogo chainId={chainReport.chainId} size={24} />
-                    {chainReport.chainName}
-                    <span className="text-sm font-normal text-muted-foreground">
-                      ({chainReport.chainId}){isMainChain ? ' • main chain' : ''}
-                    </span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="flex items-center gap-2 cursor-default">
+                          <ChainLogo chainId={chainReport.chainId} size={24} />
+                          {chainReport.chainName}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>Chain ID: {chainReport.chainId}</TooltipContent>
+                    </Tooltip>
+                    {isMainChain && (
+                      <Badge variant="secondary" className="text-xs font-normal">
+                        main chain
+                      </Badge>
+                    )}
                   </h3>
                   <Badge
                     variant="outline"
@@ -1183,11 +1192,20 @@ export function StructuredReport({ report }: StructuredReportProps) {
                 className="rounded-lg border border-border/60 bg-card/50 p-4 sm:p-6 space-y-4"
               >
                 <h3 className="flex items-center gap-2 text-base sm:text-lg font-semibold">
-                  <ChainLogo chainId={chainReport.chainId} size={24} />
-                  {chainReport.chainName}
-                  <span className="text-sm font-normal text-muted-foreground">
-                    ({chainReport.chainId}){isMainChain ? ' • main chain' : ''}
-                  </span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="flex items-center gap-2 cursor-default">
+                        <ChainLogo chainId={chainReport.chainId} size={24} />
+                        {chainReport.chainName}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Chain ID: {chainReport.chainId}</TooltipContent>
+                  </Tooltip>
+                  {isMainChain && (
+                    <Badge variant="secondary" className="text-xs font-normal">
+                      main chain
+                    </Badge>
+                  )}
                 </h3>
                 <StateChanges
                   stateChanges={chainReport.stateChanges}
