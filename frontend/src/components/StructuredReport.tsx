@@ -3,6 +3,7 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type {
   CrossChainMessagePreview,
   Proposal,
@@ -82,16 +83,6 @@ function getAddressLabel(
     }
   }
   return null;
-}
-
-function formatAddressWithLabel(
-  address: string,
-  metadata: StructuredSimulationReport['metadata'],
-  truncate = false,
-): { label: string | null; displayAddress: string } {
-  const label = getAddressLabel(address, metadata);
-  const displayAddress = truncate ? `${address.slice(0, 6)}...${address.slice(-4)}` : address;
-  return { label, displayAddress };
 }
 
 // --- Simulation warning components ---
@@ -1408,7 +1399,9 @@ function parseEventsFromDetails(details: string): ParsedEvent[] {
     const cleanLine = line.replace(/^\*\*Info\*\*:\s*/, '').trim();
 
     // Check if this is a contract header (e.g., "Proxy at `0x...`" or "ContractName at 0x...")
-    const contractMatch = cleanLine.match(/^([A-Za-z0-9_]+(?:\s*\([^)]+\))?)\s+at\s+[`']?(0x[a-fA-F0-9]{40})[`']?/);
+    const contractMatch = cleanLine.match(
+      /^([A-Za-z0-9_]+(?:\s*\([^)]+\))?)\s+at\s+[`']?(0x[a-fA-F0-9]{40})[`']?/,
+    );
     if (contractMatch) {
       if (currentContract) {
         result.push(currentContract);
@@ -1581,14 +1574,55 @@ function ExpandableCheckItem({
 
   const getStatusBadge = () => {
     if (check.status === 'warning') {
-      return (
+      const hasWarningMessages = check.warnings && check.warnings.length > 0;
+      const warningBadge = (
         <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
           Warning
         </Badge>
       );
+
+      // If there are warning messages, wrap in tooltip
+      if (hasWarningMessages) {
+        return (
+          <Tooltip>
+            <TooltipTrigger asChild>{warningBadge}</TooltipTrigger>
+            <TooltipContent
+              side="left"
+              className="max-w-xs bg-yellow-50 text-yellow-900 border-yellow-200"
+            >
+              <ul className="list-disc list-inside space-y-1 text-xs">
+                {check.warnings!.map((warning, idx) => (
+                  <li key={`tooltip-warning-${idx}`}>{warning}</li>
+                ))}
+              </ul>
+            </TooltipContent>
+          </Tooltip>
+        );
+      }
+
+      return warningBadge;
     }
     if (check.status === 'failed') {
-      return <Badge variant="destructive">Failed</Badge>;
+      const hasErrorMessages = check.errors && check.errors.length > 0;
+      const failedBadge = <Badge variant="destructive">Failed</Badge>;
+
+      // If there are error messages, wrap in tooltip
+      if (hasErrorMessages) {
+        return (
+          <Tooltip>
+            <TooltipTrigger asChild>{failedBadge}</TooltipTrigger>
+            <TooltipContent side="left" className="max-w-xs bg-red-50 text-red-900 border-red-200">
+              <ul className="list-disc list-inside space-y-1 text-xs">
+                {check.errors!.map((error, idx) => (
+                  <li key={`tooltip-error-${idx}`}>{error}</li>
+                ))}
+              </ul>
+            </TooltipContent>
+          </Tooltip>
+        );
+      }
+
+      return failedBadge;
     }
     if (check.status === 'skipped') {
       return (
@@ -1969,7 +2003,15 @@ function ExpandableCheckItem({
         })}
       </>
     );
-  }, [check.details, check.title, isStateChangesCheck, isSecurityCheck, isEventsCheck, stateChanges, metadata]);
+  }, [
+    check.details,
+    check.title,
+    isStateChangesCheck,
+    isSecurityCheck,
+    isEventsCheck,
+    stateChanges,
+    metadata,
+  ]);
 
   // Status-based styling
   const getStatusStyles = () => {
@@ -2027,6 +2069,24 @@ function ExpandableCheckItem({
       </button>
       {isExpanded && (check.details || check.skipReason || isTreasuryMovementCheck) && (
         <div className="px-3 pb-4 sm:px-4 sm:pb-4 sm:pl-12 text-sm border-t border-muted/50 bg-background/50">
+          {/* Display warnings if present */}
+          {check.warnings && check.warnings.length > 0 && (
+            <div className="mt-4 mb-4">
+              <Alert className="bg-yellow-50 border-yellow-200">
+                <AlertTriangleIcon className="h-4 w-4 text-yellow-600" />
+                <AlertTitle className="text-yellow-800 text-sm font-medium">
+                  {check.warnings.length === 1 ? 'Warning' : `${check.warnings.length} Warnings`}
+                </AlertTitle>
+                <AlertDescription className="text-yellow-700 text-sm">
+                  <ul className="list-disc list-inside space-y-1 mt-1">
+                    {check.warnings.map((warning, idx) => (
+                      <li key={`warning-${idx}`}>{warning}</li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
           {check.status === 'skipped' && check.skipReason ? (
             <div className="mt-4">
               <p className="text-muted-foreground italic">{check.skipReason}</p>
