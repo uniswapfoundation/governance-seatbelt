@@ -1725,6 +1725,12 @@ function StateChangeItem({
   const isHex32 = (value: string) => /^0x[0-9a-fA-F]{64}$/.test(value);
   const isDecimalInteger = (value: string) => /^-?\d+$/.test(value);
 
+  const isUniswapV3Slot0Change =
+    stateChange.contract.toLowerCase().includes('uniswapv3pool') &&
+    isHex32(oldValueCleaned) &&
+    isHex32(newValueCleaned) &&
+    /^0x0{64}$/i.test(stateChange.key);
+
   // Determine if the change is a simple value change or a complex one
   const isNumericChange = isDecimalInteger(oldValueCleaned) && isDecimalInteger(newValueCleaned);
   const isAddressChange = oldValueCleaned.startsWith('0x') && newValueCleaned.startsWith('0x');
@@ -1735,18 +1741,20 @@ function StateChangeItem({
   // Calculate difference for numeric values
   const getDifference = () => {
     // Special-case: Uniswap V3 Pool `slot0` packing can be decoded for a readable delta (feeProtocol/unlocked).
-    if (
-      stateChange.contract.toLowerCase().includes('uniswapv3pool') &&
-      isHex32(oldValueCleaned) &&
-      isHex32(newValueCleaned) &&
-      /^0x0{64}$/i.test(stateChange.key)
-    ) {
+    if (isUniswapV3Slot0Change) {
       try {
         const oldSlot0 = BigInt(oldValueCleaned);
         const newSlot0 = BigInt(newValueCleaned);
 
         const feeProtocolOld = Number((oldSlot0 >> 232n) & 0xffn);
         const feeProtocolNew = Number((newSlot0 >> 232n) & 0xffn);
+
+        // Uniswap V3 packs feeProtocol0 in the low 4 bits and feeProtocol1 in the high 4 bits.
+        const feeProtocol0Old = feeProtocolOld & 0x0f;
+        const feeProtocol1Old = feeProtocolOld >> 4;
+        const feeProtocol0New = feeProtocolNew & 0x0f;
+        const feeProtocol1New = feeProtocolNew >> 4;
+
         const unlockedOld = ((oldSlot0 >> 240n) & 0xffn) === 1n;
         const unlockedNew = ((newSlot0 >> 240n) & 0xffn) === 1n;
 
@@ -1756,7 +1764,11 @@ function StateChangeItem({
               <span className="text-muted-foreground">Decoded (Uniswap V3 slot0)</span>
             </div>
             <div className="text-xs font-mono">
-              feeProtocol: {feeProtocolOld} → {feeProtocolNew}
+              feeProtocol (raw): {feeProtocolOld} → {feeProtocolNew}
+            </div>
+            <div className="text-xs font-mono">
+              feeProtocol (token0, token1): ({feeProtocol0Old}, {feeProtocol1Old}) → (
+              {feeProtocol0New}, {feeProtocol1New})
             </div>
             <div className="text-xs font-mono">
               unlocked: {String(unlockedOld)} → {String(unlockedNew)}
@@ -1944,7 +1956,7 @@ function StateChangeItem({
         <div className="flex items-start gap-2">
           {isHex32(stateChange.key) ? (
             <div className="text-xs bg-muted-foreground/10 px-2 py-1 rounded text-muted-foreground">
-              Slot
+              {isUniswapV3Slot0Change ? 'slot0' : 'Slot'}
             </div>
           ) : null}
         </div>
