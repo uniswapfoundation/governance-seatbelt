@@ -309,24 +309,37 @@ function StateChanges({ stateChanges, metadata }: StateChangesProps) {
   // Create a default metadata for backwards compatibility
   const effectiveMetadata = metadata || { proposalId: '', proposer: '' as `0x${string}` };
 
+  // Calculate summary stats
+  const groupedChanges = stateChanges.reduce<Record<string, SimulationStateChange[]>>((acc, change) => {
+    const contractName = change.contract;
+    const key = `${contractName}|${change.contractAddress || ''}`;
+    if (!acc[key]) {
+      acc[key] = [];
+    }
+    acc[key].push(change);
+    return acc;
+  }, {});
+
+  const contractCount = Object.keys(groupedChanges).length;
+  const slotCount = stateChanges.length;
+
   return (
     <div className="space-y-6">
+      {/* Summary header */}
+      <div className="flex items-center gap-4 text-sm text-muted-foreground pb-2 border-b border-muted">
+        <span>
+          <strong className="text-foreground">{contractCount}</strong>{' '}
+          {contractCount === 1 ? 'contract' : 'contracts'} modified
+        </span>
+        <span>•</span>
+        <span>
+          <strong className="text-foreground">{slotCount}</strong>{' '}
+          {slotCount === 1 ? 'storage slot' : 'storage slots'} changed
+        </span>
+      </div>
+
       {/* Group state changes by contract */}
-      {Object.entries(
-        stateChanges.reduce<Record<string, SimulationStateChange[]>>((acc, change) => {
-          // Contract always exists on change but may be generic
-          const contractName = change.contract;
-
-          // We'll keep the original contract name in the key for grouping
-          const key = `${contractName}|${change.contractAddress || ''}`;
-
-          if (!acc[key]) {
-            acc[key] = [];
-          }
-          acc[key].push(change);
-          return acc;
-        }, {}),
-      ).map(([contractKey, changes]) => {
+      {Object.entries(groupedChanges).map(([contractKey, changes]) => {
         const [contractName, contractAddress] = contractKey.split('|');
         return (
           <div key={contractKey} className="space-y-3">
