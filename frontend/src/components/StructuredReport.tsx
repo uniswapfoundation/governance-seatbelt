@@ -1697,7 +1697,7 @@ function ExpandableCheckItem({
       '$1',
     );
 
-    // Then remove all other variations of Info prefixes
+    // Then remove all other variations of Info/Warning prefixes
     preprocessedDetails = preprocessedDetails
       .replace(/\*\*Info\*\*:/g, '')
       .replace(/\*\*Warnings\*\*:/g, '')
@@ -1706,7 +1706,11 @@ function ExpandableCheckItem({
       .replace(/^- \*\*Info\*\*:/gm, '')
       .replace(/^-\s*\*\*Info\*\*:/gm, '')
       .replace(/^-\s*Info:/gm, '')
-      .replace(/^-\s*/gm, '');
+      .replace(/^-\s*/gm, '')
+      // Remove "Warning:" prefix from lines (we show warning status via badge)
+      .replace(/^Warning:\s*/gm, '')
+      // Remove redundant "(simulation placeholder)" text since we show the badge
+      .replace(/\s*\(simulation placeholder\)/g, '');
 
     // Remove all markdown formatting
     const cleanedDetails = preprocessedDetails.replace(/\*\*([^*]+)\*\*:/g, '$1:');
@@ -1727,12 +1731,14 @@ function ExpandableCheckItem({
     return (
       <>
         {lines.map((line: string, index: number) => {
-          // Final cleanup for any remaining Info prefixes
+          // Final cleanup for any remaining Info/Warning prefixes
           let processedLine = line
             .replace(/^\*\*Info\*\*:\s*/, '')
             .replace(/^\*\*Info\*\*:\s*-\s*/, '')
             .replace(/^Info:\s*/, '')
-            .replace(/^Info\s*-\s*/, '');
+            .replace(/^Info\s*-\s*/, '')
+            .replace(/^Warning:\s*/, '')
+            .replace(/\s*\(simulation placeholder\)/g, '');
 
           // Remove "Info:" if it appears at the beginning of a line
           processedLine = processedLine
