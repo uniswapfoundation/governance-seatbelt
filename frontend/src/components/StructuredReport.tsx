@@ -352,15 +352,18 @@ function StateChanges({ stateChanges, metadata }: StateChangesProps) {
   const effectiveMetadata = metadata || { proposalId: '', proposer: '' as `0x${string}` };
 
   // Calculate summary stats
-  const groupedChanges = stateChanges.reduce<Record<string, SimulationStateChange[]>>((acc, change) => {
-    const contractName = change.contract;
-    const key = `${contractName}|${change.contractAddress || ''}`;
-    if (!acc[key]) {
-      acc[key] = [];
-    }
-    acc[key].push(change);
-    return acc;
-  }, {});
+  const groupedChanges = stateChanges.reduce<Record<string, SimulationStateChange[]>>(
+    (acc, change) => {
+      const contractName = change.contract;
+      const key = `${contractName}|${change.contractAddress || ''}`;
+      if (!acc[key]) {
+        acc[key] = [];
+      }
+      acc[key].push(change);
+      return acc;
+    },
+    {},
+  );
 
   const contractCount = Object.keys(groupedChanges).length;
   const slotCount = stateChanges.length;
@@ -1976,13 +1979,13 @@ function ExpandableCheckItem({
               if (fn.length <= 60) return fn;
               // Find the function name and opening paren
               const parenIndex = fn.indexOf('(');
-              if (parenIndex === -1) return fn.slice(0, 60) + '...';
+              if (parenIndex === -1) return `${fn.slice(0, 60)}...`;
               const fnName = fn.slice(0, parenIndex);
               const args = fn.slice(parenIndex + 1, -1);
               // Truncate each arg if it's a long hex string
               const truncatedArgs = args.split(', ').map((arg) => {
                 if (arg.startsWith('0x') && arg.length > 20) {
-                  return arg.slice(0, 10) + '...' + arg.slice(-6);
+                  return `${arg.slice(0, 10)}...${arg.slice(-6)}`;
                 }
                 return arg;
               });
