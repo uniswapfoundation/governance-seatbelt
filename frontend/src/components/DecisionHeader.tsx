@@ -15,7 +15,7 @@ import {
   XCircleIcon,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { buildBlockLink } from './StructuredReport';
+import { buildBlockLink } from './structured-report/explorer';
 
 interface DecisionHeaderProps {
   report: StructuredSimulationReport;
