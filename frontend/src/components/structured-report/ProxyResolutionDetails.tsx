@@ -2,7 +2,7 @@
 
 import { ArrowRightIcon, ShieldCheckIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import { AddressChip } from './AddressChip';
+import { AddressChip } from '../AddressChip';
 
 interface ProxyItem {
   type: 'eip1967' | 'beacon';

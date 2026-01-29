@@ -12,6 +12,7 @@ import {
   CheckCircleIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  HelpCircleIcon,
   InfoIcon,
   SkipForwardIcon,
 } from 'lucide-react';
@@ -39,28 +40,36 @@ export function ExpandableCheckItem({
   const [isExpanded, setIsExpanded] = useState(false);
 
   const getStatusIcon = () => {
-    if (check.status === 'warning') {
-      return <AlertTriangleIcon className="h-5 w-5 text-yellow-500" />;
+    switch (check.status) {
+      case 'warning':
+        return <AlertTriangleIcon className="h-5 w-5 text-yellow-500" />;
+      case 'failed':
+        return <AlertTriangleIcon className="h-5 w-5 text-red-500" />;
+      case 'skipped':
+        return <SkipForwardIcon className="h-5 w-5 text-gray-400" />;
+      case 'inconclusive':
+        return <HelpCircleIcon className="h-5 w-5 text-gray-500" />;
+      case 'passed':
+        return <CheckCircleIcon className="h-5 w-5 text-green-500" />;
+      default: {
+        const _exhaustive: never = check.status;
+        throw new Error(`Unhandled check status: ${_exhaustive}`);
+      }
     }
-    if (check.status === 'failed') {
-      return <AlertTriangleIcon className="h-5 w-5 text-red-500" />;
-    }
-    if (check.status === 'skipped') {
-      return <SkipForwardIcon className="h-5 w-5 text-gray-400" />;
-    }
-    return <CheckCircleIcon className="h-5 w-5 text-green-500" />;
   };
 
   const getStatusBadge = () => {
-    if (check.status === 'warning') {
-      const hasWarningMessages = check.warnings && check.warnings.length > 0;
-      const warningBadge = (
-        <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
-          Warning
-        </Badge>
-      );
+    switch (check.status) {
+      case 'warning': {
+        const hasWarningMessages = check.warnings && check.warnings.length > 0;
+        const warningBadge = (
+          <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+            Warning
+          </Badge>
+        );
 
-      if (hasWarningMessages) {
+        if (!hasWarningMessages) return warningBadge;
+
         return (
           <Tooltip>
             <TooltipTrigger asChild>{warningBadge}</TooltipTrigger>
@@ -77,14 +86,12 @@ export function ExpandableCheckItem({
           </Tooltip>
         );
       }
+      case 'failed': {
+        const hasErrorMessages = check.errors && check.errors.length > 0;
+        const failedBadge = <Badge variant="destructive">Failed</Badge>;
 
-      return warningBadge;
-    }
-    if (check.status === 'failed') {
-      const hasErrorMessages = check.errors && check.errors.length > 0;
-      const failedBadge = <Badge variant="destructive">Failed</Badge>;
+        if (!hasErrorMessages) return failedBadge;
 
-      if (hasErrorMessages) {
         return (
           <Tooltip>
             <TooltipTrigger asChild>{failedBadge}</TooltipTrigger>
@@ -98,21 +105,29 @@ export function ExpandableCheckItem({
           </Tooltip>
         );
       }
-
-      return failedBadge;
+      case 'skipped':
+        return (
+          <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-300">
+            Skipped
+          </Badge>
+        );
+      case 'inconclusive':
+        return (
+          <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-300">
+            Inconclusive
+          </Badge>
+        );
+      case 'passed':
+        return (
+          <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+            Passed
+          </Badge>
+        );
+      default: {
+        const _exhaustive: never = check.status;
+        throw new Error(`Unhandled check status: ${_exhaustive}`);
+      }
     }
-    if (check.status === 'skipped') {
-      return (
-        <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-300">
-          Skipped
-        </Badge>
-      );
-    }
-    return (
-      <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
-        Passed
-      </Badge>
-    );
   };
 
   const toggleExpanded = () => {
@@ -159,12 +174,22 @@ export function ExpandableCheckItem({
           bg: 'bg-gray-50/30',
           hoverBg: 'hover:bg-gray-50',
         };
-      default:
+      case 'inconclusive':
+        return {
+          border: 'border-l-4 border-l-slate-400 border-t border-r border-b border-slate-200',
+          bg: 'bg-slate-50/30',
+          hoverBg: 'hover:bg-slate-50',
+        };
+      case 'passed':
         return {
           border: 'border-l-4 border-l-green-500 border-t border-r border-b border-muted',
           bg: '',
           hoverBg: 'hover:bg-muted/50',
         };
+      default: {
+        const _exhaustive: never = check.status;
+        throw new Error(`Unhandled check status: ${_exhaustive}`);
+      }
     }
   };
 

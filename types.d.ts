@@ -620,6 +620,7 @@ export interface CoverageData {
  */
 export interface SimulationCheck {
   checkId?: string;
+  chainId?: number;
   title: string;
   status: 'passed' | 'warning' | 'failed' | 'skipped';
   skipReason?: string;
@@ -701,6 +702,19 @@ export interface CrossChainMessagePreview {
 
 export interface CrossChainPreview {
   messages: CrossChainMessagePreview[];
+  /**
+   * Optional per-chain check details for destination simulations.
+   * This is redundant with `StructuredSimulationReport.chainReports`, but is
+   * colocated under `crossChain` for integrators that primarily consume
+   * `crossChain.messages`.
+   */
+  destinationChains?: Array<{
+    chainId: number;
+    chainName: string;
+    blockExplorerBaseUrl?: string;
+    status: 'success' | 'warning' | 'error';
+    checks: SimulationCheck[];
+  }>;
 }
 
 export interface StructuredSimulationReport {

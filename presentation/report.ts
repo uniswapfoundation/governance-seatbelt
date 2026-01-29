@@ -183,6 +183,7 @@ function getSimulationContractLabel(
 
 async function buildCrossChainPreview(
   destinationSimulations: NonNullable<SimulationResult['destinationSimulations']>,
+  destinationChecks?: Record<number, AllCheckResults>,
 ): Promise<StructuredSimulationReport['crossChain']> {
   const messages = await Promise.all(
     destinationSimulations.map(async (dest) => {
@@ -222,7 +223,31 @@ async function buildCrossChainPreview(
     }),
   );
 
-  return { messages };
+  const chains =
+    destinationChecks && Object.keys(destinationChecks).length > 0
+      ? Object.entries(destinationChecks)
+          .map(([chainIdStr, checks]) => {
+            const chainId = Number(chainIdStr);
+
+            let blockExplorerBaseUrl = 'https://etherscan.io';
+            try {
+              blockExplorerBaseUrl = getChainConfig(chainId).blockExplorer.baseUrl;
+            } catch {
+              // Ignore unknown chain configs.
+            }
+
+            return {
+              chainId,
+              chainName: getChainName(chainId),
+              blockExplorerBaseUrl,
+              status: getStatusForChecks(checks),
+              checks: formatChecksForStructuredReport(checks, chainId),
+            };
+          })
+          .sort((a, b) => a.chainId - b.chainId)
+      : undefined;
+
+  return { messages, destinationChains: chains };
 }
 
 // --- Repository and Tenderly utilities ---
@@ -653,6 +678,65 @@ function extractCalldata(
   return undefined;
 }
 
+function getStatusForChecks(value: AllCheckResults): 'success' | 'warning' | 'error' {
+  let hasErrors = false;
+  let hasWarnings = false;
+
+  for (const checkId in value) {
+    const { result } = value[checkId];
+    if (result.errors.length > 0) hasErrors = true;
+    if (result.warnings.length > 0) hasWarnings = true;
+  }
+
+  if (hasErrors) return 'error';
+  if (hasWarnings) return 'warning';
+  return 'success';
+}
+
+function formatChecksForStructuredReport(
+  value: AllCheckResults,
+  chainId?: number,
+): SimulationCheck[] {
+  return Object.entries(value).map(([checkId, check]) => {
+    const { name, result } = check;
+    const { errors, warnings, info, skipped } = result;
+
+    let checkStatus: 'passed' | 'warning' | 'failed' | 'skipped' = 'passed';
+    let skipReason: string | undefined;
+
+    if (skipped) {
+      checkStatus = 'skipped';
+      skipReason = skipped.reason;
+    } else if (errors.length > 0) {
+      checkStatus = 'failed';
+    } else if (warnings.length > 0) {
+      checkStatus = 'warning';
+    }
+
+    const details = [
+      ...(skipped ? [`**Skipped**: ${skipped.reason}`] : []),
+      ...errors.map((msg) => `**Error**: ${msg}`),
+      ...warnings.map((msg) => `**Warning**: ${msg}`),
+      ...info.map((msg) => `**Info**: ${msg}`),
+    ].join('\n\n');
+
+    return {
+      checkId,
+      chainId,
+      title: name,
+      status: checkStatus,
+      skipReason,
+      warningCount: warnings.length,
+      errorCount: errors.length,
+      details,
+      info,
+      warnings,
+      errors,
+      data: result.data,
+    };
+  });
+}
+
 /**
  * Generate a structured report from the check results
  */
@@ -686,66 +770,11 @@ function generateStructuredReport(
   // Determine overall status
   let status: 'success' | 'warning' | 'error' | 'inconclusive' = 'success';
 
-  const getStatusForChecks = (value: AllCheckResults): 'success' | 'warning' | 'error' => {
-    let hasErrors = false;
-    let hasWarnings = false;
-
-    for (const checkId in value) {
-      const { result } = value[checkId];
-      if (result.errors.length > 0) hasErrors = true;
-      if (result.warnings.length > 0) hasWarnings = true;
-    }
-
-    if (hasErrors) return 'error';
-    if (hasWarnings) return 'warning';
-    return 'success';
-  };
-
   // Set status based on conditions (skips are informational and do not make the report inconclusive)
   status = getStatusForChecks(checks);
 
-  const formatChecks = (value: AllCheckResults): SimulationCheck[] =>
-    Object.entries(value).map(([checkId, check]) => {
-      const { name, result } = check;
-      const { errors, warnings, info, skipped } = result;
-
-      let checkStatus: 'passed' | 'warning' | 'failed' | 'skipped' = 'passed';
-      let skipReason: string | undefined;
-
-      if (skipped) {
-        checkStatus = 'skipped';
-        skipReason = skipped.reason;
-      } else if (errors.length > 0) {
-        checkStatus = 'failed';
-      } else if (warnings.length > 0) {
-        checkStatus = 'warning';
-      }
-
-      // Combine all messages into details
-      const details = [
-        ...(skipped ? [`**Skipped**: ${skipped.reason}`] : []),
-        ...errors.map((msg) => `**Error**: ${msg}`),
-        ...warnings.map((msg) => `**Warning**: ${msg}`),
-        ...info.map((msg) => `**Info**: ${msg}`),
-      ].join('\n\n');
-
-      return {
-        checkId,
-        title: name,
-        status: checkStatus,
-        skipReason,
-        warningCount: warnings.length,
-        errorCount: errors.length,
-        details,
-        info,
-        warnings,
-        errors,
-        data: result.data,
-      };
-    });
-
   // Format checks
-  const formattedChecks: SimulationCheck[] = formatChecks(checks);
+  const formattedChecks: SimulationCheck[] = formatChecksForStructuredReport(checks, chainId ?? 1);
 
   // Get chain configuration for explorer URL
   const targetChainId = chainId ?? 1; // Default to mainnet
@@ -816,7 +845,7 @@ function generateStructuredReport(
         chainName: getChainName(destChainId),
         blockExplorerBaseUrl: destBlockExplorerBaseUrl,
         status: getStatusForChecks(destChecks),
-        checks: formatChecks(destChecks),
+        checks: formatChecksForStructuredReport(destChecks, destChainId),
         stateChanges: extractStateChanges(destChecks),
         events: extractEvents(destChecks),
       };
@@ -1074,7 +1103,10 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
   // Add cross-chain preview data (Issue #101)
   if (destinationSimulations && destinationSimulations.length > 0) {
     try {
-      structuredReport.crossChain = await buildCrossChainPreview(destinationSimulations);
+      structuredReport.crossChain = await buildCrossChainPreview(
+        destinationSimulations,
+        destinationChecks,
+      );
     } catch (error) {
       console.warn('[Report] Failed to build cross-chain preview:', error);
       // Continue without cross-chain preview - it's optional.

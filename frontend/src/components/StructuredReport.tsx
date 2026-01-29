@@ -46,7 +46,9 @@ export function StructuredReport({ report }: StructuredReportProps) {
               ? 'error'
               : report.status === 'warning'
                 ? 'warning'
-                : 'success',
+                : report.status === 'inconclusive'
+                  ? 'inconclusive'
+                  : 'success',
           checks: report.checks,
           stateChanges: report.stateChanges,
           events: report.events,
@@ -196,6 +198,7 @@ export function StructuredReport({ report }: StructuredReportProps) {
           {report.crossChain?.messages?.length ? (
             <CrossChainChecksSummary messages={report.crossChain.messages} />
           ) : null}
+
           {chainReports.map((chainReport) => {
             const isMainChain = chainReport.chainId === mainChainId;
             const effectiveMetadata = {
@@ -235,14 +238,18 @@ export function StructuredReport({ report }: StructuredReportProps) {
                         ? 'bg-red-100 text-red-800 border-red-300'
                         : chainReport.status === 'warning'
                           ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
-                          : 'bg-green-100 text-green-800 border-green-300'
+                          : chainReport.status === 'inconclusive'
+                            ? 'bg-slate-100 text-slate-700 border-slate-300'
+                            : 'bg-green-100 text-green-800 border-green-300'
                     }
                   >
                     {chainReport.status === 'error'
                       ? 'Errors'
                       : chainReport.status === 'warning'
                         ? 'Warnings'
-                        : 'Passed'}
+                        : chainReport.status === 'inconclusive'
+                          ? 'Inconclusive'
+                          : 'Passed'}
                   </Badge>
                 </div>
 

@@ -30,11 +30,17 @@ export type TreasuryMovementCheckDataV1 = {
 
 export function isTreasuryMovementCheckDataV1(data: unknown): data is TreasuryMovementCheckDataV1 {
   if (!data || typeof data !== 'object') return false;
-  const d = data as Partial<TreasuryMovementCheckDataV1>;
+  const d = data as Record<string, unknown>;
+  const thresholds = d.thresholds as Record<string, unknown> | null | undefined;
   return (
     d.type === 'treasuryMovement/v1' &&
     typeof d.blockExplorerBaseUrl === 'string' &&
     Array.isArray(d.treasuryAddresses) &&
+    thresholds != null &&
+    typeof thresholds === 'object' &&
+    typeof thresholds.totalUsdWarning === 'number' &&
+    typeof thresholds.recipientUsdWarning === 'number' &&
+    typeof thresholds.topRecipients === 'number' &&
     typeof d.totalOutgoingUsd === 'number' &&
     typeof d.transferCount === 'number' &&
     Array.isArray(d.topRecipients)
