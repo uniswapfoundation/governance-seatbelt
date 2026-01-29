@@ -197,10 +197,18 @@ export interface CheckCoverage {
 ### `CrossChainPreview` (destination simulation preview)
 
 This is a lightweight, UI-friendly summary of extracted L2 messages. It is **optional** and may be absent.
+If `destinationChains` is present, it includes the full per-chain check findings for destination simulations.
 
 ```ts
 export interface CrossChainPreview {
   messages: CrossChainMessagePreview[];
+  destinationChains?: Array<{
+    chainId: number;
+    chainName: string;
+    blockExplorerBaseUrl?: string;
+    status: 'success' | 'warning' | 'error';
+    checks: SimulationCheck[];
+  }>;
 }
 
 export interface CrossChainMessagePreview {
@@ -406,4 +414,3 @@ export async function loadSeatbeltDecision(filePath: string): Promise<Decision> 
   return 'PASS';
 }
 ```
-
