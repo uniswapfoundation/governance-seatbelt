@@ -25,8 +25,7 @@ import {
   SkipForwardIcon,
   UserIcon,
 } from 'lucide-react';
-import type React from 'react';
-import { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DecisionHeader } from './DecisionHeader';
 import {
   TreasuryMovementCheck,
@@ -338,6 +337,8 @@ interface StateChangesProps {
   metadata?: StructuredSimulationReport['metadata'];
 }
 
+const MemoStateChangeItem = React.memo(StateChangeItem);
+
 function StateChanges({ stateChanges, metadata }: StateChangesProps) {
   if (stateChanges.length === 0) {
     return (
@@ -420,7 +421,7 @@ function StateChanges({ stateChanges, metadata }: StateChangesProps) {
             {/* State changes for this contract */}
             <div className="space-y-3 pl-2">
               {changes.map((change, index) => (
-                <StateChangeItem
+                <MemoStateChangeItem
                   key={`state-${change.contract}-${change.key}-${index}`}
                   stateChange={change}
                   metadata={effectiveMetadata}
@@ -1250,6 +1251,8 @@ interface ChecksSectionProps {
   metadata?: StructuredSimulationReport['metadata'];
 }
 
+const MemoExpandableCheckItem = React.memo(ExpandableCheckItem);
+
 function ChecksSection({ checks, stateChanges, metadata }: ChecksSectionProps) {
   // Group checks by status
   const grouped = useMemo(() => {
@@ -1304,7 +1307,7 @@ function ChecksSection({ checks, stateChanges, metadata }: ChecksSectionProps) {
       {/* Checks list */}
       <div className="space-y-2">
         {orderedChecks.map((check, index) => (
-          <ExpandableCheckItem
+          <MemoExpandableCheckItem
             key={`check-${check.title}-${index}`}
             check={check}
             stateChanges={stateChanges}
@@ -1638,6 +1641,8 @@ function ExpandableCheckItem({
   metadata?: StructuredSimulationReport['metadata'];
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [formattedDetails, setFormattedDetails] = useState<React.ReactNode | null>(null);
+  const [hasComputedFormattedDetails, setHasComputedFormattedDetails] = useState(false);
 
   const getStatusIcon = () => {
     if (check.status === 'warning') {
@@ -1719,7 +1724,13 @@ function ExpandableCheckItem({
   };
 
   const toggleExpanded = () => {
-    setIsExpanded(!isExpanded);
+    const nextExpanded = !isExpanded;
+    setIsExpanded(nextExpanded);
+
+    if (nextExpanded && !hasComputedFormattedDetails && shouldComputeFormattedDetails) {
+      setFormattedDetails(computeFormattedDetails());
+      setHasComputedFormattedDetails(true);
+    }
   };
 
   // Check if this is a state changes check
@@ -1756,8 +1767,67 @@ function ExpandableCheckItem({
     return parseTreasuryMovementDetails(check.details);
   }, [isTreasuryMovementCheck, check.data, check.details, check.warnings]);
 
-  // Format the details content as React components
-  const FormattedDetails = useMemo(() => {
+  const shouldComputeFormattedDetails =
+    !!check.details &&
+    !isStateChangesCheck &&
+    !(isVerificationCheck && !!check.details) &&
+    !(isProxyResolutionCheck && !!check.details) &&
+    !(isTreasuryMovementCheck && !!treasuryData);
+
+  const stateChangesSignature = useMemo(() => {
+    if (!stateChanges || stateChanges.length === 0) return 'none';
+    const first = stateChanges[0];
+    const last = stateChanges[stateChanges.length - 1];
+    return `${stateChanges.length}:${first.contract}:${first.key}:${last.contract}:${last.key}`;
+  }, [stateChanges]);
+
+  const metadataSignature = useMemo(() => {
+    if (!metadata) return 'none';
+    const placeholderCount = metadata.placeholderAddresses?.length ?? 0;
+    const addressLabelCount = metadata.addressLabels
+      ? Object.keys(metadata.addressLabels).length
+      : 0;
+    return `${metadata.proposalId}:${metadata.chainId ?? ''}:${metadata.blockExplorerBaseUrl ?? ''}:${placeholderCount}:${addressLabelCount}`;
+  }, [metadata]);
+
+  const detailsSignature = useMemo(() => {
+    if (!check.details) return 'none';
+    const length = check.details.length;
+    const head = check.details.slice(0, 64);
+    const tail = check.details.slice(-64);
+    return `${length}:${head}:${tail}`;
+  }, [check.details]);
+
+  const formattedDetailsResetKey = useMemo(() => {
+    return [
+      shouldComputeFormattedDetails ? '1' : '0',
+      check.title,
+      detailsSignature,
+      isStateChangesCheck ? '1' : '0',
+      isSecurityCheck ? '1' : '0',
+      isEventsCheck ? '1' : '0',
+      stateChangesSignature,
+      metadataSignature,
+    ].join('|');
+  }, [
+    shouldComputeFormattedDetails,
+    check.title,
+    detailsSignature,
+    isStateChangesCheck,
+    isSecurityCheck,
+    isEventsCheck,
+    stateChangesSignature,
+    metadataSignature,
+  ]);
+
+  useEffect(() => {
+    if (!formattedDetailsResetKey) return;
+    setFormattedDetails(null);
+    setHasComputedFormattedDetails(false);
+  }, [formattedDetailsResetKey]);
+
+  // Format the details content as React components (computed lazily on first expand)
+  const computeFormattedDetails = useCallback((): React.ReactNode | null => {
     if (!check.details) return null;
 
     // Use SecurityAnalysisOutput for slither/solc checks
@@ -2335,7 +2405,7 @@ function ExpandableCheckItem({
               <TreasuryMovementCheck {...treasuryData} />
             </div>
           ) : (
-            <div className="mt-4 whitespace-pre-wrap">{FormattedDetails}</div>
+            <div className="mt-4 whitespace-pre-wrap">{formattedDetails}</div>
           )}
         </div>
       )}
