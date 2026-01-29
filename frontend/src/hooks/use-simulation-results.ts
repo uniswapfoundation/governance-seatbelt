@@ -13,7 +13,7 @@ export interface Proposal {
 export interface SimulationCheck {
   checkId?: string;
   title: string;
-  status: 'passed' | 'warning' | 'failed' | 'skipped';
+  status: 'passed' | 'warning' | 'failed' | 'skipped' | 'inconclusive';
   skipReason?: string;
   warningCount?: number;
   errorCount?: number;
@@ -129,7 +129,7 @@ export interface ChainSimulationReport {
   chainId: number;
   chainName: string;
   blockExplorerBaseUrl?: string;
-  status: 'success' | 'warning' | 'error';
+  status: 'success' | 'warning' | 'error' | 'inconclusive';
   checks: SimulationCheck[];
   stateChanges: SimulationStateChange[];
   events: SimulationEvent[];
