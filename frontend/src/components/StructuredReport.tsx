@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useMemo, useState } from 'react';
+import { AddressChip } from './AddressChip';
 import { DecisionHeader } from './DecisionHeader';
 import {
   TreasuryMovementCheck,
@@ -39,18 +40,6 @@ import {
 
 function getExplorerUrl(metadata: StructuredSimulationReport['metadata']): string {
   return metadata.blockExplorerBaseUrl || 'https://etherscan.io';
-}
-
-function buildAddressLink(
-  address: string,
-  metadata: StructuredSimulationReport['metadata'],
-): string {
-  const baseUrl = getExplorerUrl(metadata);
-  return `${baseUrl}/address/${address}`;
-}
-
-function buildAddressLinkForExplorer(address: string, baseUrl: string): string {
-  return `${baseUrl || 'https://etherscan.io'}/address/${address}`;
 }
 
 export function buildBlockLink(
@@ -249,8 +238,16 @@ function parseProxyDetails(details: string): ProxyItem[] {
   return items;
 }
 
-function ProxyResolutionDetails({ details }: { details: string }) {
+function ProxyResolutionDetails({
+  details,
+  metadata,
+}: {
+  details: string;
+  metadata?: StructuredSimulationReport['metadata'];
+}) {
   const items = useMemo(() => parseProxyDetails(details), [details]);
+  const effectiveMetadata = metadata || { proposalId: '', proposer: '' as `0x${string}` };
+  const explorerBaseUrl = getExplorerUrl(effectiveMetadata);
 
   if (items.length === 0) {
     return (
@@ -278,20 +275,28 @@ function ProxyResolutionDetails({ details }: { details: string }) {
           <div className="px-4 py-3">
             <div className="flex items-center gap-2 flex-wrap">
               {/* Proxy */}
-              <AddressChip address={item.proxy} label="Proxy" />
+              <AddressChip address={item.proxy} label="Proxy" blockExplorerUrl={explorerBaseUrl} />
 
               <ArrowRightIcon className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
 
               {/* Beacon (if present) */}
               {item.beacon && (
                 <>
-                  <AddressChip address={item.beacon} label="Beacon" />
+                  <AddressChip
+                    address={item.beacon}
+                    label="Beacon"
+                    blockExplorerUrl={explorerBaseUrl}
+                  />
                   <ArrowRightIcon className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
                 </>
               )}
 
               {/* Implementation */}
-              <AddressChip address={item.implementation} label="Impl" />
+              <AddressChip
+                address={item.implementation}
+                label="Impl"
+                blockExplorerUrl={explorerBaseUrl}
+              />
             </div>
 
             {/* Verification Badge */}
@@ -305,30 +310,6 @@ function ProxyResolutionDetails({ details }: { details: string }) {
         </div>
       ))}
     </div>
-  );
-}
-
-function AddressChip({ address, label }: { address: string; label?: string }) {
-  const truncated = `${address.slice(0, 6)}...${address.slice(-4)}`;
-
-  return (
-    <a
-      href={`https://etherscan.io/address/${address}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/60 hover:bg-muted transition-colors"
-      title={address}
-    >
-      {label && (
-        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
-          {label}
-        </span>
-      )}
-      <code className="text-xs font-mono text-foreground/80 group-hover:text-foreground">
-        {truncated}
-      </code>
-      <ExternalLinkIcon className="h-3 w-3 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
-    </a>
   );
 }
 
@@ -350,6 +331,7 @@ function StateChanges({ stateChanges, metadata }: StateChangesProps) {
 
   // Create a default metadata for backwards compatibility
   const effectiveMetadata = metadata || { proposalId: '', proposer: '' as `0x${string}` };
+  const explorerBaseUrl = getExplorerUrl(effectiveMetadata);
 
   // Calculate summary stats
   const groupedChanges = stateChanges.reduce<Record<string, SimulationStateChange[]>>(
@@ -400,16 +382,7 @@ function StateChanges({ stateChanges, metadata }: StateChangesProps) {
                       : contractName}
                 {contractAddress && (
                   <span className="ml-2 text-sm font-normal inline-flex items-center gap-2">
-                    at{' '}
-                    <a
-                      href={buildAddressLink(contractAddress, effectiveMetadata)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
-                    >
-                      {contractAddress}
-                      <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                    </a>
+                    at <AddressChip address={contractAddress} blockExplorerUrl={explorerBaseUrl} />
                     {isPlaceholderAddress(contractAddress, effectiveMetadata) && (
                       <SimulationPlaceholderBadge />
                     )}
@@ -480,14 +453,17 @@ function parseVerificationLine(line: string): ParsedContract | null {
 interface ContractVerificationListProps {
   details: string;
   info?: string[];
+  metadata?: StructuredSimulationReport['metadata'];
 }
 
-function ContractVerificationList({ details, info }: ContractVerificationListProps) {
+function ContractVerificationList({ details, info, metadata }: ContractVerificationListProps) {
   // Parse all contracts from info array or details string
   const contracts = useMemo(() => {
     const lines = info || details.split('\n').filter((l) => l.trim());
     return lines.map(parseVerificationLine).filter((c): c is ParsedContract => c !== null);
   }, [details, info]);
+  const effectiveMetadata = metadata || { proposalId: '', proposer: '' as `0x${string}` };
+  const explorerBaseUrl = getExplorerUrl(effectiveMetadata);
 
   // Group contracts by status
   const grouped = useMemo(() => {
@@ -546,7 +522,12 @@ function ContractVerificationList({ details, info }: ContractVerificationListPro
           </h4>
           <div className="space-y-2">
             {grouped.unverified.map((contract) => (
-              <ContractCard key={contract.address} contract={contract} variant="danger" />
+              <ContractCard
+                key={contract.address}
+                contract={contract}
+                variant="danger"
+                blockExplorerUrl={explorerBaseUrl}
+              />
             ))}
           </div>
         </div>
@@ -561,7 +542,12 @@ function ContractVerificationList({ details, info }: ContractVerificationListPro
           </h4>
           <div className="space-y-2">
             {grouped.verified.map((contract) => (
-              <ContractCard key={contract.address} contract={contract} variant="success" />
+              <ContractCard
+                key={contract.address}
+                contract={contract}
+                variant="success"
+                blockExplorerUrl={explorerBaseUrl}
+              />
             ))}
           </div>
         </div>
@@ -576,7 +562,12 @@ function ContractVerificationList({ details, info }: ContractVerificationListPro
           </h4>
           <div className="space-y-2">
             {grouped.eoa.map((contract) => (
-              <ContractCard key={contract.address} contract={contract} variant="neutral" />
+              <ContractCard
+                key={contract.address}
+                contract={contract}
+                variant="neutral"
+                blockExplorerUrl={explorerBaseUrl}
+              />
             ))}
           </div>
         </div>
@@ -591,7 +582,12 @@ function ContractVerificationList({ details, info }: ContractVerificationListPro
           </h4>
           <div className="space-y-2">
             {grouped.unknown.map((contract) => (
-              <ContractCard key={contract.address} contract={contract} variant="neutral" />
+              <ContractCard
+                key={contract.address}
+                contract={contract}
+                variant="neutral"
+                blockExplorerUrl={explorerBaseUrl}
+              />
             ))}
           </div>
         </div>
@@ -604,9 +600,10 @@ function ContractVerificationList({ details, info }: ContractVerificationListPro
 interface ContractCardProps {
   contract: ParsedContract;
   variant: 'success' | 'danger' | 'neutral';
+  blockExplorerUrl?: string;
 }
 
-function ContractCard({ contract, variant }: ContractCardProps) {
+function ContractCard({ contract, variant, blockExplorerUrl }: ContractCardProps) {
   const variantStyles = {
     success: {
       card: 'bg-green-50 border-green-200 hover:border-green-300',
@@ -633,15 +630,11 @@ function ContractCard({ contract, variant }: ContractCardProps) {
     >
       <div className="flex items-center gap-3 min-w-0 flex-1">
         {styles.icon}
-        <a
-          href={`https://etherscan.io/address/${contract.address}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="font-mono text-sm truncate hover:underline inline-flex items-center gap-1 group"
-        >
-          <span className="truncate">{contract.address}</span>
-          <ExternalLinkIcon className="h-3 w-3 opacity-50 group-hover:opacity-100 flex-shrink-0" />
-        </a>
+        <AddressChip
+          address={contract.address}
+          blockExplorerUrl={blockExplorerUrl}
+          className="text-sm"
+        />
       </div>
       <Badge variant="outline" className={`text-xs font-medium flex-shrink-0 ${styles.badge}`}>
         {contract.statusLabel}
@@ -814,16 +807,7 @@ function CrossChainChecksSummary({ messages }: { messages: CrossChainMessagePrev
                     </code>
                     {m.targetLabel ? <span>{m.targetLabel}</span> : null}
                     {m.target ? (
-                      <a
-                        href={buildAddressLinkForExplorer(m.target, chain.explorerBaseUrl)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-mono bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
-                        title={m.target}
-                      >
-                        {m.target.slice(0, 6)}...{m.target.slice(-4)}
-                        <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                      </a>
+                      <AddressChip address={m.target} blockExplorerUrl={chain.explorerBaseUrl} />
                     ) : null}
                   </div>
                 ))}
@@ -901,16 +885,7 @@ function CrossChainPreview({ messages }: { messages: CrossChainMessagePreview[] 
                         <span className="text-muted-foreground">Target:</span>
                         {targetLabel ? <span>{targetLabel}</span> : null}
                         {target ? (
-                          <a
-                            href={buildAddressLinkForExplorer(target, explorerBaseUrl)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
-                            title={target}
-                          >
-                            {target.slice(0, 6)}...{target.slice(-4)}
-                            <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                          </a>
+                          <AddressChip address={target} blockExplorerUrl={explorerBaseUrl} />
                         ) : (
                           <span className="text-muted-foreground">(unknown)</span>
                         )}
@@ -947,6 +922,7 @@ export function StructuredReport({ report }: StructuredReportProps) {
   const blockNumber =
     report.metadata.simulationBlockNumber || report.metadata.blockNumber || 'unknown';
   const timestamp = report.metadata.simulationTimestamp || report.metadata.timestamp || '0';
+  const explorerBaseUrl = getExplorerUrl(report.metadata);
 
   const mainChainId = report.metadata.chainId ?? 1;
   const chainReports = report.chainReports?.length
@@ -1039,20 +1015,11 @@ export function StructuredReport({ report }: StructuredReportProps) {
                       {getAddressLabel(report.metadata.proposer, report.metadata)}
                     </span>
                   )}
-                  <a
-                    href={buildAddressLink(report.metadata.proposer, report.metadata)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-mono text-xs hover:underline inline-flex items-center gap-1 break-all text-muted-foreground"
-                  >
-                    <span className="hidden sm:inline">
-                      {report.metadata.proposer.slice(0, 6)}...{report.metadata.proposer.slice(-4)}
-                    </span>
-                    <span className="sm:hidden">
-                      {report.metadata.proposer.slice(0, 6)}...{report.metadata.proposer.slice(-4)}
-                    </span>
-                    <ExternalLinkIcon className="h-3 w-3 shrink-0" />
-                  </a>
+                  <AddressChip
+                    address={report.metadata.proposer}
+                    blockExplorerUrl={explorerBaseUrl}
+                    className="text-muted-foreground"
+                  />
                   {report.metadata.proposerIsPlaceholder && <SimulationPlaceholderBadge />}
                 </div>
               </MetadataItem>
@@ -1064,18 +1031,11 @@ export function StructuredReport({ report }: StructuredReportProps) {
                         {getAddressLabel(report.metadata.executor, report.metadata)}
                       </span>
                     )}
-                    <a
-                      href={buildAddressLink(report.metadata.executor, report.metadata)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-xs hover:underline inline-flex items-center gap-1 break-all text-muted-foreground"
-                    >
-                      <span>
-                        {report.metadata.executor.slice(0, 6)}...
-                        {report.metadata.executor.slice(-4)}
-                      </span>
-                      <ExternalLinkIcon className="h-3 w-3 shrink-0" />
-                    </a>
+                    <AddressChip
+                      address={report.metadata.executor}
+                      blockExplorerUrl={explorerBaseUrl}
+                      className="text-muted-foreground"
+                    />
                     {report.metadata.executorIsPlaceholder && <SimulationPlaceholderBadge />}
                   </div>
                 </MetadataItem>
@@ -1088,18 +1048,11 @@ export function StructuredReport({ report }: StructuredReportProps) {
                         {getAddressLabel(report.metadata.governorAddress, report.metadata)}
                       </span>
                     )}
-                    <a
-                      href={buildAddressLink(report.metadata.governorAddress, report.metadata)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-xs hover:underline inline-flex items-center gap-1 break-all text-muted-foreground"
-                    >
-                      <span>
-                        {report.metadata.governorAddress.slice(0, 6)}...
-                        {report.metadata.governorAddress.slice(-4)}
-                      </span>
-                      <ExternalLinkIcon className="h-3 w-3 shrink-0" />
-                    </a>
+                    <AddressChip
+                      address={report.metadata.governorAddress}
+                      blockExplorerUrl={explorerBaseUrl}
+                      className="text-muted-foreground"
+                    />
                   </div>
                 </MetadataItem>
               )}
@@ -1543,6 +1496,7 @@ function EventsDisplay({
 }) {
   const parsedEvents = useMemo(() => parseEventsFromDetails(details), [details]);
   const effectiveMetadata = metadata || { proposalId: '', proposer: '' as `0x${string}` };
+  const explorerBaseUrl = getExplorerUrl(effectiveMetadata);
 
   if (parsedEvents.length === 0) {
     return <p className="text-muted-foreground text-sm">No events to display</p>;
@@ -1556,15 +1510,11 @@ function EventsDisplay({
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium text-sm">{contract.contractName}</span>
             {contract.contractAddress && (
-              <a
-                href={buildAddressLink(contract.contractAddress, effectiveMetadata)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-xs bg-muted/50 px-2 py-0.5 rounded hover:underline inline-flex items-center gap-1 text-muted-foreground"
-              >
-                {contract.contractAddress.slice(0, 6)}...{contract.contractAddress.slice(-4)}
-                <ExternalLinkIcon className="h-3 w-3" />
-              </a>
+              <AddressChip
+                address={contract.contractAddress}
+                blockExplorerUrl={explorerBaseUrl}
+                className="bg-muted/50 px-2 text-muted-foreground"
+              />
             )}
           </div>
 
@@ -1596,15 +1546,11 @@ function EventsDisplay({
                             {param.name}:
                           </span>
                           {isAddress ? (
-                            <a
-                              href={buildAddressLink(param.value, effectiveMetadata)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-mono text-xs hover:underline inline-flex items-center gap-1 text-blue-600"
-                            >
-                              {truncateHex(param.value, 16)}
-                              <ExternalLinkIcon className="h-3 w-3" />
-                            </a>
+                            <AddressChip
+                              address={param.value}
+                              blockExplorerUrl={explorerBaseUrl}
+                              className="text-blue-600"
+                            />
                           ) : (
                             <span
                               className={`font-mono text-xs break-all ${isLongHex ? 'text-muted-foreground' : ''}`}
@@ -1802,6 +1748,7 @@ function ExpandableCheckItem({
 
     // Create effective metadata for dynamic explorer links
     const effectiveMetadata = metadata || { proposalId: '', proposer: '' as `0x${string}` };
+    const explorerBaseUrl = getExplorerUrl(effectiveMetadata);
 
     if (isStateChangesCheck) {
       // Only return StateChanges if stateChanges exists and is not empty
@@ -1852,15 +1799,7 @@ function ExpandableCheckItem({
                     {contractName}
                     <span className="text-sm font-normal inline-flex items-center gap-2">
                       at{' '}
-                      <a
-                        href={buildAddressLink(contractAddress, effectiveMetadata)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
-                      >
-                        {contractAddress}
-                        <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                      </a>
+                      <AddressChip address={contractAddress} blockExplorerUrl={explorerBaseUrl} />
                       {isPlaceholderAddress(contractAddress, effectiveMetadata) && (
                         <SimulationPlaceholderBadge />
                       )}
@@ -1931,15 +1870,7 @@ function ExpandableCheckItem({
               return (
                 <div key={`target-${address}-${index}`} className="mb-2">
                   <div className="flex items-center justify-between gap-2 p-2 bg-muted/30 rounded-md">
-                    <a
-                      href={buildAddressLink(address, effectiveMetadata)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-xs hover:underline inline-flex items-center gap-1 min-w-0 truncate"
-                    >
-                      {address}
-                      <ExternalLinkIcon className="h-3 w-3 shrink-0" />
-                    </a>
+                    <AddressChip address={address} blockExplorerUrl={explorerBaseUrl} />
                     <div className="flex items-center gap-2 shrink-0">
                       {isPlaceholderAddress(address, effectiveMetadata) && (
                         <SimulationPlaceholderBadge />
@@ -1998,15 +1929,7 @@ function ExpandableCheckItem({
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       {caller && (
-                        <a
-                          href={buildAddressLink(caller, effectiveMetadata)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded hover:underline inline-flex items-center gap-1"
-                        >
-                          {caller.slice(0, 10)}...{caller.slice(-8)}
-                          <ExternalLinkIcon className="h-3 w-3" />
-                        </a>
+                        <AddressChip address={caller} blockExplorerUrl={explorerBaseUrl} />
                       )}
                       <span className="text-muted-foreground text-sm">calls</span>
                       {functionCall && (
@@ -2024,15 +1947,10 @@ function ExpandableCheckItem({
                         {targetAddress && (
                           <>
                             <span>at</span>
-                            <a
-                              href={buildAddressLink(targetAddress, effectiveMetadata)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-mono text-xs hover:underline inline-flex items-center gap-1"
-                            >
-                              {targetAddress.slice(0, 10)}...{targetAddress.slice(-8)}
-                              <ExternalLinkIcon className="h-3 w-3" />
-                            </a>
+                            <AddressChip
+                              address={targetAddress}
+                              blockExplorerUrl={explorerBaseUrl}
+                            />
                           </>
                         )}
                       </div>
@@ -2080,30 +1998,14 @@ function ExpandableCheckItem({
                 <div key={`calldata-${formattedLine.substring(0, 30)}`} className="mb-3">
                   <code className="block font-mono text-xs bg-muted p-3 rounded whitespace-pre-wrap overflow-x-auto">
                     <span className="flex flex-wrap gap-2 items-center">
-                      <a
-                        href={buildAddressLink(fromAddress, effectiveMetadata)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
-                      >
-                        {fromAddress}
-                        <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                      </a>
+                      <AddressChip address={fromAddress} blockExplorerUrl={explorerBaseUrl} />
                       {isPlaceholderAddress(fromAddress, effectiveMetadata) && (
                         <SimulationPlaceholderBadge />
                       )}
                       <span>transfers</span>
                       <span className="font-bold">{amount} UNI</span>
                       <span>to</span>
-                      <a
-                        href={buildAddressLink(toAddress, effectiveMetadata)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
-                      >
-                        {toAddress}
-                        <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                      </a>
+                      <AddressChip address={toAddress} blockExplorerUrl={explorerBaseUrl} />
                       {isPlaceholderAddress(toAddress, effectiveMetadata) && (
                         <SimulationPlaceholderBadge />
                       )}
@@ -2161,15 +2063,7 @@ function ExpandableCheckItem({
                 key={`address-wrapper-${address}-${combinedMatch.index}`}
                 className="inline-flex items-center gap-1"
               >
-                <a
-                  href={buildAddressLink(address, effectiveMetadata)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
-                >
-                  {address}
-                  <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                </a>
+                <AddressChip address={address} blockExplorerUrl={explorerBaseUrl} />
                 {isPlaceholder && <SimulationPlaceholderBadge />}
               </span>,
             );
@@ -2314,7 +2208,7 @@ function ExpandableCheckItem({
           ) : isStateChangesCheck ? (
             <div className="mt-4">
               {stateChanges && stateChanges.length > 0 ? (
-                <StateChanges stateChanges={stateChanges} />
+                <StateChanges stateChanges={stateChanges} metadata={metadata} />
               ) : (
                 <div className="flex items-center justify-center p-6 text-muted-foreground">
                   <InfoIcon className="h-4 w-4 mr-2" />
@@ -2324,11 +2218,11 @@ function ExpandableCheckItem({
             </div>
           ) : isVerificationCheck && check.details ? (
             <div className="mt-4">
-              <ContractVerificationList details={check.details} />
+              <ContractVerificationList details={check.details} metadata={metadata} />
             </div>
           ) : isProxyResolutionCheck && check.details ? (
             <div className="mt-4">
-              <ProxyResolutionDetails details={check.details} />
+              <ProxyResolutionDetails details={check.details} metadata={metadata} />
             </div>
           ) : isTreasuryMovementCheck && treasuryData ? (
             <div className="mt-4">
@@ -2536,34 +2430,20 @@ function StateChangeItem({
             <div className="flex flex-col gap-2">
               <span className="inline-flex items-center gap-2 flex-wrap">
                 From:{' '}
-                <code className="bg-muted-foreground/10 px-1 py-0.5 rounded">
-                  <a
-                    href={buildAddressLink(oldValueCleaned, effectiveMetadata)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:underline inline-flex items-center"
-                  >
-                    {oldValueCleaned}
-                    <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                  </a>
-                </code>
+                <AddressChip
+                  address={oldValueCleaned}
+                  blockExplorerUrl={getExplorerUrl(effectiveMetadata)}
+                />
                 {isPlaceholderAddress(oldValueCleaned, effectiveMetadata) && (
                   <SimulationPlaceholderBadge />
                 )}
               </span>
               <span className="inline-flex items-center gap-2 flex-wrap">
                 To:{' '}
-                <code className="bg-muted-foreground/10 px-1 py-0.5 rounded">
-                  <a
-                    href={buildAddressLink(newValueCleaned, effectiveMetadata)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:underline inline-flex items-center"
-                  >
-                    {newValueCleaned}
-                    <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                  </a>
-                </code>
+                <AddressChip
+                  address={newValueCleaned}
+                  blockExplorerUrl={getExplorerUrl(effectiveMetadata)}
+                />
                 {isPlaceholderAddress(newValueCleaned, effectiveMetadata) && (
                   <SimulationPlaceholderBadge />
                 )}
