@@ -61,7 +61,10 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center">
-            <ConnectButton chainStatus="full" />
+            <ConnectButton
+              chainStatus={{ smallScreen: 'name', largeScreen: 'full' }}
+              showBalance={{ smallScreen: false, largeScreen: true }}
+            />
           </div>
         </div>
       </div>
