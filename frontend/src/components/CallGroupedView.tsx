@@ -3,6 +3,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type {
+  CrossChainMessagePreview,
   Proposal,
   SimulationCheck,
   StructuredSimulationReport,
@@ -17,6 +18,7 @@ import {
   parseAbiItem,
   toFunctionSelector,
 } from 'viem';
+import { ChainLogo } from './structured-report/ChainLogo';
 
 type RiskTag = 'Upgrade' | 'Admin/Role' | 'Token Approval' | 'Token Transfer' | 'ETH Value';
 
@@ -596,7 +598,10 @@ export function CallGroupedView({
   const labels = report.metadata.addressLabels;
 
   // Summary stats
-  const totalCalls = calls.length;
+  const crossChainMessages = report.crossChain?.messages ?? [];
+  const totalMainnetCalls = calls.length;
+  const totalCrossChainCalls = crossChainMessages.length;
+  const totalCalls = totalMainnetCalls + totalCrossChainCalls;
   const totalEthValue = calls.reduce((sum, c) => sum + c.value, 0n);
   const allTags = calls.flatMap((c) => c.tags);
   const tagCounts = allTags.reduce<Record<RiskTag, number>>(
@@ -607,6 +612,10 @@ export function CallGroupedView({
     {} as Record<RiskTag, number>,
   );
   const uniqueTargets = Object.keys(byTarget).length;
+
+  // Cross-chain stats
+  const crossChainChains = new Set(crossChainMessages.map((m) => m.chainId));
+  const crossChainFailures = crossChainMessages.filter((m) => m.status === 'failure').length;
 
   if (totalCalls === 0) {
     return (
@@ -629,6 +638,17 @@ export function CallGroupedView({
           </span>
           {totalEthValue > 0n && (
             <span className="text-muted-foreground">{formatEthValue(totalEthValue)} total</span>
+          )}
+          {totalCrossChainCalls > 0 && (
+            <span className="text-muted-foreground">
+              {totalCrossChainCalls} cross-chain ({crossChainChains.size} chain
+              {crossChainChains.size === 1 ? '' : 's'})
+              {crossChainFailures > 0 && (
+                <Badge variant="destructive" className="ml-1 text-[10px] px-1.5">
+                  {crossChainFailures} failed
+                </Badge>
+              )}
+            </span>
           )}
         </div>
         {Object.keys(tagCounts).length > 0 && (
@@ -832,6 +852,224 @@ export function CallGroupedView({
           </div>
         );
       })}
+
+      {/* Cross-chain calls */}
+      <CrossChainCallsSection messages={report.crossChain?.messages ?? []} labels={labels} />
     </div>
+  );
+}
+
+function CrossChainCallsSection({
+  messages,
+  labels,
+}: {
+  messages: CrossChainMessagePreview[];
+  labels?: StructuredSimulationReport['metadata']['addressLabels'];
+}) {
+  if (messages.length === 0) return null;
+
+  // Group by chain
+  const byChain = messages.reduce<Record<number, CrossChainMessagePreview[]>>((acc, msg) => {
+    if (!acc[msg.chainId]) acc[msg.chainId] = [];
+    acc[msg.chainId].push(msg);
+    return acc;
+  }, {});
+
+  return (
+    <>
+      {Object.entries(byChain).map(([chainIdStr, chainMessages]) => {
+        const chainId = Number(chainIdStr);
+        const chainName = chainMessages[0]?.chainName || `Chain ${chainId}`;
+        const explorerBaseUrl = chainMessages[0]?.blockExplorerBaseUrl || 'https://etherscan.io';
+        const bridgeType = chainMessages[0]?.bridgeType;
+
+        // Group by target within this chain
+        const byTarget = chainMessages.reduce<Record<string, CrossChainMessagePreview[]>>(
+          (acc, msg) => {
+            const key = (msg.l2TargetAddress ?? 'unknown').toLowerCase();
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(msg);
+            return acc;
+          },
+          {},
+        );
+
+        const totalMessages = chainMessages.length;
+        const failedCount = chainMessages.filter((m) => m.status === 'failure').length;
+
+        return (
+          <div key={chainId} className="space-y-3">
+            {/* Chain header */}
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-border">
+              <div className="flex items-center gap-2">
+                <ChainLogo chainId={chainId} size={20} />
+                <span className="font-medium text-sm">{chainName}</span>
+                {bridgeType && (
+                  <Badge variant="outline" className="text-[10px] px-1.5">
+                    via {bridgeType}
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>
+                  {totalMessages} message{totalMessages === 1 ? '' : 's'}
+                </span>
+                {failedCount > 0 && (
+                  <Badge variant="destructive" className="text-[10px] px-1.5">
+                    {failedCount} failed
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            {/* Targets within this chain */}
+            {Object.entries(byTarget).map(([targetKey, targetMessages]) => {
+              const target = targetMessages[0]?.l2TargetAddress ?? targetKey;
+              const targetLabel = targetMessages[0]?.targetLabel;
+
+              return (
+                <div
+                  key={`${chainId}-${targetKey}`}
+                  className="border border-muted rounded-lg p-3 bg-card space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {target !== 'unknown' ? (
+                        <AddressValue
+                          address={target}
+                          baseUrl={explorerBaseUrl}
+                          labels={labels}
+                          chainId={chainId}
+                          variant="header"
+                        />
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Unknown target</span>
+                      )}
+                      {targetLabel && !labels?.[target] && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                          {targetLabel}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground whitespace-nowrap">
+                      {targetMessages.length} call{targetMessages.length === 1 ? '' : 's'}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {targetMessages.map((msg, index) => {
+                      const fnName =
+                        msg.call?.signature?.split('(')[0] ||
+                        (msg.l2InputData ? `0x${msg.l2InputData.slice(2, 10)}` : 'Call');
+                      const hasValue = msg.l2Value && msg.l2Value !== '0';
+                      const isFailed = msg.status === 'failure';
+
+                      return (
+                        <details
+                          key={`${chainId}-${targetKey}-${index}`}
+                          className={`group border rounded ${isFailed ? 'border-red-200 bg-red-50/50' : 'border-muted/60'}`}
+                        >
+                          <summary className="cursor-pointer select-none px-2.5 py-1.5 flex items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
+                            <div className="min-w-0 flex items-baseline gap-2">
+                              <span className="inline-flex items-center justify-center h-5 w-5 rounded bg-muted text-[10px] font-semibold text-muted-foreground shrink-0">
+                                {index + 1}
+                              </span>
+                              <span className="text-sm font-medium">{fnName}</span>
+                              {hasValue && (
+                                <span className="text-xs text-muted-foreground">
+                                  {msg.l2Value} wei
+                                </span>
+                              )}
+                              {isFailed && (
+                                <Badge variant="destructive" className="text-[10px] px-1.5">
+                                  Failed
+                                </Badge>
+                              )}
+                            </div>
+                            <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground transition-transform group-open:rotate-180 shrink-0" />
+                          </summary>
+
+                          <div className="px-3 pb-3 pt-1 space-y-1.5 text-xs">
+                            {msg.l2FromAddress && (
+                              <div className="flex items-center gap-3">
+                                <span className="text-muted-foreground w-14 shrink-0">From</span>
+                                <AddressValue
+                                  address={msg.l2FromAddress}
+                                  baseUrl={explorerBaseUrl}
+                                  labels={labels}
+                                  chainId={chainId}
+                                />
+                              </div>
+                            )}
+
+                            {msg.call?.signature && (
+                              <div className="flex items-start gap-3">
+                                <span className="text-muted-foreground w-14 shrink-0">Sig</span>
+                                <code className="font-mono text-[11px] break-all">
+                                  {msg.call.signature}
+                                </code>
+                              </div>
+                            )}
+
+                            {msg.call?.args && msg.call.args.length > 0 && (
+                              <div className="space-y-1">
+                                {msg.call.args.map((arg, argIndex) => {
+                                  const raw = stringifyDecodedValue(arg);
+                                  const looksLikeAddress = isHexAddress(raw);
+
+                                  return (
+                                    <div
+                                      key={`${chainId}-${targetKey}-${index}-arg-${argIndex}`}
+                                      className="flex items-center gap-3"
+                                    >
+                                      <span className="text-muted-foreground w-14 shrink-0 truncate">
+                                        arg{argIndex}
+                                      </span>
+                                      {looksLikeAddress ? (
+                                        <AddressValue
+                                          address={raw}
+                                          baseUrl={explorerBaseUrl}
+                                          labels={labels}
+                                          chainId={chainId}
+                                        />
+                                      ) : (
+                                        <ValueWithCopy value={raw} />
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {msg.error && (
+                              <div className="mt-2 p-2 bg-red-100 border border-red-200 rounded text-red-800 text-[11px]">
+                                {msg.error}
+                              </div>
+                            )}
+
+                            {msg.l2InputData && (
+                              <details className="mt-2">
+                                <summary className="cursor-pointer text-muted-foreground hover:text-foreground text-[11px]">
+                                  Raw data
+                                </summary>
+                                <div className="mt-1 pl-2 border-l border-muted">
+                                  <code className="font-mono text-[11px] break-all text-muted-foreground">
+                                    {msg.l2InputData}
+                                  </code>
+                                </div>
+                              </details>
+                            )}
+                          </div>
+                        </details>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </>
   );
 }
