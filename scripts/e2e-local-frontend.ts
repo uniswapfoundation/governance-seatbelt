@@ -5,12 +5,13 @@ import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 import solc from 'solc';
 import {
+  http,
+  type Abi,
+  type Address,
+  type Chain,
   createPublicClient,
   createWalletClient,
   encodeAbiParameters,
-  http,
-  type Address,
-  type Chain,
 } from 'viem';
 import { mnemonicToAccount } from 'viem/accounts';
 
@@ -63,9 +64,9 @@ async function pickPort(): Promise<{ port: number; reason: 'preferred' | 'fallba
 }
 
 function compileContracts(): {
-  governorAbi: any;
+  governorAbi: Abi;
   governorBytecode: `0x${string}`;
-  targetAbi: any;
+  targetAbi: Abi;
   targetBytecode: `0x${string}`;
 } {
   const source = `
@@ -152,9 +153,9 @@ contract MockTarget {
   if (!compiledGovernor?.evm?.bytecode?.object) throw new Error('Failed to compile MockGovernor');
   if (!compiledTarget?.evm?.bytecode?.object) throw new Error('Failed to compile MockTarget');
   return {
-    governorAbi: compiledGovernor.abi,
+    governorAbi: compiledGovernor.abi as Abi,
     governorBytecode: `0x${compiledGovernor.evm.bytecode.object}`,
-    targetAbi: compiledTarget.abi,
+    targetAbi: compiledTarget.abi as Abi,
     targetBytecode: `0x${compiledTarget.evm.bytecode.object}`,
   };
 }
@@ -178,7 +179,12 @@ function writeSimulationResults({
   simulationType: 'new' | 'proposed' | 'executed';
   proposalId: string;
 }) {
-  const simulationResultsPath = path.join(process.cwd(), 'frontend', 'public', 'simulation-results.json');
+  const simulationResultsPath = path.join(
+    process.cwd(),
+    'frontend',
+    'public',
+    'simulation-results.json',
+  );
 
   const demoValue = 42n;
   const encodedArgs = encodeAbiParameters([{ type: 'uint256' }], [demoValue]);
@@ -261,7 +267,7 @@ async function main() {
   const account = mnemonicToAccount(HARDHAT_MNEMONIC);
   const transport = http(rpcUrl);
   const publicClient = createPublicClient({ chain, transport });
-    const walletClient = createWalletClient({ chain, transport, account });
+  const walletClient = createWalletClient({ chain, transport, account });
 
   try {
     for (let i = 0; i < 80; i++) {
@@ -277,6 +283,7 @@ async function main() {
     const deployGovernorHash = await walletClient.deployContract({
       abi: governorAbi,
       bytecode: governorBytecode,
+      args: [],
     });
     const deployGovernorReceipt = await publicClient.waitForTransactionReceipt({
       hash: deployGovernorHash,
@@ -287,8 +294,11 @@ async function main() {
     const deployTargetHash = await walletClient.deployContract({
       abi: targetAbi,
       bytecode: targetBytecode,
+      args: [],
     });
-    const deployTargetReceipt = await publicClient.waitForTransactionReceipt({ hash: deployTargetHash });
+    const deployTargetReceipt = await publicClient.waitForTransactionReceipt({
+      hash: deployTargetHash,
+    });
     if (!deployTargetReceipt.contractAddress) throw new Error('MockTarget deployment failed');
     const targetAddress = deployTargetReceipt.contractAddress as Address;
 
@@ -362,7 +372,10 @@ async function main() {
           const stat = fs.lstatSync(frontendEnvLocalPath);
           if (stat.isSymbolicLink()) {
             const target = fs.readlinkSync(frontendEnvLocalPath);
-            fs.writeFileSync(path.join(CONTEXT_DIR, 'frontend.env.local.symlink-target.txt'), target);
+            fs.writeFileSync(
+              path.join(CONTEXT_DIR, 'frontend.env.local.symlink-target.txt'),
+              target,
+            );
           }
         } catch {
           // best-effort only
@@ -377,7 +390,9 @@ async function main() {
 
         fs.writeFileSync(frontendEnvLocalPath, GENERATED_ENV_LOCAL_HEADER);
         shouldRestoreEnvLocal = true;
-        console.log(`Replaced unreadable ${frontendEnvLocalPath} (backup in ${envLocalBackupPath})`);
+        console.log(
+          `Replaced unreadable ${frontendEnvLocalPath} (backup in ${envLocalBackupPath})`,
+        );
       }
     }
 

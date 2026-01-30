@@ -121,7 +121,7 @@ function ReportSection() {
   const { proposalData, report } = simulationData;
   const rawSimulationType = report.structuredReport?.metadata?.simulationType;
   const simulationType: SimulationType =
-    rawSimulationType == null ? 'new' : parseSimulationType(rawSimulationType) ?? 'new';
+    rawSimulationType == null ? 'new' : (parseSimulationType(rawSimulationType) ?? 'new');
 
   return (
     <div className="w-full space-y-4">

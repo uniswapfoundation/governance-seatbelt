@@ -1,5 +1,6 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import { useSimulationResults } from '@/hooks/use-simulation-results';
 import { parseSimulationType } from '@/lib/write-actions';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
@@ -17,39 +18,52 @@ function NavbarConnect() {
 
         if (!connected) {
           return (
-            <button className="rk-connect-button" type="button" onClick={openConnectModal}>
+            <Button type="button" size="sm" className="cursor-pointer" onClick={openConnectModal}>
               Connect Wallet
-            </button>
+            </Button>
           );
         }
 
         if (chain.unsupported) {
           return (
-            <button
-              className="rk-connect-button rk-connect-button--error"
+            <Button
               type="button"
+              size="sm"
+              variant="destructive"
+              className="cursor-pointer"
               onClick={openChainModal}
             >
               Wrong network
-            </button>
+            </Button>
           );
         }
 
         return (
-          <div className="rk-connect-group" aria-label="Wallet">
-            <button
-              className="rk-connect-pill"
+          <div className="flex items-center gap-2" aria-label="Wallet">
+            <Button
               type="button"
+              size="sm"
+              variant="outline"
+              className="cursor-pointer"
               onClick={openChainModal}
               aria-label={`Network: ${chain.name}`}
             >
               {chain.name}
-            </button>
-            <button className="rk-connect-pill" type="button" onClick={openAccountModal}>
-              <span className="rk-connect-indicator" aria-hidden="true" />
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="cursor-pointer"
+              onClick={openAccountModal}
+            >
+              <span
+                className="inline-block size-2 rounded-full bg-emerald-500"
+                aria-hidden="true"
+              />
               {account.displayName}
               {account.displayBalance ? ` (${account.displayBalance})` : ''}
-            </button>
+            </Button>
           </div>
         );
       }}
@@ -63,7 +77,7 @@ export function Navbar() {
 
   const rawSimulationType = simulationData?.report.structuredReport?.metadata?.simulationType;
   const simulationType: SimulationType =
-    rawSimulationType == null ? 'new' : parseSimulationType(rawSimulationType) ?? 'new';
+    rawSimulationType == null ? 'new' : (parseSimulationType(rawSimulationType) ?? 'new');
 
   const getActionLabel = () => {
     switch (simulationType) {

@@ -1,6 +1,6 @@
+import type { Address } from 'viem';
 import { GOVERNOR_ABI } from './abis';
 import { projectId, queryClient, config as wagmiConfig, walletConnectEnabled } from './wagmi';
-import type { Address } from 'viem';
 
 // State names for readability
 export const PROPOSAL_STATES = [

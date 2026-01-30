@@ -3,12 +3,13 @@ import net from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import solc from 'solc';
 import {
+  http,
+  type Abi,
+  type Address,
+  type Chain,
   createPublicClient,
   createWalletClient,
   encodeAbiParameters,
-  http,
-  type Address,
-  type Chain,
 } from 'viem';
 import { mnemonicToAccount } from 'viem/accounts';
 
@@ -33,7 +34,12 @@ async function getFreePort(): Promise<number> {
   });
 }
 
-function compileMockGovernor(): { abi: any; bytecode: `0x${string}` } {
+function compileMockGovernor(): {
+  abi: Abi;
+  bytecode: `0x${string}`;
+  targetAbi: Abi;
+  targetBytecode: `0x${string}`;
+} {
   const source = `
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
@@ -118,9 +124,9 @@ contract MockTarget {
   if (!compiledGovernor?.evm?.bytecode?.object) throw new Error('Failed to compile MockGovernor');
   if (!compiledTarget?.evm?.bytecode?.object) throw new Error('Failed to compile MockTarget');
   return {
-    abi: compiledGovernor.abi,
+    abi: compiledGovernor.abi as Abi,
     bytecode: `0x${compiledGovernor.evm.bytecode.object}`,
-    targetAbi: compiledTarget.abi,
+    targetAbi: compiledTarget.abi as Abi,
     targetBytecode: `0x${compiledTarget.evm.bytecode.object}`,
   };
 }
@@ -128,122 +134,132 @@ contract MockTarget {
 describe('frontend propose/execute on-chain smoke (local anvil)', () => {
   const maybeIt = Bun.which('anvil') ? it : it.skip;
 
-  maybeIt('can propose + execute using frontend-built args against a local mock governor', async () => {
-    const port = await getFreePort();
-    const rpcUrl = `http://127.0.0.1:${port}`;
+  maybeIt(
+    'can propose + execute using frontend-built args against a local mock governor',
+    async () => {
+      const port = await getFreePort();
+      const rpcUrl = `http://127.0.0.1:${port}`;
 
-    const anvil = Bun.spawn({
-      cmd: [
-        'anvil',
-        '--silent',
-        '--port',
-        String(port),
-        '--chain-id',
-        '31337',
-        '--mnemonic',
-        HARDHAT_MNEMONIC,
-      ],
-      stdout: 'ignore',
-      stderr: 'pipe',
-    });
+      const anvil = Bun.spawn({
+        cmd: [
+          'anvil',
+          '--silent',
+          '--port',
+          String(port),
+          '--chain-id',
+          '31337',
+          '--mnemonic',
+          HARDHAT_MNEMONIC,
+        ],
+        stdout: 'ignore',
+        stderr: 'pipe',
+      });
 
-    try {
-      const chain: Chain = {
-        id: 31337,
-        name: 'Anvil',
-        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-        rpcUrls: { default: { http: [rpcUrl] }, public: { http: [rpcUrl] } },
-      };
+      try {
+        const chain: Chain = {
+          id: 31337,
+          name: 'Anvil',
+          nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+          rpcUrls: { default: { http: [rpcUrl] }, public: { http: [rpcUrl] } },
+        };
 
-      const account = mnemonicToAccount(HARDHAT_MNEMONIC);
-      const transport = http(rpcUrl);
-      const publicClient = createPublicClient({ chain, transport });
-      const walletClient = createWalletClient({ chain, transport, account });
+        const account = mnemonicToAccount(HARDHAT_MNEMONIC);
+        const transport = http(rpcUrl);
+        const publicClient = createPublicClient({ chain, transport });
+        const walletClient = createWalletClient({ chain, transport, account });
 
-      // Wait for the node to be ready.
-      for (let i = 0; i < 50; i++) {
-        try {
-          await publicClient.getBlockNumber();
-          break;
-        } catch {
-          await delay(50);
+        // Wait for the node to be ready.
+        for (let i = 0; i < 50; i++) {
+          try {
+            await publicClient.getBlockNumber();
+            break;
+          } catch {
+            await delay(50);
+          }
         }
+
+        const { abi: mockAbi, bytecode, targetAbi, targetBytecode } = compileMockGovernor();
+        const deployGovernorHash = await walletClient.deployContract({
+          abi: mockAbi,
+          bytecode,
+          args: [],
+        });
+        const deployGovernorReceipt = await publicClient.waitForTransactionReceipt({
+          hash: deployGovernorHash,
+        });
+        if (!deployGovernorReceipt.contractAddress)
+          throw new Error('MockGovernor deployment failed');
+        const governorAddress = deployGovernorReceipt.contractAddress as Address;
+
+        const deployTargetHash = await walletClient.deployContract({
+          abi: targetAbi,
+          bytecode: targetBytecode,
+          args: [],
+        });
+        const deployTargetReceipt = await publicClient.waitForTransactionReceipt({
+          hash: deployTargetHash,
+        });
+        if (!deployTargetReceipt.contractAddress) throw new Error('MockTarget deployment failed');
+        const targetAddress = deployTargetReceipt.contractAddress as Address;
+
+        const demoValue = 42n;
+        const targets = [targetAddress] as const;
+        const values = [0n] as const;
+        const signatures = ['setValue(uint256)'] as const;
+        const calldatas = [encodeAbiParameters([{ type: 'uint256' }], [demoValue])] as const;
+        const description = 'Smoke test proposal: setValue(42)';
+
+        const proposeArgs = buildProposeArgs({
+          targets,
+          values,
+          signatures,
+          calldatas,
+          description,
+        });
+
+        const proposeHash = await walletClient.writeContract({
+          address: governorAddress,
+          abi: GOVERNOR_ABI,
+          functionName: 'propose',
+          args: proposeArgs,
+        });
+        await publicClient.waitForTransactionReceipt({ hash: proposeHash });
+
+        const proposalId = await publicClient.readContract({
+          address: governorAddress,
+          abi: mockAbi,
+          functionName: 'lastProposalId',
+          args: [],
+        });
+        expect(proposalId).toBe(1n);
+
+        const executeHash = await walletClient.writeContract({
+          address: governorAddress,
+          abi: GOVERNOR_ABI,
+          functionName: 'execute',
+          args: buildExecuteArgs(proposalId as bigint),
+        });
+        await publicClient.waitForTransactionReceipt({ hash: executeHash });
+
+        const executed = await publicClient.readContract({
+          address: governorAddress,
+          abi: mockAbi,
+          functionName: 'executed',
+          args: [proposalId as bigint],
+        });
+        expect(executed).toBe(true);
+
+        const value = await publicClient.readContract({
+          address: targetAddress,
+          abi: targetAbi,
+          functionName: 'value',
+          args: [],
+        });
+        expect(value).toBe(demoValue);
+      } finally {
+        anvil.kill();
+        await anvil.exited;
       }
-
-      const { abi: mockAbi, bytecode, targetAbi, targetBytecode } = compileMockGovernor();
-      const deployGovernorHash = await walletClient.deployContract({
-        abi: mockAbi,
-        bytecode,
-      });
-      const deployGovernorReceipt = await publicClient.waitForTransactionReceipt({
-        hash: deployGovernorHash,
-      });
-      if (!deployGovernorReceipt.contractAddress) throw new Error('MockGovernor deployment failed');
-      const governorAddress = deployGovernorReceipt.contractAddress as Address;
-
-      const deployTargetHash = await walletClient.deployContract({
-        abi: targetAbi,
-        bytecode: targetBytecode,
-      });
-      const deployTargetReceipt = await publicClient.waitForTransactionReceipt({ hash: deployTargetHash });
-      if (!deployTargetReceipt.contractAddress) throw new Error('MockTarget deployment failed');
-      const targetAddress = deployTargetReceipt.contractAddress as Address;
-
-      const demoValue = 42n;
-      const targets = [targetAddress] as const;
-      const values = [0n] as const;
-      const signatures = ['setValue(uint256)'] as const;
-      const calldatas = [encodeAbiParameters([{ type: 'uint256' }], [demoValue])] as const;
-      const description = 'Smoke test proposal: setValue(42)';
-
-      const proposeArgs = buildProposeArgs({
-        targets,
-        values,
-        signatures,
-        calldatas,
-        description,
-      });
-
-      const proposeHash = await walletClient.writeContract({
-        address: governorAddress,
-        abi: GOVERNOR_ABI,
-        functionName: 'propose',
-        args: proposeArgs,
-      });
-      await publicClient.waitForTransactionReceipt({ hash: proposeHash });
-
-      const proposalId = await publicClient.readContract({
-        address: governorAddress,
-        abi: mockAbi,
-        functionName: 'lastProposalId',
-      });
-      expect(proposalId).toBe(1n);
-
-      const executeHash = await walletClient.writeContract({
-        address: governorAddress,
-        abi: GOVERNOR_ABI,
-        functionName: 'execute',
-        args: buildExecuteArgs(proposalId as bigint),
-      });
-      await publicClient.waitForTransactionReceipt({ hash: executeHash });
-
-      const executed = await publicClient.readContract({
-        address: governorAddress,
-        abi: mockAbi,
-        functionName: 'executed',
-        args: [proposalId as bigint],
-      });
-      expect(executed).toBe(true);
-
-      const value = await publicClient.readContract({
-        address: targetAddress,
-        abi: targetAbi,
-        functionName: 'value',
-      });
-      expect(value).toBe(demoValue);
-    } finally {
-      anvil.kill();
-      await anvil.exited;
-    }
-  });
+    },
+  );
 });

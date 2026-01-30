@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { encodeFunctionData } from 'viem';
 import type { Address } from 'viem';
+import { GOVERNOR_ABI } from '../frontend/src/config/abis';
 import {
   buildExecuteArgs,
   buildExecuteArgsFromSimulationData,
@@ -8,7 +9,6 @@ import {
   getWriteActionForSimulationType,
   parseSimulationType,
 } from '../frontend/src/lib/write-actions';
-import { GOVERNOR_ABI } from '../frontend/src/config/abis';
 
 describe('frontend write actions (deterministic wiring)', () => {
   it('buildProposeArgs maps proposalData into Governor.propose args', () => {
@@ -83,4 +83,3 @@ describe('frontend write actions (deterministic wiring)', () => {
     expect(parseSimulationType('not-a-real-type')).toBe(null);
   });
 });
-

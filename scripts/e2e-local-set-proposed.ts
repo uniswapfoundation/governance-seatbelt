@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { createPublicClient, http, type Address, type Chain } from 'viem';
+import { http, type Address, type Chain, createPublicClient } from 'viem';
 
 const CONTEXT_FILE = path.join(process.cwd(), '.context', 'e2e-local.json');
 
@@ -15,6 +15,18 @@ const mockGovernorReadAbi = [
   },
 ] as const;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getOrCreateRecord(parent: Record<string, unknown>, key: string): Record<string, unknown> {
+  const existing = parent[key];
+  if (isRecord(existing)) return existing;
+  const next: Record<string, unknown> = {};
+  parent[key] = next;
+  return next;
+}
+
 function readContext(): { rpcUrl: string; chainId: number; governorAddress: Address } {
   const raw = fs.readFileSync(CONTEXT_FILE, 'utf8');
   const parsed = JSON.parse(raw) as { rpcUrl: string; chainId: number; governorAddress: Address };
@@ -22,20 +34,29 @@ function readContext(): { rpcUrl: string; chainId: number; governorAddress: Addr
 }
 
 function updateSimulationResults(proposalId: string) {
-  const simulationResultsPath = path.join(process.cwd(), 'frontend', 'public', 'simulation-results.json');
+  const simulationResultsPath = path.join(
+    process.cwd(),
+    'frontend',
+    'public',
+    'simulation-results.json',
+  );
   const raw = fs.readFileSync(simulationResultsPath, 'utf8');
-  const parsed = JSON.parse(raw) as any[];
+  const parsed = JSON.parse(raw) as unknown;
   if (!Array.isArray(parsed) || parsed.length === 0) {
     throw new Error('simulation-results.json must be a non-empty array');
   }
 
   const first = parsed[0];
-  first.report = first.report ?? {};
-  first.report.structuredReport = first.report.structuredReport ?? {};
-  first.report.structuredReport.metadata = first.report.structuredReport.metadata ?? {};
+  if (!isRecord(first)) {
+    throw new Error('simulation-results.json first entry must be an object');
+  }
 
-  first.report.structuredReport.metadata.simulationType = 'proposed';
-  first.report.structuredReport.metadata.proposalId = proposalId;
+  const report = getOrCreateRecord(first, 'report');
+  const structuredReport = getOrCreateRecord(report, 'structuredReport');
+  const metadata = getOrCreateRecord(structuredReport, 'metadata');
+
+  metadata.simulationType = 'proposed';
+  metadata.proposalId = proposalId;
 
   fs.writeFileSync(simulationResultsPath, JSON.stringify(parsed, null, 2));
 }
@@ -66,8 +87,9 @@ async function main() {
   }
 
   updateSimulationResults(lastProposalId.toString());
-  console.log(`Updated simulation-results.json -> simulationType=proposed, proposalId=${lastProposalId}`);
+  console.log(
+    `Updated simulation-results.json -> simulationType=proposed, proposalId=${lastProposalId}`,
+  );
 }
 
 await main();
-
