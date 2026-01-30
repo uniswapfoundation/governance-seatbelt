@@ -12,6 +12,17 @@ Create `frontend/.env.local` (see `frontend/.env.local.example`):
 
 In development, the app will fall back to demo defaults if these are missing (wallet connect may be limited).
 
+### Local E2E propose/execute demo (no Tenderly)
+
+From the repo root:
+
+```bash
+bun run e2e:local
+```
+
+Then follow the printed steps to connect your wallet to Localhost `31337`, click **Propose**, run
+`bun run e2e:local:set-proposed`, and then click **Execute**.
+
 ### 2) Provide simulation results
 Generate a real file by running a Seatbelt simulation from the repo root (requires Tenderly + RPCs):
 

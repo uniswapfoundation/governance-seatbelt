@@ -1,5 +1,6 @@
 import { DEFAULT_GOVERNOR_ADDRESS, GOVERNOR_ABI } from '@/config';
 import { parseWeb3Error } from '@/lib/errors';
+import { buildProposeArgs } from '@/lib/write-actions';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
@@ -38,13 +39,7 @@ export function useWriteProposeNew() {
         address: DEFAULT_GOVERNOR_ADDRESS,
         abi: GOVERNOR_ABI,
         functionName: 'propose',
-        args: [
-          proposalData.targets,
-          proposalData.values.map((value) => BigInt(value)),
-          proposalData.signatures,
-          proposalData.calldatas,
-          proposalData.description,
-        ],
+        args: buildProposeArgs(proposalData),
         gas: HIGH_GAS_LIMIT,
       });
 

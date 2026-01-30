@@ -7,6 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Toaster } from '@/components/ui/sonner';
 import { useSimulationResults } from '@/hooks/use-simulation-results';
+import { parseSimulationType } from '@/lib/write-actions';
 import { AlertTriangleIcon, InfoIcon } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 
@@ -118,7 +119,9 @@ function ReportSection() {
   }
 
   const { proposalData, report } = simulationData;
-  const simulationType: SimulationType = report.structuredReport?.metadata.simulationType || 'new';
+  const rawSimulationType = report.structuredReport?.metadata?.simulationType;
+  const simulationType: SimulationType =
+    rawSimulationType == null ? 'new' : (parseSimulationType(rawSimulationType) ?? 'new');
 
   return (
     <div className="w-full space-y-4">

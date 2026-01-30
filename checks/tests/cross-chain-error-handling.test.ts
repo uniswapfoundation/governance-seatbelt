@@ -120,7 +120,7 @@ describe('Cross-Chain Error Handling and Recovery Tests', () => {
         // If simulation fails completely, that's also acceptable
         expect(error).toBeDefined();
       }
-    });
+    }, 90000); // Increased timeout for external API calls
 
     test('should handle network timeouts during cross-chain simulation', async () => {
       // Create a minimal source result that would trigger cross-chain handling
@@ -230,7 +230,7 @@ describe('Cross-Chain Error Handling and Recovery Tests', () => {
         // Invalid governor should cause simulation to fail
         expect(error).toBeDefined();
       }
-    });
+    }, 90000); // Increased timeout for external API calls
 
     test('should handle empty target arrays', async () => {
       const emptyConfig: SimulationConfigNew = {
@@ -256,7 +256,7 @@ describe('Cross-Chain Error Handling and Recovery Tests', () => {
         // Empty proposals may fail validation
         expect(error).toBeDefined();
       }
-    });
+    }, 90000); // Increased timeout for external API calls
 
     test('should handle mismatched array lengths', async () => {
       const mismatchedConfig: SimulationConfigNew = {

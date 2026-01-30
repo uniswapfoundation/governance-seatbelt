@@ -8,6 +8,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { useSimulationResults } from '@/hooks/use-simulation-results';
 import { useWriteExecuteProposal } from '@/hooks/use-write-execute-proposal';
 import { useWriteProposeNew } from '@/hooks/use-write-propose-new';
+import { getWriteActionForSimulationType, parseSimulationType } from '@/lib/write-actions';
 import {
   AlertTriangleIcon,
   ArrowLeftIcon,
@@ -19,7 +20,6 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { ErrorBoundary } from 'react-error-boundary';
-import { toast } from 'sonner';
 import { useAccount } from 'wagmi';
 
 function ErrorFallback({ error }: { error: Error }) {
@@ -89,25 +89,39 @@ function ActionSection({ isConnected }: { isConnected: boolean }) {
   }
 
   const { proposalData, report } = simulationData;
-  const simulationType: SimulationType = report.structuredReport?.metadata.simulationType || 'new';
+  const rawSimulationType = report.structuredReport?.metadata?.simulationType;
+  const parsedSimulationType =
+    rawSimulationType == null ? null : parseSimulationType(rawSimulationType);
+  const isInvalidSimulationType = rawSimulationType != null && parsedSimulationType == null;
+  const simulationType: SimulationType = parsedSimulationType ?? 'new';
+  const action = getWriteActionForSimulationType(simulationType);
+
+  if (isInvalidSimulationType) {
+    return (
+      <Alert variant="destructive">
+        <AlertTriangleIcon className="h-4 w-4" />
+        <AlertTitle>Invalid Report Metadata</AlertTitle>
+        <AlertDescription>
+          The report has an unexpected <code>simulationType</code>. Re-run the simulation to
+          regenerate results.
+        </AlertDescription>
+      </Alert>
+    );
+  }
 
   const handleAction = () => {
-    if (!simulationData) {
-      toast.error('No simulation data available');
-      return;
-    }
-
-    if (simulationType === 'new') {
+    if (action === 'propose') {
       proposeNew();
-    } else if (simulationType === 'proposed') {
+    } else if (action === 'execute') {
       executeProposal();
     }
     // 'executed' type doesn't have an action
   };
 
-  const isPending = simulationType === 'new' ? isProposePending : isExecutePending;
+  const isPending =
+    action === 'propose' ? isProposePending : action === 'execute' ? isExecutePending : false;
   const isPendingConfirmation =
-    simulationType === 'new' ? isProposeConfirming : isExecuteConfirming;
+    action === 'propose' ? isProposeConfirming : action === 'execute' ? isExecuteConfirming : false;
 
   const checks = report.structuredReport?.checks ?? [];
   const passedChecks = checks.filter((c) => c.status === 'passed');

@@ -1,3 +1,4 @@
+import type { Address } from 'viem';
 import { GOVERNOR_ABI } from './abis';
 import { projectId, queryClient, config as wagmiConfig, walletConnectEnabled } from './wagmi';
 
@@ -14,7 +15,8 @@ export const PROPOSAL_STATES = [
 ];
 
 // Default Uniswap Governor Bravo address
-export const DEFAULT_GOVERNOR_ADDRESS = '0x408ED6354d4973f66138C91495F2f2FCbd8724C3';
+export const DEFAULT_GOVERNOR_ADDRESS = (process.env.NEXT_PUBLIC_GOVERNOR_ADDRESS ??
+  '0x408ED6354d4973f66138C91495F2f2FCbd8724C3') as Address;
 export const DEFAULT_DAO_NAME = 'Uniswap';
 
 // Paths to data directories

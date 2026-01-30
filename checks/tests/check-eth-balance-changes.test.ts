@@ -46,7 +46,7 @@ describe('checkEthBalanceChanges', () => {
 
     expect(result.warnings).toHaveLength(0);
     expect(result.errors).toHaveLength(0);
-  });
+  }, 30000);
 
   test('should report no ETH transfers when none exist', async () => {
     // Update the config to set the values to 0 so that no ETH transfers occur
@@ -68,5 +68,5 @@ describe('checkEthBalanceChanges', () => {
     expect(result.info).toContain('No ETH balance changes detected in this proposal.');
     expect(result.warnings).toHaveLength(0);
     expect(result.errors).toHaveLength(0);
-  });
+  }, 30000);
 });

@@ -53,6 +53,7 @@ export function ProposalCard({
 
   // Determine action text based on simulation type
   const getActionText = () => {
+    if (simulationType === 'executed') return 'Already executed';
     if (!isConnected) return 'Connect Wallet';
     if (isPendingConfirmation) return 'Confirming...';
     if (isPending) {

@@ -138,6 +138,31 @@ To avoid accidentally wedging the dev server/browser with oversized artifacts, t
 response (sets `report.markdownReport` to `""`); pass `?includeMarkdown=1` to include it.
 If you deploy the frontend publicly, add platform-level rate limiting + error-rate monitoring for `/api/*`.
 
+### Local E2E propose/execute demo (Anvil)
+
+For a quick, deterministic end-to-end demo of the **wallet propose → execute** wiring (without Tenderly):
+
+```sh
+bun run e2e:local
+```
+
+This will:
+- start an Anvil chain on `http://127.0.0.1:8545` (chain id `31337`)
+- deploy a mock governor + target contract
+- write `frontend/public/simulation-results.json` with a real proposal payload
+- start the frontend dev server configured to use that local chain
+
+In the browser:
+1. Open `http://localhost:3000/action`
+2. In your wallet, switch to **Localhost 31337** (RPC `http://127.0.0.1:8545`)
+3. Click **Propose** and confirm the tx
+4. In another terminal: `bun run e2e:local:set-proposed`
+5. Reload `/action`, then click **Execute**
+
+Notes:
+- If port `8545` is already in use, the script will error unless you set `E2E_LOCAL_ALLOW_FALLBACK_PORT=1`.
+- WalletConnect options in RainbowKit require `NEXT_PUBLIC_PROJECT_ID`.
+
 ### Creating Proposals
 
 The frontend allows you to:

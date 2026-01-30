@@ -18,6 +18,8 @@
     "check-proposal": "bun run-checks.ts",
     "sim": "bun start",
     "propose": "bun run sim && cd frontend && bun dev",
+    "e2e:local": "bun run scripts/e2e-local-frontend.ts",
+    "e2e:local:set-proposed": "bun run scripts/e2e-local-set-proposed.ts",
     "prepare": "husky"
   },
   "repository": {
@@ -54,7 +56,8 @@
     "@secretlint/secretlint-rule-preset-recommend": "11.2.5",
     "@types/bun": "1.2.4",
     "husky": "9.1.7",
-    "secretlint": "11.2.5"
+    "secretlint": "11.2.5",
+    "solc": "^0.8.30"
   },
   "module": "index.ts",
   "peerDependencies": {
