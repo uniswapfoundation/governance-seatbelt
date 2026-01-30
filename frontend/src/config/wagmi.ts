@@ -46,7 +46,6 @@ const getChain = (): { chain: Chain; rpcUrl: string } => {
 
 const { chain, rpcUrl } = getChain();
 
-export const appChain = chain;
 export const queryClient = new QueryClient();
 
 export const projectId = process.env.NEXT_PUBLIC_PROJECT_ID;
