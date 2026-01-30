@@ -317,7 +317,6 @@ async function main() {
         NEXT_PUBLIC_CHAIN_ID: String(CHAIN_ID),
         NEXT_PUBLIC_RPC_URL: rpcUrl,
         NEXT_PUBLIC_GOVERNOR_ADDRESS: governorAddress,
-        NEXT_PUBLIC_PROJECT_ID: 'demo',
       },
     });
 
