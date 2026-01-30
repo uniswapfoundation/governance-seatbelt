@@ -25,3 +25,4 @@ trace*.json
 tenderly*.json
 new-response.json
 .osgrep/
+.context/
