@@ -1,0 +1,8 @@
+# gitleaks ignore list
+#
+# These findings are a known local-dev mnemonic phrase used for deterministic Anvil/Hardhat demos/tests.
+# It is not a production secret.
+
+0eaf9b83430b1d3a8d365b31d654751ba32ce577:scripts/e2e-local-frontend.ts:ethereum-mnemonic:16
+0eaf9b83430b1d3a8d365b31d654751ba32ce577:tests/frontend-onchain-wiring.test.ts:ethereum-mnemonic:17
+

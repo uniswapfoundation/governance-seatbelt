@@ -159,7 +159,7 @@ describe('Cross-Chain Simulation Metadata Tests', () => {
         // If simulation fails completely, that's also a valid outcome
         expect(error).toBeDefined();
       }
-    });
+    }, 90000); // Increased timeout for external API calls
   });
 
   describe('Cross-Chain Dependencies Validation', () => {
