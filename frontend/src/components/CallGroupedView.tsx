@@ -267,12 +267,13 @@ function ValueWithCopy({
 }) {
   const [expanded, setExpanded] = useState(false);
   const isLongValue = value.length > 66; // longer than an address
-  const shouldTruncate = truncate && isLongValue && !expanded;
+  const isExpandable = truncate && isLongValue;
+  const shouldTruncate = isExpandable && !expanded;
 
   const displayValue = shouldTruncate ? `${value.slice(0, 20)}...${value.slice(-16)}` : value;
 
-  const handleToggle = isLongValue ? () => setExpanded(!expanded) : undefined;
-  const handleKeyDown = isLongValue
+  const handleToggle = isExpandable ? () => setExpanded(!expanded) : undefined;
+  const handleKeyDown = isExpandable
     ? (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
@@ -287,9 +288,11 @@ function ValueWithCopy({
         className={`font-mono text-xs ${shouldTruncate ? 'cursor-pointer hover:text-foreground' : ''} ${isLongValue && !expanded ? 'text-muted-foreground' : ''}`}
         onClick={handleToggle}
         onKeyDown={handleKeyDown}
-        tabIndex={isLongValue ? 0 : undefined}
-        role={isLongValue ? 'button' : undefined}
-        title={isLongValue && !expanded ? 'Click to expand' : undefined}
+        tabIndex={isExpandable ? 0 : undefined}
+        role={isExpandable ? 'button' : undefined}
+        aria-expanded={isExpandable ? expanded : undefined}
+        aria-label={isExpandable ? (expanded ? 'Collapse value' : 'Expand value') : undefined}
+        title={isExpandable ? (expanded ? 'Click to collapse' : 'Click to expand') : undefined}
       >
         {expanded ? (
           <span className="break-all">{value}</span>
@@ -561,40 +564,36 @@ function EventCard({
   }
 
   const hasParams = parsed.params.length > 0;
+  if (!hasParams) {
+    return <div className="text-xs font-medium text-foreground">{parsed.name}</div>;
+  }
 
   return (
     <details className="group">
       <summary className="cursor-pointer select-none flex items-center gap-2 text-xs [&::-webkit-details-marker]:hidden">
         <ChevronDownIcon className="h-3 w-3 text-muted-foreground transition-transform group-open:rotate-180 shrink-0" />
         <span className="font-medium text-foreground">{parsed.name}</span>
-        {hasParams && (
-          <span className="text-muted-foreground">({parsed.params.length} params)</span>
-        )}
+        <span className="text-muted-foreground">({parsed.params.length} params)</span>
       </summary>
-      {hasParams && (
-        <div className="mt-1.5 ml-5 space-y-1 border-l-2 border-muted/50 pl-3">
-          {parsed.params.map((p) => {
-            const raw = p.value;
-            const isAddr = isHexAddress(raw);
+      <div className="mt-1.5 ml-5 space-y-1 border-l-2 border-muted/50 pl-3">
+        {parsed.params.map((p) => {
+          const raw = p.value;
+          const isAddr = isHexAddress(raw);
 
-            return (
-              <div
-                key={`${parsed.name}-${p.name}-${raw}`}
-                className="flex items-start gap-2 text-xs"
-              >
-                <span className="text-muted-foreground w-20 shrink-0 truncate" title={p.name}>
-                  {p.name}
-                </span>
-                {isAddr ? (
-                  <AddressValue address={raw} baseUrl={baseUrl} labels={labels} chainId={chainId} />
-                ) : (
-                  <ValueWithCopy value={raw} />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+          return (
+            <div key={`${parsed.name}-${p.name}-${raw}`} className="flex items-start gap-2 text-xs">
+              <span className="text-muted-foreground w-20 shrink-0 truncate" title={p.name}>
+                {p.name}
+              </span>
+              {isAddr ? (
+                <AddressValue address={raw} baseUrl={baseUrl} labels={labels} chainId={chainId} />
+              ) : (
+                <ValueWithCopy value={raw} />
+              )}
+            </div>
+          );
+        })}
+      </div>
     </details>
   );
 }
@@ -1007,7 +1006,7 @@ function CrossChainCallsSection({
                       ) : (
                         <span className="text-sm text-muted-foreground">Unknown target</span>
                       )}
-                      {targetLabel && !labels?.[target] && (
+                      {targetLabel && !getAddressLabelFor(target, labels) && (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                           {targetLabel}
                         </Badge>

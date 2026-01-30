@@ -96,7 +96,12 @@ export function ChecksSection({
             check={check}
             stateChanges={stateChanges}
             metadata={metadata}
-            coverage={check.checkId ? coverageByCheckId?.get(check.checkId) : undefined}
+            coverage={
+              check.checkId
+                ? (coverageByCheckId?.get(`${metadata?.chainId}:${check.checkId}`) ??
+                  coverageByCheckId?.get(check.checkId))
+                : undefined
+            }
             permissionsDiff={permissionsDiff}
           />
         ))}

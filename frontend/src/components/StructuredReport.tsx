@@ -43,6 +43,10 @@ export function StructuredReport({ report, proposal }: StructuredReportProps) {
   const coverageByCheckId = useMemo(() => {
     const map = new Map<string, CheckCoverage>();
     for (const coverageEntry of report.coverage?.checks ?? []) {
+      if (coverageEntry.chainId) {
+        map.set(`${coverageEntry.chainId}:${coverageEntry.checkId}`, coverageEntry);
+      }
+      // Back-compat fallback when chainId isn't available.
       map.set(coverageEntry.checkId, coverageEntry);
     }
     return map;
