@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { walletConnectEnabled } from '@/config';
 import { useSimulationResults } from '@/hooks/use-simulation-results';
+import { parseSimulationType } from '@/lib/write-actions';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { CheckCircleIcon, FileTextIcon, PlayIcon, SendIcon } from 'lucide-react';
 import Link from 'next/link';
@@ -25,8 +26,9 @@ export function Navbar() {
     connect({ connector: injected });
   }, [connect, connectors]);
 
+  const rawSimulationType = simulationData?.report.structuredReport?.metadata?.simulationType;
   const simulationType: SimulationType =
-    simulationData?.report.structuredReport?.metadata.simulationType || 'new';
+    rawSimulationType == null ? 'new' : parseSimulationType(rawSimulationType) ?? 'new';
 
   const getActionLabel = () => {
     switch (simulationType) {

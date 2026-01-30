@@ -1,5 +1,6 @@
 import { DEFAULT_GOVERNOR_ADDRESS, GOVERNOR_ABI } from '@/config';
 import { parseWeb3Error } from '@/lib/errors';
+import { buildExecuteArgsFromSimulationData } from '@/lib/write-actions';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
@@ -28,8 +29,7 @@ export function useWriteExecuteProposal() {
       if (!publicClient) throw new Error('Public client not found');
       if (!simulationData) throw new Error('Simulation data not found');
 
-      const proposalId = simulationData.report.structuredReport?.metadata.proposalId;
-      if (!proposalId) throw new Error('Proposal ID not found in simulation data');
+      const args = buildExecuteArgsFromSimulationData(simulationData);
 
       // Clear any existing toasts and show initial state
       toast.dismiss();
@@ -39,7 +39,7 @@ export function useWriteExecuteProposal() {
         address: DEFAULT_GOVERNOR_ADDRESS,
         abi: GOVERNOR_ABI,
         functionName: 'execute',
-        args: [BigInt(proposalId)],
+        args,
         gas: HIGH_GAS_LIMIT,
       });
 
