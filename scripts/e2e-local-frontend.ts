@@ -258,6 +258,16 @@ async function main() {
     console.log('5) Reload /action, then click "Execute"');
     console.log('');
 
+    if (!process.env.NEXT_PUBLIC_PROJECT_ID) {
+      console.log(
+        'Note: NEXT_PUBLIC_PROJECT_ID is not set, so WalletConnect options may not appear in RainbowKit.',
+      );
+      console.log(
+        '      To enable WalletConnect, run: NEXT_PUBLIC_PROJECT_ID=... bun run e2e:local',
+      );
+      console.log('');
+    }
+
     // Conductor-style workspaces sometimes symlink `.env.local` to a protected location.
     // Next.js tries to read it on boot; if it's unreadable we temporarily replace it.
     if (fs.existsSync(frontendEnvLocalPath)) {

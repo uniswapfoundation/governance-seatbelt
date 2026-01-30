@@ -2,6 +2,8 @@
 
 import { useSimulationResults } from '@/hooks/use-simulation-results';
 import { parseSimulationType } from '@/lib/write-actions';
+import { Badge } from '@/components/ui/badge';
+import { appChain } from '@/config';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { CheckCircleIcon, FileTextIcon, PlayIcon, SendIcon } from 'lucide-react';
 import Link from 'next/link';
@@ -61,6 +63,9 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center">
+            <Badge variant="outline" className="mr-2">
+              {appChain.name} ({appChain.id})
+            </Badge>
             <ConnectButton chainStatus="name" />
           </div>
         </div>
