@@ -259,14 +259,45 @@ function AddressValue({
 function ValueWithCopy({
   value,
   className,
+  truncate = true,
 }: {
   value: string;
   className?: string;
+  truncate?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLongValue = value.length > 66; // longer than an address
+  const shouldTruncate = truncate && isLongValue && !expanded;
+
+  const displayValue = shouldTruncate ? `${value.slice(0, 20)}...${value.slice(-16)}` : value;
+
+  const handleToggle = isLongValue ? () => setExpanded(!expanded) : undefined;
+  const handleKeyDown = isLongValue
+    ? (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          setExpanded(!expanded);
+        }
+      }
+    : undefined;
+
   return (
-    <div className={`group inline-flex items-center gap-1 ${className || ''}`}>
-      <span className="font-mono text-xs break-all">{value}</span>
-      <CopyButton value={value} className={`h-4 w-4 ${hoverCopyClasses}`} />
+    <div className={`group inline-flex items-center gap-1 min-w-0 ${className || ''}`}>
+      <span
+        className={`font-mono text-xs ${shouldTruncate ? 'cursor-pointer hover:text-foreground' : ''} ${isLongValue && !expanded ? 'text-muted-foreground' : ''}`}
+        onClick={handleToggle}
+        onKeyDown={handleKeyDown}
+        tabIndex={isLongValue ? 0 : undefined}
+        role={isLongValue ? 'button' : undefined}
+        title={isLongValue && !expanded ? 'Click to expand' : undefined}
+      >
+        {expanded ? (
+          <span className="break-all">{value}</span>
+        ) : (
+          <span className={shouldTruncate ? '' : 'break-all'}>{displayValue}</span>
+        )}
+      </span>
+      <CopyButton value={value} className={`h-4 w-4 shrink-0 ${hoverCopyClasses}`} />
     </div>
   );
 }
@@ -529,25 +560,42 @@ function EventCard({
     return <div className="text-xs font-mono break-all text-muted-foreground">{eventText}</div>;
   }
 
-  return (
-    <div className="space-y-0.5">
-      <div className="text-xs font-medium">{parsed.name}</div>
-      {parsed.params.map((p) => {
-        const raw = p.value;
-        const isAddr = isHexAddress(raw);
+  const hasParams = parsed.params.length > 0;
 
-        return (
-          <div key={`${parsed.name}-${p.name}-${raw}`} className="flex items-center gap-3 text-xs">
-            <span className="text-muted-foreground w-14 shrink-0">{p.name}</span>
-            {isAddr ? (
-              <AddressValue address={raw} baseUrl={baseUrl} labels={labels} chainId={chainId} />
-            ) : (
-              <ValueWithCopy value={raw} />
-            )}
-          </div>
-        );
-      })}
-    </div>
+  return (
+    <details className="group">
+      <summary className="cursor-pointer select-none flex items-center gap-2 text-xs [&::-webkit-details-marker]:hidden">
+        <ChevronDownIcon className="h-3 w-3 text-muted-foreground transition-transform group-open:rotate-180 shrink-0" />
+        <span className="font-medium text-foreground">{parsed.name}</span>
+        {hasParams && (
+          <span className="text-muted-foreground">({parsed.params.length} params)</span>
+        )}
+      </summary>
+      {hasParams && (
+        <div className="mt-1.5 ml-5 space-y-1 border-l-2 border-muted/50 pl-3">
+          {parsed.params.map((p) => {
+            const raw = p.value;
+            const isAddr = isHexAddress(raw);
+
+            return (
+              <div
+                key={`${parsed.name}-${p.name}-${raw}`}
+                className="flex items-start gap-2 text-xs"
+              >
+                <span className="text-muted-foreground w-20 shrink-0 truncate" title={p.name}>
+                  {p.name}
+                </span>
+                {isAddr ? (
+                  <AddressValue address={raw} baseUrl={baseUrl} labels={labels} chainId={chainId} />
+                ) : (
+                  <ValueWithCopy value={raw} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </details>
   );
 }
 
@@ -676,33 +724,44 @@ export function CallGroupedView({
         const eventCount = emitted?.events.length ?? 0;
 
         return (
-          <div key={targetKey} className="border border-muted rounded-lg p-3 bg-card space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <AddressValue
-                  address={target}
-                  baseUrl={baseUrl}
-                  labels={labels}
-                  chainId={chainId}
-                  variant="header"
-                />
-                {uniqueTags.map((tag) => (
-                  <Badge
-                    key={tag}
-                    variant="outline"
-                    className={`text-[10px] px-1.5 py-0 ${RISK_TAG_STYLES[tag]}`}
-                  >
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
-              <div className="text-[11px] text-muted-foreground whitespace-nowrap">
-                {targetCalls.length} call{targetCalls.length === 1 ? '' : 's'}
-                {totalEth > 0n ? ` · ${formatEthValue(totalEth)}` : ''}
+          <div
+            key={targetKey}
+            className="rounded-lg border border-border/80 bg-card overflow-hidden"
+          >
+            {/* Target header with accent bar */}
+            <div className="bg-muted/30 border-b border-border/50 px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex flex-col gap-1.5 min-w-0">
+                  <AddressValue
+                    address={target}
+                    baseUrl={baseUrl}
+                    labels={labels}
+                    chainId={chainId}
+                    variant="header"
+                  />
+                  {uniqueTags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {uniqueTags.map((tag) => (
+                        <Badge
+                          key={tag}
+                          variant="outline"
+                          className={`text-[10px] px-2 py-0.5 font-semibold ${RISK_TAG_STYLES[tag]}`}
+                        >
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="text-xs text-muted-foreground whitespace-nowrap bg-background/50 px-2 py-1 rounded">
+                  {targetCalls.length} call{targetCalls.length === 1 ? '' : 's'}
+                  {totalEth > 0n ? ` · ${formatEthValue(totalEth)}` : ''}
+                </div>
               </div>
             </div>
 
-            <div className="space-y-2">
+            {/* Calls list */}
+            <div className="p-3 space-y-2">
               {targetCalls.map((call) => {
                 const hasDetails = Boolean(call.decodedText || call.signature || call.calldata);
                 const decoded = call.decoded;
@@ -720,25 +779,28 @@ export function CallGroupedView({
                 return (
                   <details
                     key={`${call.target}-${call.index}`}
-                    className="group border border-muted/60 rounded"
+                    className="group border border-border/60 rounded-md bg-background/50 hover:bg-background/80 transition-colors"
                   >
-                    <summary className="cursor-pointer select-none px-2.5 py-1.5 flex items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
-                      <div className="min-w-0 flex items-baseline gap-2">
-                        <span className="inline-flex items-center justify-center h-5 w-5 rounded bg-muted text-[10px] font-semibold text-muted-foreground shrink-0">
+                    <summary className="cursor-pointer select-none px-3 py-2 flex items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
+                      <div className="min-w-0 flex items-center gap-2.5">
+                        <span className="inline-flex items-center justify-center h-6 w-6 rounded-md bg-primary/10 text-primary text-xs font-bold shrink-0">
                           {call.index + 1}
                         </span>
-                        <span className="text-sm font-medium">{fnLabel}</span>
+                        <span className="text-sm font-semibold text-foreground">{fnLabel}</span>
                         {showEth && (
-                          <span className="text-xs text-muted-foreground">
+                          <Badge
+                            variant="outline"
+                            className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]"
+                          >
                             {formatEthValue(call.value)}
-                          </span>
+                          </Badge>
                         )}
                       </div>
-                      <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground transition-transform group-open:rotate-180 shrink-0" />
+                      <ChevronDownIcon className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180 shrink-0" />
                     </summary>
 
                     {hasDetails && (
-                      <div className="px-3 pb-3 pt-1 space-y-1.5 text-xs">
+                      <div className="px-3 pb-3 pt-2 space-y-2 text-xs border-t border-border/40 bg-muted/20">
                         {(decoded?.kind === 'call' || decoded?.kind === 'eth-transfer') && (
                           <div className="flex items-center gap-3">
                             <span className="text-muted-foreground w-14 shrink-0">Caller</span>
