@@ -61,7 +61,7 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center">
-            <ConnectButton />
+            <ConnectButton chainStatus="name" />
           </div>
         </div>
       </div>
