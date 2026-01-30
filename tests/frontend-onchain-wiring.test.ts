@@ -5,6 +5,7 @@ import solc from 'solc';
 import {
   createPublicClient,
   createWalletClient,
+  encodeAbiParameters,
   http,
   type Address,
   type Chain,
@@ -40,26 +41,58 @@ pragma solidity ^0.8.20;
 contract MockGovernor {
   uint256 public lastProposalId;
   mapping(uint256 => bool) public executed;
+  mapping(uint256 => address[]) internal _targets;
+  mapping(uint256 => uint256[]) internal _values;
+  mapping(uint256 => bytes[]) internal _calldatas;
 
   event ProposalCreated(uint256 id);
   event ProposalExecuted(uint256 id);
 
   function propose(
-    address[] calldata,
-    uint256[] calldata,
-    string[] calldata,
-    bytes[] calldata,
+    address[] calldata targets,
+    uint256[] calldata values,
+    string[] calldata signatures,
+    bytes[] calldata calldatas,
     string calldata
   ) external returns (uint256) {
+    require(
+      targets.length == values.length &&
+        targets.length == signatures.length &&
+        targets.length == calldatas.length,
+      "length mismatch"
+    );
     lastProposalId++;
     emit ProposalCreated(lastProposalId);
+
+    for (uint256 i = 0; i < targets.length; i++) {
+      bytes memory callData = bytes(signatures[i]).length == 0
+        ? calldatas[i]
+        : abi.encodePacked(bytes4(keccak256(bytes(signatures[i]))), calldatas[i]);
+      _targets[lastProposalId].push(targets[i]);
+      _values[lastProposalId].push(values[i]);
+      _calldatas[lastProposalId].push(callData);
+    }
+
     return lastProposalId;
   }
 
   function execute(uint256 proposalId) external payable {
+    require(!executed[proposalId], "already executed");
     executed[proposalId] = true;
+    address[] storage targets = _targets[proposalId];
+    uint256[] storage values = _values[proposalId];
+    bytes[] storage calldatas = _calldatas[proposalId];
+    for (uint256 i = 0; i < targets.length; i++) {
+      (bool ok, ) = targets[i].call{ value: values[i] }(calldatas[i]);
+      require(ok, "call failed");
+    }
     emit ProposalExecuted(proposalId);
   }
+}
+
+contract MockTarget {
+  uint256 public value;
+  function setValue(uint256 next) external { value = next; }
 }
 `;
 
@@ -79,9 +112,17 @@ contract MockGovernor {
     throw new Error(fatal.map((e) => e.formattedMessage).join('\n'));
   }
 
-  const compiled = output.contracts['MockGovernor.sol']?.MockGovernor;
-  if (!compiled?.evm?.bytecode?.object) throw new Error('Failed to compile MockGovernor');
-  return { abi: compiled.abi, bytecode: `0x${compiled.evm.bytecode.object}` };
+  const contracts = output.contracts['MockGovernor.sol'];
+  const compiledGovernor = contracts?.MockGovernor;
+  const compiledTarget = contracts?.MockTarget;
+  if (!compiledGovernor?.evm?.bytecode?.object) throw new Error('Failed to compile MockGovernor');
+  if (!compiledTarget?.evm?.bytecode?.object) throw new Error('Failed to compile MockTarget');
+  return {
+    abi: compiledGovernor.abi,
+    bytecode: `0x${compiledGovernor.evm.bytecode.object}`,
+    targetAbi: compiledTarget.abi,
+    targetBytecode: `0x${compiledTarget.evm.bytecode.object}`,
+  };
 }
 
 describe('frontend propose/execute on-chain smoke (local anvil)', () => {
@@ -129,20 +170,31 @@ describe('frontend propose/execute on-chain smoke (local anvil)', () => {
         }
       }
 
-      const { abi: mockAbi, bytecode } = compileMockGovernor();
-      const deployHash = await walletClient.deployContract({
+      const { abi: mockAbi, bytecode, targetAbi, targetBytecode } = compileMockGovernor();
+      const deployGovernorHash = await walletClient.deployContract({
         abi: mockAbi,
         bytecode,
       });
-      const deployReceipt = await publicClient.waitForTransactionReceipt({ hash: deployHash });
-      if (!deployReceipt.contractAddress) throw new Error('MockGovernor deployment failed');
-      const governorAddress = deployReceipt.contractAddress as Address;
+      const deployGovernorReceipt = await publicClient.waitForTransactionReceipt({
+        hash: deployGovernorHash,
+      });
+      if (!deployGovernorReceipt.contractAddress) throw new Error('MockGovernor deployment failed');
+      const governorAddress = deployGovernorReceipt.contractAddress as Address;
 
-      const targets = ['0x0000000000000000000000000000000000000001'] as const;
+      const deployTargetHash = await walletClient.deployContract({
+        abi: targetAbi,
+        bytecode: targetBytecode,
+      });
+      const deployTargetReceipt = await publicClient.waitForTransactionReceipt({ hash: deployTargetHash });
+      if (!deployTargetReceipt.contractAddress) throw new Error('MockTarget deployment failed');
+      const targetAddress = deployTargetReceipt.contractAddress as Address;
+
+      const demoValue = 42n;
+      const targets = [targetAddress] as const;
       const values = [0n] as const;
-      const signatures = [''] as const;
-      const calldatas = ['0x'] as const;
-      const description = 'Smoke test proposal';
+      const signatures = ['setValue(uint256)'] as const;
+      const calldatas = [encodeAbiParameters([{ type: 'uint256' }], [demoValue])] as const;
+      const description = 'Smoke test proposal: setValue(42)';
 
       const proposeArgs = buildProposeArgs({
         targets,
@@ -182,10 +234,16 @@ describe('frontend propose/execute on-chain smoke (local anvil)', () => {
         args: [proposalId as bigint],
       });
       expect(executed).toBe(true);
+
+      const value = await publicClient.readContract({
+        address: targetAddress,
+        abi: targetAbi,
+        functionName: 'value',
+      });
+      expect(value).toBe(demoValue);
     } finally {
       anvil.kill();
       await anvil.exited;
     }
   });
 });
-
