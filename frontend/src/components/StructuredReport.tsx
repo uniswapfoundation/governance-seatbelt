@@ -3,11 +3,18 @@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import type { Proposal, StructuredSimulationReport } from '@/hooks/use-simulation-results';
+import type {
+  CheckCoverage,
+  Proposal,
+  StructuredSimulationReport,
+} from '@/hooks/use-simulation-results';
 import { ExternalLinkIcon, InfoIcon } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { CallGroupedView } from './CallGroupedView';
 import { DecisionHeader } from './DecisionHeader';
 import { ChainLogo } from './structured-report/ChainLogo';
 import { ChecksSection } from './structured-report/ChecksSection';
+import { CoverageSummary } from './structured-report/CoverageSummary';
 import { CrossChainChecksSummary } from './structured-report/CrossChainChecksSummary';
 import { CrossChainPreview } from './structured-report/CrossChainPreview';
 import { MetadataItem } from './structured-report/MetadataItem';
@@ -25,13 +32,22 @@ export { buildBlockLink } from './structured-report/explorer';
 
 interface StructuredReportProps {
   report: StructuredSimulationReport;
-  proposal?: Proposal;
+  proposal: Proposal;
 }
 
-export function StructuredReport({ report }: StructuredReportProps) {
+export function StructuredReport({ report, proposal }: StructuredReportProps) {
+  const [activeTab, setActiveTab] = useState('overview');
   const blockNumber =
     report.metadata.simulationBlockNumber || report.metadata.blockNumber || 'unknown';
   const timestamp = report.metadata.simulationTimestamp || report.metadata.timestamp || '0';
+
+  const coverageByCheckId = useMemo(() => {
+    const map = new Map<string, CheckCoverage>();
+    for (const coverageEntry of report.coverage?.checks ?? []) {
+      map.set(coverageEntry.checkId, coverageEntry);
+    }
+    return map;
+  }, [report.coverage?.checks]);
 
   const mainChainId = report.metadata.chainId ?? 1;
   const chainReports = report.chainReports?.length
@@ -61,137 +77,190 @@ export function StructuredReport({ report }: StructuredReportProps) {
 
       <SimulationWarningBanner metadata={report.metadata} />
 
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 h-10 sm:h-11">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-4 h-10 sm:h-11">
           <TabsTrigger className="cursor-pointer text-xs sm:text-sm" value="overview">
             Overview
           </TabsTrigger>
           <TabsTrigger className="cursor-pointer text-xs sm:text-sm" value="checks">
             Checks
           </TabsTrigger>
+          <TabsTrigger className="cursor-pointer text-xs sm:text-sm" value="calls">
+            Calls
+          </TabsTrigger>
           <TabsTrigger className="cursor-pointer text-xs sm:text-sm" value="state-changes">
             State Changes
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-4 space-y-4">
-          {report.crossChain?.messages?.length ? (
-            <section>
-              <h3 className="text-sm sm:text-base font-semibold mb-2">Cross-Chain Preview</h3>
-              <CrossChainPreview messages={report.crossChain.messages} />
-            </section>
-          ) : null}
+        <TabsContent value="overview" className="mt-4 space-y-6">
+          {/* Primary: Execution Summary - Coverage + Cross-Chain in a prominent grid */}
+          {(report.coverage?.checks?.length || report.crossChain?.messages?.length) && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {report.coverage && report.coverage.checks.length > 0 && (
+                <section className="rounded-lg border-2 border-border bg-card p-4 sm:p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                      Check Coverage
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('checks')}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      View all checks →
+                    </button>
+                  </div>
+                  <CoverageSummary
+                    report={report}
+                    coverageByCheckId={coverageByCheckId}
+                    onNavigateToChecks={() => setActiveTab('checks')}
+                  />
+                </section>
+              )}
 
+              {report.crossChain?.messages?.length ? (
+                <section className="rounded-lg border-2 border-border bg-card p-4 sm:p-5">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                    Cross-Chain Messages
+                  </h3>
+                  <CrossChainPreview messages={report.crossChain.messages} />
+                </section>
+              ) : null}
+            </div>
+          )}
+
+          {/* Secondary: Proposal Details - Full width, less prominent */}
           {report.proposalText && (
             <section>
-              <h3 className="text-sm sm:text-base font-semibold mb-2">Proposal Details</h3>
-              <div className="bg-muted p-3 sm:p-4 rounded-lg text-sm whitespace-pre-wrap break-words">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                Proposal Details
+              </h3>
+              <div className="bg-muted/50 border border-border/50 p-4 rounded-lg text-sm whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
                 {report.proposalText}
               </div>
             </section>
           )}
 
-          {report.calldata && (
-            <section>
-              <h3 className="text-sm sm:text-base font-semibold mb-2">Calldata Decoded</h3>
-              <div className="bg-muted p-3 sm:p-4 rounded-lg font-mono text-xs sm:text-sm overflow-x-auto">
-                {report.calldata.decoded}
-              </div>
-            </section>
-          )}
+          {/* Tertiary: Technical Details - Collapsible or compact */}
+          <div className="border-t border-border/50 pt-4">
+            <details className="group">
+              <summary className="text-sm font-semibold uppercase tracking-wide text-muted-foreground cursor-pointer select-none flex items-center gap-2 mb-3">
+                <span className="transition-transform group-open:rotate-90">▸</span>
+                Technical Details
+              </summary>
 
-          <section>
-            <h3 className="text-sm sm:text-base font-semibold mb-2">Metadata</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
-              <MetadataItem label="Block Number">
-                <a
-                  href={buildBlockLink(blockNumber, report.metadata)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono text-xs hover:underline inline-flex items-center gap-1"
-                >
-                  {blockNumber}
-                  <ExternalLinkIcon className="h-3 w-3" />
-                </a>
-              </MetadataItem>
-              <MetadataItem label="Timestamp">
-                {new Date(Number.parseInt(timestamp) * 1000).toLocaleString()}
-              </MetadataItem>
-              <MetadataItem label="Proposal ID">{report.metadata.proposalId}</MetadataItem>
-              <MetadataItem label="Network">{report.metadata.chainName || 'Ethereum'}</MetadataItem>
-              <MetadataItem label="Proposer" fullWidth>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {getAddressLabel(report.metadata.proposer, report.metadata) && (
-                    <span className="font-medium text-sm">
-                      {getAddressLabel(report.metadata.proposer, report.metadata)}
-                    </span>
-                  )}
-                  <a
-                    href={buildAddressLink(report.metadata.proposer, report.metadata)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-mono text-xs hover:underline inline-flex items-center gap-1 break-all text-muted-foreground"
-                  >
-                    <span className="hidden sm:inline">
-                      {report.metadata.proposer.slice(0, 6)}...{report.metadata.proposer.slice(-4)}
-                    </span>
-                    <span className="sm:hidden">
-                      {report.metadata.proposer.slice(0, 6)}...{report.metadata.proposer.slice(-4)}
-                    </span>
-                    <ExternalLinkIcon className="h-3 w-3 shrink-0" />
-                  </a>
-                  {report.metadata.proposerIsPlaceholder && <SimulationPlaceholderBadge />}
+              <div className="space-y-4 pl-4">
+                {report.calldata && (
+                  <div>
+                    <h4 className="text-xs font-medium text-muted-foreground mb-1">
+                      Calldata Decoded
+                    </h4>
+                    <div className="bg-muted/30 border border-border/30 p-3 rounded font-mono text-xs overflow-x-auto max-h-32 overflow-y-auto">
+                      {report.calldata.decoded}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <span className="text-muted-foreground block">Block</span>
+                    <a
+                      href={buildBlockLink(blockNumber, report.metadata)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono hover:underline inline-flex items-center gap-1"
+                    >
+                      {blockNumber}
+                      <ExternalLinkIcon className="h-3 w-3" />
+                    </a>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">Timestamp</span>
+                    <span>{new Date(Number.parseInt(timestamp) * 1000).toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">Proposal ID</span>
+                    <span className="font-mono">{report.metadata.proposalId}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">Network</span>
+                    <span>{report.metadata.chainName || 'Ethereum'}</span>
+                  </div>
                 </div>
-              </MetadataItem>
-              {report.metadata.executor && (
-                <MetadataItem label={getExecutorLabel(report.metadata.simulationType)} fullWidth>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {getAddressLabel(report.metadata.executor, report.metadata) && (
-                      <span className="font-medium text-sm">
-                        {getAddressLabel(report.metadata.executor, report.metadata)}
-                      </span>
-                    )}
-                    <a
-                      href={buildAddressLink(report.metadata.executor, report.metadata)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-xs hover:underline inline-flex items-center gap-1 break-all text-muted-foreground"
-                    >
-                      <span>
-                        {report.metadata.executor.slice(0, 6)}...
-                        {report.metadata.executor.slice(-4)}
-                      </span>
-                      <ExternalLinkIcon className="h-3 w-3 shrink-0" />
-                    </a>
-                    {report.metadata.executorIsPlaceholder && <SimulationPlaceholderBadge />}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-muted-foreground block">Proposer</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {getAddressLabel(report.metadata.proposer, report.metadata) && (
+                        <span className="font-medium">
+                          {getAddressLabel(report.metadata.proposer, report.metadata)}
+                        </span>
+                      )}
+                      <a
+                        href={buildAddressLink(report.metadata.proposer, report.metadata)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono hover:underline inline-flex items-center gap-1 text-muted-foreground"
+                      >
+                        {report.metadata.proposer.slice(0, 6)}...{report.metadata.proposer.slice(-4)}
+                        <ExternalLinkIcon className="h-3 w-3" />
+                      </a>
+                      {report.metadata.proposerIsPlaceholder && <SimulationPlaceholderBadge />}
+                    </div>
                   </div>
-                </MetadataItem>
-              )}
-              {report.metadata.governorAddress && (
-                <MetadataItem label="Governor" fullWidth>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {getAddressLabel(report.metadata.governorAddress, report.metadata) && (
-                      <span className="font-medium text-sm">
-                        {getAddressLabel(report.metadata.governorAddress, report.metadata)}
+                  {report.metadata.executor && (
+                    <div>
+                      <span className="text-muted-foreground block">
+                        {getExecutorLabel(report.metadata.simulationType)}
                       </span>
-                    )}
-                    <a
-                      href={buildAddressLink(report.metadata.governorAddress, report.metadata)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-xs hover:underline inline-flex items-center gap-1 break-all text-muted-foreground"
-                    >
-                      <span>
-                        {report.metadata.governorAddress.slice(0, 6)}...
-                        {report.metadata.governorAddress.slice(-4)}
-                      </span>
-                      <ExternalLinkIcon className="h-3 w-3 shrink-0" />
-                    </a>
-                  </div>
-                </MetadataItem>
-              )}
-            </div>
-          </section>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {getAddressLabel(report.metadata.executor, report.metadata) && (
+                          <span className="font-medium">
+                            {getAddressLabel(report.metadata.executor, report.metadata)}
+                          </span>
+                        )}
+                        <a
+                          href={buildAddressLink(report.metadata.executor, report.metadata)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono hover:underline inline-flex items-center gap-1 text-muted-foreground"
+                        >
+                          {report.metadata.executor.slice(0, 6)}...
+                          {report.metadata.executor.slice(-4)}
+                          <ExternalLinkIcon className="h-3 w-3" />
+                        </a>
+                        {report.metadata.executorIsPlaceholder && <SimulationPlaceholderBadge />}
+                      </div>
+                    </div>
+                  )}
+                  {report.metadata.governorAddress && (
+                    <div>
+                      <span className="text-muted-foreground block">Governor</span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {getAddressLabel(report.metadata.governorAddress, report.metadata) && (
+                          <span className="font-medium">
+                            {getAddressLabel(report.metadata.governorAddress, report.metadata)}
+                          </span>
+                        )}
+                        <a
+                          href={buildAddressLink(report.metadata.governorAddress, report.metadata)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono hover:underline inline-flex items-center gap-1 text-muted-foreground"
+                        >
+                          {report.metadata.governorAddress.slice(0, 6)}...
+                          {report.metadata.governorAddress.slice(-4)}
+                          <ExternalLinkIcon className="h-3 w-3" />
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </details>
+          </div>
         </TabsContent>
 
         <TabsContent value="checks" className="mt-4 space-y-4">
@@ -263,11 +332,17 @@ export function StructuredReport({ report }: StructuredReportProps) {
                     checks={chainReport.checks}
                     stateChanges={chainReport.stateChanges}
                     metadata={effectiveMetadata}
+                    coverageByCheckId={coverageByCheckId}
+                    permissionsDiff={report.permissionsDiff}
                   />
                 )}
               </section>
             );
           })}
+        </TabsContent>
+
+        <TabsContent value="calls" className="mt-4 space-y-4">
+          <CallGroupedView proposal={proposal} report={report} />
         </TabsContent>
 
         <TabsContent value="state-changes" className="mt-4 space-y-4">

@@ -1,6 +1,8 @@
 'use client';
 
 import type {
+  CheckCoverage,
+  PermissionsDiffItem,
   SimulationCheck,
   SimulationStateChange,
   StructuredSimulationReport,
@@ -13,9 +15,17 @@ interface ChecksSectionProps {
   checks: SimulationCheck[];
   stateChanges?: SimulationStateChange[];
   metadata?: StructuredSimulationReport['metadata'];
+  coverageByCheckId?: Map<string, CheckCoverage>;
+  permissionsDiff?: PermissionsDiffItem[];
 }
 
-export function ChecksSection({ checks, stateChanges, metadata }: ChecksSectionProps) {
+export function ChecksSection({
+  checks,
+  stateChanges,
+  metadata,
+  coverageByCheckId,
+  permissionsDiff,
+}: ChecksSectionProps) {
   const grouped = useMemo(() => {
     const failed = checks.filter((c) => c.status === 'failed');
     const warning = checks.filter((c) => c.status === 'warning');
@@ -86,6 +96,8 @@ export function ChecksSection({ checks, stateChanges, metadata }: ChecksSectionP
             check={check}
             stateChanges={stateChanges}
             metadata={metadata}
+            coverage={check.checkId ? coverageByCheckId?.get(check.checkId) : undefined}
+            permissionsDiff={permissionsDiff}
           />
         ))}
       </div>

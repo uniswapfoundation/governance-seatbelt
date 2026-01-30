@@ -3,6 +3,8 @@
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type {
+  CheckCoverage,
+  PermissionsDiffItem,
   SimulationCheck,
   SimulationStateChange,
   StructuredSimulationReport,
@@ -17,6 +19,7 @@ import {
   SkipForwardIcon,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { PermissionsDiff } from '../PermissionsDiff';
 import {
   TreasuryMovementCheck,
   isTreasuryMovementCheckDataV1,
@@ -24,6 +27,7 @@ import {
   treasuryMovementDataToViewModel,
 } from '../TreasuryMovementCheck';
 import { ContractVerificationList } from './ContractVerificationList';
+import { getOutcome } from './CoverageSummary';
 import { FormattedCheckDetails } from './FormattedCheckDetails';
 import { ProxyResolutionDetails } from './ProxyResolutionDetails';
 import { StateChanges } from './StateChanges';
@@ -32,10 +36,14 @@ export function ExpandableCheckItem({
   check,
   stateChanges,
   metadata,
+  coverage,
+  permissionsDiff,
 }: {
   check: SimulationCheck;
   stateChanges?: SimulationStateChange[];
   metadata?: StructuredSimulationReport['metadata'];
+  coverage?: CheckCoverage;
+  permissionsDiff?: PermissionsDiffItem[];
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -140,6 +148,18 @@ export function ExpandableCheckItem({
     title.includes('verified on sourcify') || title.includes('verified on block explorer');
   const isProxyResolutionCheck = title.includes('proxy implementation');
   const isTreasuryMovementCheck = title.includes('treasury movement');
+  const isPermissionChangesCheck = title.includes('permission changes');
+
+  const outcome = getOutcome(check, coverage);
+  const methodTag = coverage?.wasInferred ? 'Inferred' : null;
+  const secondaryLine =
+    outcome === 'not_applicable'
+      ? (coverage?.skipReason ?? check.skipReason ?? 'Not applicable')
+      : outcome === 'not_run'
+        ? (coverage?.skipReason ?? 'Not run')
+        : coverage?.wasInferred && coverage?.skipReason
+          ? `Inferred: ${coverage.skipReason}`
+          : null;
 
   const treasuryData = useMemo(() => {
     if (!isTreasuryMovementCheck) return null;
@@ -205,11 +225,25 @@ export function ExpandableCheckItem({
       >
         <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
           <span className="shrink-0 mt-0.5">{getStatusIcon()}</span>
-          <h4 className="font-medium text-sm sm:text-base leading-snug">{check.title}</h4>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <h4 className="font-medium text-sm sm:text-base leading-snug">{check.title}</h4>
+              {methodTag && (
+                <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-300">
+                  {methodTag}
+                </Badge>
+              )}
+            </div>
+            {secondaryLine && <div className="text-xs text-muted-foreground">{secondaryLine}</div>}
+          </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className="hidden sm:block">{getStatusBadge()}</span>
-          {(check.details || check.skipReason || isTreasuryMovementCheck) &&
+          {(check.details ||
+            check.skipReason ||
+            isTreasuryMovementCheck ||
+            isPermissionChangesCheck ||
+            coverage?.skipReason) &&
             (isExpanded ? (
               <ChevronUpIcon className="h-4 w-4 text-muted-foreground" />
             ) : (
@@ -218,83 +252,99 @@ export function ExpandableCheckItem({
         </div>
       </button>
 
-      {isExpanded && (check.details || check.skipReason || isTreasuryMovementCheck) && (
-        <div className="px-3 pb-4 sm:px-4 sm:pb-4 sm:pl-12 text-sm border-t border-muted/50 bg-background/50">
-          {check.status === 'warning' &&
-            check.warnings &&
-            check.warnings.length > 0 &&
-            check.warnings.some((w) => !w.includes('0x') && w.length < 200) && (
-              <div className="mt-4 mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+      {isExpanded &&
+        (check.details ||
+          check.skipReason ||
+          isTreasuryMovementCheck ||
+          isPermissionChangesCheck ||
+          coverage?.skipReason) && (
+          <div className="px-3 pb-4 sm:px-4 sm:pb-4 sm:pl-12 text-sm border-t border-muted/50 bg-background/50">
+            {check.status === 'warning' &&
+              check.warnings &&
+              check.warnings.length > 0 &&
+              check.warnings.some((w) => !w.includes('0x') && w.length < 200) && (
+                <div className="mt-4 mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangleIcon className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
+                    <div className="text-yellow-800 text-sm">
+                      <span className="font-medium">Why this check has warnings:</span>
+                      <ul className="mt-1 list-disc list-inside space-y-1">
+                        {check.warnings
+                          .filter((w) => !w.includes('0x') && w.length < 200)
+                          .map((w, i) => (
+                            <li key={`reason-${i}`}>{w}</li>
+                          ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            {check.status === 'failed' && check.errors && check.errors.length > 0 && (
+              <div className="mt-4 mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
                 <div className="flex items-start gap-2">
-                  <AlertTriangleIcon className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
-                  <div className="text-yellow-800 text-sm">
-                    <span className="font-medium">Why this check has warnings:</span>
+                  <AlertTriangleIcon className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+                  <div className="text-red-800 text-sm">
+                    <span className="font-medium">Why this check failed:</span>
                     <ul className="mt-1 list-disc list-inside space-y-1">
-                      {check.warnings
-                        .filter((w) => !w.includes('0x') && w.length < 200)
-                        .map((w, i) => (
-                          <li key={`reason-${i}`}>{w}</li>
-                        ))}
+                      {check.errors.map((e, i) => (
+                        <li key={`error-${i}`}>{e}</li>
+                      ))}
                     </ul>
                   </div>
                 </div>
               </div>
             )}
 
-          {check.status === 'failed' && check.errors && check.errors.length > 0 && (
-            <div className="mt-4 mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-              <div className="flex items-start gap-2">
-                <AlertTriangleIcon className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
-                <div className="text-red-800 text-sm">
-                  <span className="font-medium">Why this check failed:</span>
-                  <ul className="mt-1 list-disc list-inside space-y-1">
-                    {check.errors.map((e, i) => (
-                      <li key={`error-${i}`}>{e}</li>
-                    ))}
-                  </ul>
-                </div>
+            {check.status === 'skipped' && check.skipReason ? (
+              <div className="mt-4">
+                <p className="text-muted-foreground italic">{check.skipReason}</p>
               </div>
-            </div>
-          )}
-
-          {check.status === 'skipped' && check.skipReason ? (
-            <div className="mt-4">
-              <p className="text-muted-foreground italic">{check.skipReason}</p>
-            </div>
-          ) : isStateChangesCheck ? (
-            <div className="mt-4">
-              {stateChanges && stateChanges.length > 0 ? (
-                <StateChanges stateChanges={stateChanges} />
-              ) : (
-                <div className="flex items-center justify-center p-6 text-muted-foreground">
-                  <InfoIcon className="h-4 w-4 mr-2" />
-                  <span>No state changes available</span>
-                </div>
-              )}
-            </div>
-          ) : isVerificationCheck && check.details ? (
-            <div className="mt-4">
-              <ContractVerificationList details={check.details} />
-            </div>
-          ) : isProxyResolutionCheck && check.details ? (
-            <div className="mt-4">
-              <ProxyResolutionDetails details={check.details} />
-            </div>
-          ) : isTreasuryMovementCheck && treasuryData ? (
-            <div className="mt-4">
-              <TreasuryMovementCheck {...treasuryData} />
-            </div>
-          ) : (
-            <div className="mt-4 whitespace-pre-wrap">
-              <FormattedCheckDetails
-                check={check}
-                stateChanges={stateChanges}
-                metadata={metadata}
-              />
-            </div>
-          )}
-        </div>
-      )}
+            ) : isStateChangesCheck ? (
+              <div className="mt-4">
+                {stateChanges && stateChanges.length > 0 ? (
+                  <StateChanges stateChanges={stateChanges} />
+                ) : (
+                  <div className="flex items-center justify-center p-6 text-muted-foreground">
+                    <InfoIcon className="h-4 w-4 mr-2" />
+                    <span>No state changes available</span>
+                  </div>
+                )}
+              </div>
+            ) : isVerificationCheck && check.details ? (
+              <div className="mt-4">
+                <ContractVerificationList details={check.details} />
+              </div>
+            ) : isProxyResolutionCheck && check.details ? (
+              <div className="mt-4">
+                <ProxyResolutionDetails details={check.details} />
+              </div>
+            ) : isTreasuryMovementCheck && treasuryData ? (
+              <div className="mt-4">
+                <TreasuryMovementCheck {...treasuryData} />
+              </div>
+            ) : isPermissionChangesCheck ? (
+              <div className="mt-4">
+                {permissionsDiff && permissionsDiff.length > 0 ? (
+                  <PermissionsDiff items={permissionsDiff} />
+                ) : (
+                  <div className="flex items-center justify-center p-6 text-muted-foreground">
+                    <InfoIcon className="h-4 w-4 mr-2" />
+                    <span>No permission changes detected</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-4 whitespace-pre-wrap">
+                <FormattedCheckDetails
+                  check={check}
+                  stateChanges={stateChanges}
+                  metadata={metadata}
+                />
+              </div>
+            )}
+          </div>
+        )}
     </div>
   );
 }

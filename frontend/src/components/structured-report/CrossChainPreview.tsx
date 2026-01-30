@@ -20,27 +20,27 @@ export function CrossChainPreview({ messages }: { messages: CrossChainMessagePre
   }, [messages]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {groups.map(([chainId, chainMessages]) => {
         const chainName = chainMessages[0]?.chainName || `Chain ${chainId}`;
         const explorerBaseUrl = chainMessages[0]?.blockExplorerBaseUrl || 'https://etherscan.io';
         const bridgeType = chainMessages[0]?.bridgeType;
 
         return (
-          <div key={chainId} className="border border-muted rounded-md p-4 bg-card">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2 font-semibold">
-                <ChainLogo chainId={chainId} size={20} />
+          <div key={chainId}>
+            <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <ChainLogo chainId={chainId} size={16} />
                 {chainName}
               </div>
               {bridgeType ? (
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-[10px] h-5 px-1.5">
                   {bridgeType}
                 </Badge>
               ) : null}
             </div>
 
-            <div className="mt-3 space-y-3">
+            <div className="space-y-2">
               {chainMessages.map((message, index) => {
                 const messageKey = `${message.chainId}-${message.bridgeType}-${message.l2FromAddress ?? 'unknown'}-${message.l2TargetAddress ?? 'unknown'}-${message.l2InputData ?? 'unknown'}-${message.status}`;
                 const target = message.l2TargetAddress;
@@ -49,11 +49,11 @@ export function CrossChainPreview({ messages }: { messages: CrossChainMessagePre
 
                 const statusBadge =
                   message.status === 'success' ? (
-                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-xs">
-                      Succeeded
+                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px] h-5 px-1.5">
+                      OK
                     </Badge>
                   ) : (
-                    <Badge variant="destructive" className="text-xs">
+                    <Badge variant="destructive" className="text-[10px] h-5 px-1.5">
                       Failed
                     </Badge>
                   );
@@ -61,48 +61,38 @@ export function CrossChainPreview({ messages }: { messages: CrossChainMessagePre
                 return (
                   <div
                     key={messageKey}
-                    className="border border-border/50 rounded-md bg-muted/30 p-3"
+                    className="border border-border/40 rounded bg-muted/20 p-2.5"
                   >
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <div className="text-sm font-medium">Message {index + 1}</div>
-                      {statusBadge}
-                    </div>
-
-                    <div className="mt-2 space-y-1 text-sm">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-muted-foreground">Target:</span>
-                        {targetLabel ? <span>{targetLabel}</span> : null}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-xs">
+                        {targetLabel ? (
+                          <span className="font-medium">{targetLabel}</span>
+                        ) : null}
                         {target ? (
                           <a
                             href={buildAddressLinkForExplorer(target, explorerBaseUrl)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                            className="font-mono text-[10px] text-muted-foreground hover:text-foreground inline-flex items-center"
                             title={target}
                           >
                             {target.slice(0, 6)}...{target.slice(-4)}
-                            <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                            <ExternalLinkIcon className="h-2.5 w-2.5 ml-0.5" />
                           </a>
                         ) : (
-                          <span className="text-muted-foreground">(unknown)</span>
+                          <span className="text-muted-foreground text-[10px]">(unknown target)</span>
                         )}
                       </div>
-
-                      <div className="flex items-start gap-2 flex-wrap">
-                        <span className="text-muted-foreground">Call:</span>
-                        <code className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded">
-                          {call}
-                        </code>
-                      </div>
-
-                      {message.error ? (
-                        <div className="text-xs text-red-700 mt-1">{message.error}</div>
-                      ) : message.status === 'failure' ? (
-                        <div className="text-xs text-muted-foreground mt-1">
-                          Failed (no error details captured)
-                        </div>
-                      ) : null}
+                      {statusBadge}
                     </div>
+
+                    <code className="block mt-1.5 font-mono text-[10px] text-muted-foreground truncate">
+                      {call}
+                    </code>
+
+                    {message.error ? (
+                      <div className="text-[10px] text-red-600 mt-1">{message.error}</div>
+                    ) : null}
                   </div>
                 );
               })}

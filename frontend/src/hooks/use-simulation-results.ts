@@ -60,6 +60,34 @@ export interface SimulationCalldata {
   }>;
 }
 
+export interface CheckCoverage {
+  checkId: string;
+  checkName: string;
+  status: 'ran' | 'skipped' | 'failed';
+  skipReason?: string;
+  executionTimeMs?: number;
+  wasInferred?: boolean;
+  chainId?: number;
+}
+
+export interface CoverageData {
+  metadata: {
+    gitCommitHash: string;
+    gitBranch: string;
+    timestamp: string;
+    solcVersion?: string;
+    slitherVersion?: string;
+  };
+  checks: CheckCoverage[];
+  summary: {
+    total: number;
+    ran: number;
+    skipped: number;
+    failed: number;
+    inferredSkips: number;
+  };
+}
+
 export interface AddressLabel {
   label: string;
   type?: 'governance' | 'token' | 'bridge' | 'contract' | 'user';
@@ -147,6 +175,7 @@ export interface StructuredSimulationReport {
   permissionsDiff?: PermissionsDiffItem[];
   calldata?: SimulationCalldata;
   crossChain?: CrossChainPreview;
+  coverage?: CoverageData;
   metadata: {
     // Legacy fields for backwards compatibility
     blockNumber?: string;
