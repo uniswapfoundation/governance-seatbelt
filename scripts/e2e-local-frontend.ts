@@ -151,6 +151,7 @@ function writeSimulationResults({
 async function main() {
   const port = await getFreePort();
   const rpcUrl = `http://127.0.0.1:${port}`;
+  const frontendDir = path.join(process.cwd(), 'frontend');
 
   const anvil = Bun.spawn({
     cmd: ['anvil', '--silent', '--port', String(port), '--chain-id', String(CHAIN_ID), '--mnemonic', HARDHAT_MNEMONIC],
@@ -229,9 +230,28 @@ async function main() {
     console.log('5) Reload /action, then click "Execute"');
     console.log('');
 
+    const nextBin = path.join(
+      frontendDir,
+      'node_modules',
+      '.bin',
+      process.platform === 'win32' ? 'next.cmd' : 'next',
+    );
+    if (!fs.existsSync(nextBin)) {
+      console.log('Installing frontend dependencies (missing next)...');
+      const install = Bun.spawn({
+        cmd: ['bun', 'install'],
+        cwd: frontendDir,
+        stdout: 'inherit',
+        stderr: 'inherit',
+        env: process.env,
+      });
+      const code = await install.exited;
+      if (code !== 0) throw new Error(`frontend bun install failed (exit ${code})`);
+    }
+
     const frontend = Bun.spawn({
-      cmd: ['bun', 'dev'],
-      cwd: path.join(process.cwd(), 'frontend'),
+      cmd: ['bun', 'run', 'dev'],
+      cwd: frontendDir,
       stdout: 'inherit',
       stderr: 'inherit',
       env: {
@@ -263,4 +283,3 @@ async function main() {
 }
 
 await main();
-
