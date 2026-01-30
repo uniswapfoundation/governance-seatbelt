@@ -20,6 +20,14 @@ import {
 
 type RiskTag = 'Upgrade' | 'Admin/Role' | 'Token Approval' | 'Token Transfer' | 'ETH Value';
 
+const RISK_TAG_STYLES: Record<RiskTag, string> = {
+  Upgrade: 'bg-red-100 text-red-800 border-red-200',
+  'Admin/Role': 'bg-orange-100 text-orange-800 border-orange-200',
+  'Token Approval': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  'Token Transfer': 'bg-blue-100 text-blue-800 border-blue-200',
+  'ETH Value': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+};
+
 function isHexAddress(value: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(value);
 }
@@ -587,8 +595,57 @@ export function CallGroupedView({
   const baseUrl = report.metadata.blockExplorerBaseUrl ?? 'https://etherscan.io';
   const labels = report.metadata.addressLabels;
 
+  // Summary stats
+  const totalCalls = calls.length;
+  const totalEthValue = calls.reduce((sum, c) => sum + c.value, 0n);
+  const allTags = calls.flatMap((c) => c.tags);
+  const tagCounts = allTags.reduce<Record<RiskTag, number>>(
+    (acc, tag) => {
+      acc[tag] = (acc[tag] || 0) + 1;
+      return acc;
+    },
+    {} as Record<RiskTag, number>,
+  );
+  const uniqueTargets = Object.keys(byTarget).length;
+
+  if (totalCalls === 0) {
+    return (
+      <div className="flex items-center justify-center p-8 text-muted-foreground border border-dashed border-muted rounded-lg">
+        No calls in this proposal
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
+      {/* Summary Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+        <div className="flex items-center gap-4 text-sm">
+          <span className="font-medium">
+            {totalCalls} call{totalCalls === 1 ? '' : 's'}
+          </span>
+          <span className="text-muted-foreground">
+            {uniqueTargets} contract{uniqueTargets === 1 ? '' : 's'}
+          </span>
+          {totalEthValue > 0n && (
+            <span className="text-muted-foreground">{formatEthValue(totalEthValue)} total</span>
+          )}
+        </div>
+        {Object.keys(tagCounts).length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {(Object.entries(tagCounts) as Array<[RiskTag, number]>).map(([tag, count]) => (
+              <Badge
+                key={tag}
+                variant="outline"
+                className={`text-[10px] px-1.5 ${RISK_TAG_STYLES[tag]}`}
+              >
+                {count} {tag}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </div>
+
       {Object.entries(byTarget).map(([targetKey, targetCalls]) => {
         const target = targetCalls[0]?.target ?? targetKey;
 
@@ -610,7 +667,11 @@ export function CallGroupedView({
                   variant="header"
                 />
                 {uniqueTags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0">
+                  <Badge
+                    key={tag}
+                    variant="outline"
+                    className={`text-[10px] px-1.5 py-0 ${RISK_TAG_STYLES[tag]}`}
+                  >
                     {tag}
                   </Badge>
                 ))}
@@ -643,7 +704,9 @@ export function CallGroupedView({
                   >
                     <summary className="cursor-pointer select-none px-2.5 py-1.5 flex items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
                       <div className="min-w-0 flex items-baseline gap-2">
-                        <span className="text-xs text-muted-foreground">{call.index + 1}</span>
+                        <span className="inline-flex items-center justify-center h-5 w-5 rounded bg-muted text-[10px] font-semibold text-muted-foreground shrink-0">
+                          {call.index + 1}
+                        </span>
                         <span className="text-sm font-medium">{fnLabel}</span>
                         {showEth && (
                           <span className="text-xs text-muted-foreground">
