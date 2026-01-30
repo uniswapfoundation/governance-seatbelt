@@ -17,7 +17,6 @@ import { ChecksSection } from './structured-report/ChecksSection';
 import { CoverageSummary } from './structured-report/CoverageSummary';
 import { CrossChainChecksSummary } from './structured-report/CrossChainChecksSummary';
 import { CrossChainPreview } from './structured-report/CrossChainPreview';
-import { MetadataItem } from './structured-report/MetadataItem';
 import { SimulationPlaceholderBadge } from './structured-report/SimulationPlaceholderBadge';
 import { SimulationWarningBanner } from './structured-report/SimulationWarningBanner';
 import { StateChanges } from './structured-report/StateChanges';
@@ -113,7 +112,6 @@ export function StructuredReport({ report, proposal }: StructuredReportProps) {
                   </div>
                   <CoverageSummary
                     report={report}
-                    coverageByCheckId={coverageByCheckId}
                     onNavigateToChecks={() => setActiveTab('checks')}
                   />
                 </section>
@@ -204,7 +202,8 @@ export function StructuredReport({ report, proposal }: StructuredReportProps) {
                         rel="noopener noreferrer"
                         className="font-mono hover:underline inline-flex items-center gap-1 text-muted-foreground"
                       >
-                        {report.metadata.proposer.slice(0, 6)}...{report.metadata.proposer.slice(-4)}
+                        {report.metadata.proposer.slice(0, 6)}...
+                        {report.metadata.proposer.slice(-4)}
                         <ExternalLinkIcon className="h-3 w-3" />
                       </a>
                       {report.metadata.proposerIsPlaceholder && <SimulationPlaceholderBadge />}
@@ -265,7 +264,13 @@ export function StructuredReport({ report, proposal }: StructuredReportProps) {
 
         <TabsContent value="checks" className="mt-4 space-y-4">
           {report.crossChain?.messages?.length ? (
-            <CrossChainChecksSummary messages={report.crossChain.messages} />
+            <CrossChainChecksSummary
+              messages={report.crossChain.messages}
+              onNavigateToChain={(chainId) => {
+                const el = document.getElementById(`chain-checks-${chainId}`);
+                el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+            />
           ) : null}
 
           {chainReports.map((chainReport) => {
@@ -281,6 +286,7 @@ export function StructuredReport({ report, proposal }: StructuredReportProps) {
             return (
               <section
                 key={`chain-checks-${chainReport.chainId}`}
+                id={`chain-checks-${chainReport.chainId}`}
                 className="rounded-lg border border-border/60 bg-card/50 p-4 sm:p-6 space-y-4"
               >
                 <div className="flex items-center justify-between gap-4">

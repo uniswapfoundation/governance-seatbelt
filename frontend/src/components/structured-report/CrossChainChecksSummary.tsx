@@ -8,7 +8,15 @@ import { ChainLogo } from './ChainLogo';
 import { summarizeCrossChainMessages } from './cross-chain';
 import { buildAddressLinkForExplorer } from './explorer';
 
-export function CrossChainChecksSummary({ messages }: { messages: CrossChainMessagePreview[] }) {
+interface CrossChainChecksSummaryProps {
+  messages: CrossChainMessagePreview[];
+  onNavigateToChain?: (chainId: number) => void;
+}
+
+export function CrossChainChecksSummary({
+  messages,
+  onNavigateToChain,
+}: CrossChainChecksSummaryProps) {
   const summary = useMemo(() => summarizeCrossChainMessages(messages), [messages]);
   const hasFailures = summary.failureCount > 0;
 
@@ -45,10 +53,22 @@ export function CrossChainChecksSummary({ messages }: { messages: CrossChainMess
         {summary.chains.map((chain) => (
           <div key={chain.chainId} className="border border-border/50 rounded-md p-3 bg-muted/20">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <ChainLogo chainId={chain.chainId} size={18} />
-                {chain.chainName}
-              </div>
+              {onNavigateToChain ? (
+                <button
+                  type="button"
+                  onClick={() => onNavigateToChain(chain.chainId)}
+                  className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors cursor-pointer"
+                >
+                  <ChainLogo chainId={chain.chainId} size={18} />
+                  {chain.chainName}
+                  <span className="text-xs text-muted-foreground">↓</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <ChainLogo chainId={chain.chainId} size={18} />
+                  {chain.chainName}
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 {chain.bridgeType ? (
                   <Badge variant="outline" className="text-xs">

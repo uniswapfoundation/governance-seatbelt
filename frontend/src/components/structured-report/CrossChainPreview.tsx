@@ -41,7 +41,7 @@ export function CrossChainPreview({ messages }: { messages: CrossChainMessagePre
             </div>
 
             <div className="space-y-2">
-              {chainMessages.map((message, index) => {
+              {chainMessages.map((message) => {
                 const messageKey = `${message.chainId}-${message.bridgeType}-${message.l2FromAddress ?? 'unknown'}-${message.l2TargetAddress ?? 'unknown'}-${message.l2InputData ?? 'unknown'}-${message.status}`;
                 const target = message.l2TargetAddress;
                 const targetLabel = message.targetLabel;
@@ -65,9 +65,7 @@ export function CrossChainPreview({ messages }: { messages: CrossChainMessagePre
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 text-xs">
-                        {targetLabel ? (
-                          <span className="font-medium">{targetLabel}</span>
-                        ) : null}
+                        {targetLabel ? <span className="font-medium">{targetLabel}</span> : null}
                         {target ? (
                           <a
                             href={buildAddressLinkForExplorer(target, explorerBaseUrl)}
@@ -80,7 +78,9 @@ export function CrossChainPreview({ messages }: { messages: CrossChainMessagePre
                             <ExternalLinkIcon className="h-2.5 w-2.5 ml-0.5" />
                           </a>
                         ) : (
-                          <span className="text-muted-foreground text-[10px]">(unknown target)</span>
+                          <span className="text-muted-foreground text-[10px]">
+                            (unknown target)
+                          </span>
                         )}
                       </div>
                       {statusBadge}

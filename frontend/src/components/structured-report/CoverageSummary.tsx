@@ -22,15 +22,10 @@ export function getOutcome(check: SimulationCheck, coverage?: CheckCoverage): Ch
 
 interface CoverageSummaryProps {
   report: StructuredSimulationReport;
-  coverageByCheckId: Map<string, CheckCoverage>;
   onNavigateToChecks?: () => void;
 }
 
-export function CoverageSummary({
-  report,
-  coverageByCheckId,
-  onNavigateToChecks,
-}: CoverageSummaryProps) {
+export function CoverageSummary({ report, onNavigateToChecks }: CoverageSummaryProps) {
   const coverage = report.coverage;
   if (!coverage || coverage.checks.length === 0) return null;
 
