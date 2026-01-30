@@ -1,5 +1,6 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import { useSimulationResults } from '@/hooks/use-simulation-results';
 import { parseSimulationType } from '@/lib/write-actions';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
@@ -8,6 +9,44 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import type { SimulationType } from './ProposalCard';
+
+function NavbarConnect() {
+  return (
+    <ConnectButton.Custom>
+      {({ account, chain, openAccountModal, openChainModal, openConnectModal, mounted }) => {
+        const connected = mounted && account && chain;
+
+        if (!connected) {
+          return (
+            <Button size="sm" onClick={openConnectModal}>
+              Connect Wallet
+            </Button>
+          );
+        }
+
+        if (chain.unsupported) {
+          return (
+            <Button size="sm" variant="destructive" onClick={openChainModal}>
+              Wrong network
+            </Button>
+          );
+        }
+
+        return (
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={openChainModal}>
+              {chain.name}
+            </Button>
+            <Button size="sm" variant="outline" onClick={openAccountModal}>
+              {account.displayName}
+              {account.displayBalance ? ` (${account.displayBalance})` : ''}
+            </Button>
+          </div>
+        );
+      }}
+    </ConnectButton.Custom>
+  );
+}
 
 export function Navbar() {
   const pathname = usePathname();
@@ -61,10 +100,7 @@ export function Navbar() {
           </div>
 
           <div className="flex items-center">
-            <ConnectButton
-              chainStatus={{ smallScreen: 'name', largeScreen: 'full' }}
-              showBalance={{ smallScreen: false, largeScreen: true }}
-            />
+            <NavbarConnect />
           </div>
         </div>
       </div>
