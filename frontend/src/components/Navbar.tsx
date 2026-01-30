@@ -1,6 +1,5 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
 import { useSimulationResults } from '@/hooks/use-simulation-results';
 import { parseSimulationType } from '@/lib/write-actions';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
@@ -18,29 +17,39 @@ function NavbarConnect() {
 
         if (!connected) {
           return (
-            <Button size="sm" onClick={openConnectModal}>
+            <button className="rk-connect-button" type="button" onClick={openConnectModal}>
               Connect Wallet
-            </Button>
+            </button>
           );
         }
 
         if (chain.unsupported) {
           return (
-            <Button size="sm" variant="destructive" onClick={openChainModal}>
+            <button
+              className="rk-connect-button rk-connect-button--error"
+              type="button"
+              onClick={openChainModal}
+            >
               Wrong network
-            </Button>
+            </button>
           );
         }
 
         return (
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={openChainModal}>
+          <div className="rk-connect-group" aria-label="Wallet">
+            <button
+              className="rk-connect-pill"
+              type="button"
+              onClick={openChainModal}
+              aria-label={`Network: ${chain.name}`}
+            >
               {chain.name}
-            </Button>
-            <Button size="sm" variant="outline" onClick={openAccountModal}>
+            </button>
+            <button className="rk-connect-pill" type="button" onClick={openAccountModal}>
+              <span className="rk-connect-indicator" aria-hidden="true" />
               {account.displayName}
               {account.displayBalance ? ` (${account.displayBalance})` : ''}
-            </Button>
+            </button>
           </div>
         );
       }}
