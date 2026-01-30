@@ -57,11 +57,13 @@ export function CrossChainChecksSummary({
                 <button
                   type="button"
                   onClick={() => onNavigateToChain(chain.chainId)}
-                  className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors cursor-pointer"
+                  className="group/chain flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors cursor-pointer"
                 >
                   <ChainLogo chainId={chain.chainId} size={18} />
                   {chain.chainName}
-                  <span className="text-xs text-muted-foreground">↓</span>
+                  <span className="text-xs text-muted-foreground opacity-0 group-hover/chain:opacity-100 transition-opacity">
+                    ↓
+                  </span>
                 </button>
               ) : (
                 <div className="flex items-center gap-2 text-sm font-medium">
