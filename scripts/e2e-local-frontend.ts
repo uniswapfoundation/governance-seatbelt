@@ -35,6 +35,25 @@ async function getFreePort(): Promise<number> {
   });
 }
 
+async function tryListen(port: number): Promise<boolean> {
+  return await new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', () => resolve(false));
+    server.listen(port, '127.0.0.1', () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
+async function pickPort(): Promise<{ port: number; reason: 'preferred' | 'fallback' }> {
+  const preferred = process.env.E2E_LOCAL_PORT ? Number(process.env.E2E_LOCAL_PORT) : 8545;
+  if (Number.isFinite(preferred) && preferred > 0 && preferred < 65536) {
+    const ok = await tryListen(preferred);
+    if (ok) return { port: preferred, reason: 'preferred' };
+  }
+  return { port: await getFreePort(), reason: 'fallback' };
+}
+
 function compileMockGovernor(): { abi: any; bytecode: `0x${string}` } {
   const source = `
 // SPDX-License-Identifier: UNLICENSED
@@ -150,7 +169,7 @@ function writeSimulationResults({
 }
 
 async function main() {
-  const port = await getFreePort();
+  const { port, reason } = await pickPort();
   const rpcUrl = `http://127.0.0.1:${port}`;
   const frontendDir = path.join(process.cwd(), 'frontend');
   const frontendEnvLocalPath = path.join(frontendDir, '.env.local');
@@ -223,6 +242,11 @@ async function main() {
     console.log('');
     console.log('Local e2e environment is ready:');
     console.log(`- RPC: ${rpcUrl}`);
+    if (reason === 'fallback') {
+      console.log(
+        '- Note: default port 8545 was unavailable; using a random free port (set E2E_LOCAL_PORT=8545 to force).',
+      );
+    }
     console.log(`- Chain ID: ${CHAIN_ID}`);
     console.log(`- MockGovernor: ${governorAddress}`);
     console.log('');
