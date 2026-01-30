@@ -48,9 +48,16 @@ async function tryListen(port: number): Promise<boolean> {
 
 async function pickPort(): Promise<{ port: number; reason: 'preferred' | 'fallback' }> {
   const preferred = process.env.E2E_LOCAL_PORT ? Number(process.env.E2E_LOCAL_PORT) : 8545;
+  const allowFallback = process.env.E2E_LOCAL_ALLOW_FALLBACK_PORT === '1';
   if (Number.isFinite(preferred) && preferred > 0 && preferred < 65536) {
     const ok = await tryListen(preferred);
     if (ok) return { port: preferred, reason: 'preferred' };
+
+    if (!allowFallback) {
+      throw new Error(
+        `Port ${preferred} is not available. Stop the process using it, or set E2E_LOCAL_ALLOW_FALLBACK_PORT=1 to pick a random free port.`,
+      );
+    }
   }
   return { port: await getFreePort(), reason: 'fallback' };
 }
@@ -227,7 +234,18 @@ async function main() {
   let shouldRestoreEnvLocal = false;
 
   const anvil = Bun.spawn({
-    cmd: ['anvil', '--silent', '--port', String(port), '--chain-id', String(CHAIN_ID), '--mnemonic', HARDHAT_MNEMONIC],
+    cmd: [
+      'anvil',
+      '--silent',
+      '--allow-origin',
+      '*',
+      '--port',
+      String(port),
+      '--chain-id',
+      String(CHAIN_ID),
+      '--mnemonic',
+      HARDHAT_MNEMONIC,
+    ],
     stdout: 'inherit',
     stderr: 'inherit',
   });
