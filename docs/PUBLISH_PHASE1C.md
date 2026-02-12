@@ -83,14 +83,62 @@ bun upload --publish
 
 ---
 
+## Access model (MVP decision)
+
+Published simulation viewer links are **unlisted public** — anyone with the URL can view, but
+URLs are not indexed or discoverable. This is acceptable for governance transparency tooling
+where the intent is sharing with specific stakeholders (delegates, multisig signers, forum
+threads).
+
+No authentication or access-control layer is needed on viewer URLs for MVP.
+
+---
+
+## Ownership model (interim → handoff)
+
+### MVP (interim): Marco's personal Vercel account
+
+The managed relay deploys to a Vercel project under Marco's personal account. This unblocks
+shipping immediately without org-level procurement or access provisioning.
+
+**What this means concretely:**
+- Vercel project + deploy token are owned by Marco's personal account.
+- Relay service uses Marco's token to deploy publish bundles.
+- Published URLs live under a personal-account Vercel domain (e.g. `seatbelt-*.vercel.app`).
+
+### Handoff plan (post-MVP)
+
+Once UF/ScopeLift confirms org-level ownership:
+
+1. **Create org Vercel project** under `uniswapfoundation` or `scopelift` team.
+2. **Rotate deploy token** — generate new token under org, update relay service env.
+3. **DNS/domain transfer** — if a custom domain is configured, point it to the org project.
+4. **Existing links** — previously published deployments on the personal account remain
+   accessible (Vercel keeps old deployments). New publishes go to the org project.
+5. **Optional cleanup** — after confirming no active links depend on the personal project,
+   it can be archived.
+
+**Handoff is non-breaking** — the relay service is the only component that holds Vercel
+credentials. CLI callers never see or depend on the Vercel project identity. Swapping the
+backend project is a config change, not a code change.
+
+### Risk mitigations during interim period
+- Personal account Vercel free tier has generous deploy limits (100 deploys/day).
+- If limits are hit, BYO-Vercel fallback (`--publish-provider vercel`) still works.
+- Provenance metadata records which relay/project handled each publish for audit trail.
+
+---
+
 ## Tradeoffs
 
 ### Managed default (recommended)
 - ✅ Zero setup for most users (best onboarding).
 - ✅ Centralized abuse controls and observability.
 - ✅ Enables deterministic publish policy and dedupe.
+- ✅ Unlisted-public links avoid auth complexity for MVP.
 - ⚠️ Adds service operation burden (uptime, quotas, moderation).
 - ⚠️ Introduces central dependency (must provide fallback path).
+- ⚠️ Interim personal-account ownership adds handoff step (mitigated: config-only change).
 
 ### BYO-Vercel only (current)
 - ✅ Fully decentralized responsibility.
@@ -125,5 +173,6 @@ Feature-flagged CLI scaffold (no breaking default change yet):
 1. Stand up relay service endpoint (`POST /api/v1/publishes`) with authless rate-limited ingress.
 2. Re-validate artifact server-side using same contract/validator.
 3. Add artifact-hash dedupe table and publish metadata persistence.
-4. Wire relay deploy worker to Seatbelt-owned Vercel project.
+4. Wire relay deploy worker to Marco's personal Vercel project (interim ownership).
 5. Flip CLI default from gated rollout to managed-by-default once service SLOs are stable.
+6. Execute ownership handoff (see "Ownership model" above) when org confirms.
