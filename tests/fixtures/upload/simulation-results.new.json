@@ -1,0 +1,33 @@
+{
+  "proposalData": {
+    "id": "new-001",
+    "targets": ["0x1111111111111111111111111111111111111111"],
+    "values": ["0"],
+    "signatures": ["transfer(address,uint256)"],
+    "calldatas": ["0x1234"],
+    "description": "# New proposal"
+  },
+  "report": {
+    "status": "warning",
+    "summary": "Simulation completed with warnings.",
+    "markdownReport": "# Report",
+    "structuredReport": {
+      "status": "warning",
+      "summary": "Simulation completed with warnings.",
+      "checks": [],
+      "events": [],
+      "stateChanges": [],
+      "metadata": {
+        "schemaVersion": 1,
+        "simulationType": "new",
+        "proposalId": "new-001",
+        "governorAddress": "0x9876543210fedcba9876543210fedcba98765432",
+        "chainId": 1,
+        "simulationBlockNumber": "18200000",
+        "simulationTimestamp": "1700000000",
+        "proposalCreatedAtBlockNumber": "unknown",
+        "proposalCreatedAtTimestamp": "unknown"
+      }
+    }
+  }
+}

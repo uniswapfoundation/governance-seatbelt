@@ -26,3 +26,4 @@ tenderly*.json
 new-response.json
 .osgrep/
 .context/
+.seatbelt/

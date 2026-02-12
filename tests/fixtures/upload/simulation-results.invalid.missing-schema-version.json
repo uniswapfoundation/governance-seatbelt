@@ -1,0 +1,32 @@
+{
+  "proposalData": {
+    "id": "125",
+    "targets": ["0x1111111111111111111111111111111111111111"],
+    "values": ["0"],
+    "signatures": ["transfer(address,uint256)"],
+    "calldatas": ["0x1234"],
+    "description": "# Invalid proposal"
+  },
+  "report": {
+    "status": "success",
+    "summary": "Simulation completed successfully.",
+    "markdownReport": "# Report",
+    "structuredReport": {
+      "status": "success",
+      "summary": "Simulation completed successfully.",
+      "checks": [],
+      "events": [],
+      "stateChanges": [],
+      "metadata": {
+        "simulationType": "proposed",
+        "proposalId": "125",
+        "governorAddress": "0x9876543210fedcba9876543210fedcba98765432",
+        "chainId": 1,
+        "simulationBlockNumber": "18200000",
+        "simulationTimestamp": "1700000000",
+        "proposalCreatedAtBlockNumber": "18000000",
+        "proposalCreatedAtTimestamp": "1699000000"
+      }
+    }
+  }
+}

@@ -20,6 +20,8 @@
     "propose": "bun run sim && cd frontend && bun dev",
     "e2e:local": "bun run scripts/e2e-local-frontend.ts",
     "e2e:local:set-proposed": "bun run scripts/e2e-local-set-proposed.ts",
+    "upload": "bun run scripts/upload.ts",
+    "upload:validate": "bun upload --validate-only",
     "prepare": "husky"
   },
   "repository": {
