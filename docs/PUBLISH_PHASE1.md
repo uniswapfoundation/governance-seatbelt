@@ -85,9 +85,28 @@ Tip: copy those `export` lines into your shell profile or secret manager.
 # Validate + metadata log only
 bun upload --validate-only
 
-# Validate + deploy to Vercel
+# Validate + publish (provider selected by flags/env)
 bun upload --publish
+
+# Explicit providers
+bun upload --publish --publish-provider managed --managed-publish-url https://publish.example/api/v1/publishes
+bun upload --publish --publish-provider vercel
 
 # Optional custom paths
 bun upload --artifact frontend/public/simulation-results.json --log .seatbelt/publish-log.jsonl --publish
 ```
+
+## Phase 1C scaffold (managed relay default path)
+
+`bun upload` now includes a feature-flagged managed relay scaffold to support a zero-setup publish path:
+
+- `--publish-provider auto|managed|vercel`
+- `--managed-publish-url <url>`
+- `SEATBELT_ENABLE_MANAGED_PUBLISH=1` (makes `auto` pick managed relay)
+- `SEATBELT_MANAGED_PUBLISH_URL`
+- `SEATBELT_MANAGED_PUBLISH_TIMEOUT_MS`
+- `SEATBELT_MANAGED_PUBLISH_MAX_BYTES`
+
+BYO Vercel remains fully supported as the advanced fallback mode.
+
+See `docs/PUBLISH_PHASE1C.md` for full architecture/tradeoffs.

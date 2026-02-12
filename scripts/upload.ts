@@ -13,12 +13,18 @@ type UploadArgs = {
   logPath: string;
   publish: boolean;
   validateOnly: boolean;
+  publishProvider: PublishProviderSelection;
+  managedPublishUrl?: string;
 };
 
 const DEFAULT_ARTIFACT_PATH = 'frontend/public/simulation-results.json';
 const DEFAULT_LOG_PATH = '.seatbelt/publish-log.jsonl';
+const DEFAULT_MANAGED_PUBLISH_TIMEOUT_MS = 20_000;
+const DEFAULT_MANAGED_PUBLISH_MAX_BYTES = 25 * 1024 * 1024;
 
-type PublishMode = 'validate-only' | 'upload-scaffold';
+type PublishMode = 'validate-only' | 'upload-scaffold' | 'managed-relay';
+type PublishProviderSelection = 'auto' | 'vercel' | 'managed';
+type ResolvedPublishProvider = Exclude<PublishProviderSelection, 'auto'>;
 
 type PublishLogEntry = {
   publish_id: string;
@@ -31,6 +37,39 @@ type PublishLogEntry = {
   artifact_path: string;
   mode: PublishMode;
 };
+
+type ManagedPublishResponse = {
+  deploymentUrl: string;
+  artifactUrl?: string;
+  metadataUrl?: string;
+  duplicateOfPublishId?: string;
+};
+
+type ManagedPublishRequest = {
+  artifact: PublishableSimulationResult;
+  publishMetadata: PublishLogEntry;
+  provenance: {
+    source: 'seatbelt-cli';
+    artifactPath: string;
+    runtime: {
+      bunVersion: string;
+      platform: NodeJS.Platform;
+      arch: string;
+    };
+    git?: {
+      sha?: string;
+      ref?: string;
+      repository?: string;
+    };
+  };
+};
+
+type ManagedPublishRunner = (input: {
+  endpointUrl: string;
+  request: ManagedPublishRequest;
+  timeoutMs: number;
+  maxPayloadBytes: number;
+}) => Promise<ManagedPublishResponse>;
 
 type CommandRunOptions = {
   cwd: string;
@@ -52,6 +91,7 @@ type CommandRunner = (
 export type UploadRuntimeOverrides = {
   env?: Record<string, string | undefined>;
   runCommand?: CommandRunner;
+  runManagedPublish?: ManagedPublishRunner;
 };
 
 type VercelPublishEnv = {
@@ -66,11 +106,13 @@ function printHelp() {
   console.log('Usage: bun upload [options]');
   console.log('');
   console.log('Options:');
-  console.log('  --artifact <path>      Path to simulation-results artifact');
-  console.log('  --publish              Publish validated artifact to Vercel');
-  console.log('  --validate-only        Validate + log metadata without publish attempt');
-  console.log('  --log <path>           Publish metadata log path');
-  console.log('  -h, --help             Show this help');
+  console.log('  --artifact <path>              Path to simulation-results artifact');
+  console.log('  --publish                      Publish validated artifact');
+  console.log('  --validate-only                Validate + log metadata without publish attempt');
+  console.log('  --log <path>                   Publish metadata log path');
+  console.log('  --publish-provider <provider>  auto | managed | vercel');
+  console.log('  --managed-publish-url <url>    Managed publish endpoint (Phase 1C scaffold)');
+  console.log('  -h, --help                     Show this help');
 }
 
 function parseUploadArgs(argv: string[]): UploadArgs {
@@ -79,6 +121,7 @@ function parseUploadArgs(argv: string[]): UploadArgs {
     logPath: DEFAULT_LOG_PATH,
     publish: false,
     validateOnly: false,
+    publishProvider: 'auto',
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -106,6 +149,32 @@ function parseUploadArgs(argv: string[]): UploadArgs {
 
     if (arg === '--publish') {
       parsed.publish = true;
+      continue;
+    }
+
+    if (arg === '--publish-provider') {
+      const value = argv[i + 1];
+      if (!value) {
+        throw new Error('Missing value for --publish-provider');
+      }
+
+      if (value !== 'auto' && value !== 'managed' && value !== 'vercel') {
+        throw new Error('Invalid value for --publish-provider (expected auto, managed, or vercel)');
+      }
+
+      parsed.publishProvider = value;
+      i += 1;
+      continue;
+    }
+
+    if (arg === '--managed-publish-url') {
+      const value = argv[i + 1];
+      if (!value) {
+        throw new Error('Missing value for --managed-publish-url');
+      }
+
+      parsed.managedPublishUrl = value;
+      i += 1;
       continue;
     }
 
@@ -189,6 +258,66 @@ function readPrimaryOrAliasEnv(
 
 function formatEnvPair(primaryName: string, aliasName: string): string {
   return `${primaryName} (or ${aliasName})`;
+}
+
+function readBooleanFlag(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
+function readPositiveIntegerEnv(
+  env: Record<string, string | undefined>,
+  name: string,
+): number | undefined {
+  const value = readNonEmptyEnv(env, name);
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer when set (received: ${value})`);
+  }
+
+  return Math.floor(parsed);
+}
+
+function resolvePublishProvider(
+  args: UploadArgs,
+  runtimeEnv: Record<string, string | undefined>,
+): ResolvedPublishProvider {
+  if (args.publishProvider === 'managed' || args.publishProvider === 'vercel') {
+    return args.publishProvider;
+  }
+
+  if (readBooleanFlag(readNonEmptyEnv(runtimeEnv, 'SEATBELT_ENABLE_MANAGED_PUBLISH'))) {
+    return 'managed';
+  }
+
+  return 'vercel';
+}
+
+function readManagedPublishUrl(
+  args: UploadArgs,
+  runtimeEnv: Record<string, string | undefined>,
+): string {
+  const fromArg = args.managedPublishUrl?.trim();
+  if (fromArg && fromArg.length > 0) {
+    return fromArg;
+  }
+
+  const fromEnv = readNonEmptyEnv(runtimeEnv, 'SEATBELT_MANAGED_PUBLISH_URL');
+  if (fromEnv) {
+    return fromEnv;
+  }
+
+  throw new Error(
+    'Managed publish endpoint is not configured. Set SEATBELT_MANAGED_PUBLISH_URL or pass --managed-publish-url.',
+  );
 }
 
 function readVercelPublishEnv(env: Record<string, string | undefined>): VercelPublishEnv {
@@ -393,6 +522,228 @@ function appendPathToUrl(baseUrl: string, relativePath: string): string {
   return `${baseUrl}/${relativePath}`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readOptionalString(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  return undefined;
+}
+
+function parseManagedPublishResponse(value: unknown): ManagedPublishResponse {
+  if (!isRecord(value)) {
+    throw new Error('Managed publish response must be a JSON object.');
+  }
+
+  const deploymentUrl = readOptionalString(value, 'deploymentUrl');
+  if (!deploymentUrl) {
+    throw new Error('Managed publish response is missing deploymentUrl.');
+  }
+
+  return {
+    deploymentUrl,
+    artifactUrl: readOptionalString(value, 'artifactUrl'),
+    metadataUrl: readOptionalString(value, 'metadataUrl'),
+    duplicateOfPublishId: readOptionalString(value, 'duplicateOfPublishId'),
+  };
+}
+
+function toJsonSnippet(input: string): string {
+  const trimmed = input.trim();
+  if (trimmed.length === 0) {
+    return '(empty response body)';
+  }
+
+  if (trimmed.length <= 500) {
+    return trimmed;
+  }
+
+  return `${trimmed.slice(0, 500)}…`;
+}
+
+function extractErrorMessageFromJson(value: unknown): string | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const message = readOptionalString(value, 'message');
+  if (message) {
+    return message;
+  }
+
+  const error = readOptionalString(value, 'error');
+  if (error) {
+    return error;
+  }
+
+  return undefined;
+}
+
+function buildManagedPublishRequest(
+  validatedArtifact: PublishableSimulationResult,
+  logEntry: PublishLogEntry,
+  runtimeEnv: Record<string, string | undefined>,
+): ManagedPublishRequest {
+  return {
+    artifact: validatedArtifact,
+    publishMetadata: logEntry,
+    provenance: {
+      source: 'seatbelt-cli',
+      artifactPath: logEntry.artifact_path,
+      runtime: {
+        bunVersion: Bun.version,
+        platform: process.platform,
+        arch: process.arch,
+      },
+      git: {
+        sha: readNonEmptyEnv(runtimeEnv, 'GITHUB_SHA'),
+        ref: readNonEmptyEnv(runtimeEnv, 'GITHUB_REF'),
+        repository: readNonEmptyEnv(runtimeEnv, 'GITHUB_REPOSITORY'),
+      },
+    },
+  };
+}
+
+async function defaultManagedPublishRunner(input: {
+  endpointUrl: string;
+  request: ManagedPublishRequest;
+  timeoutMs: number;
+  maxPayloadBytes: number;
+}): Promise<ManagedPublishResponse> {
+  const payload = JSON.stringify(input.request);
+  const payloadBytes = Buffer.byteLength(payload, 'utf8');
+
+  if (payloadBytes > input.maxPayloadBytes) {
+    throw new Error(
+      `Managed publish payload is too large (${payloadBytes} bytes > ${input.maxPayloadBytes} bytes). Reduce artifact size or use --publish-provider vercel for BYO deployment.`,
+    );
+  }
+
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => {
+    controller.abort();
+  }, input.timeoutMs);
+
+  let responseText = '';
+
+  try {
+    const response = await fetch(input.endpointUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+        'x-seatbelt-client': 'governance-seatbelt-cli',
+        'x-seatbelt-artifact-hash': input.request.publishMetadata.artifact_hash,
+        'x-seatbelt-schema-version': String(input.request.publishMetadata.schema_version),
+        'x-seatbelt-simulation-type': input.request.publishMetadata.simulation_type,
+        'idempotency-key': input.request.publishMetadata.artifact_hash,
+      },
+      body: payload,
+      signal: controller.signal,
+    });
+
+    responseText = await response.text();
+
+    if (!response.ok) {
+      const parsedBody = (() => {
+        try {
+          return JSON.parse(responseText) as unknown;
+        } catch {
+          return undefined;
+        }
+      })();
+
+      const serviceMessage = extractErrorMessageFromJson(parsedBody);
+      const suffix = serviceMessage ? ` ${serviceMessage}` : ` ${toJsonSnippet(responseText)}`;
+
+      if (response.status === 429) {
+        throw new Error(
+          `Managed publish was rate-limited (HTTP 429). Please wait and retry.${suffix}`,
+        );
+      }
+
+      if (response.status === 413) {
+        throw new Error(`Managed publish rejected payload as too large (HTTP 413).${suffix}`);
+      }
+
+      throw new Error(`Managed publish failed with HTTP ${response.status}.${suffix}`);
+    }
+
+    let parsedJson: unknown;
+    try {
+      parsedJson = JSON.parse(responseText) as unknown;
+    } catch {
+      throw new Error(
+        `Managed publish returned non-JSON success response: ${toJsonSnippet(responseText)}`,
+      );
+    }
+
+    return parseManagedPublishResponse(parsedJson);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Managed publish timed out after ${input.timeoutMs}ms.`);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
+}
+
+async function runManagedPublish(
+  validatedArtifact: PublishableSimulationResult,
+  logEntry: PublishLogEntry,
+  runtimeEnv: Record<string, string | undefined>,
+  args: UploadArgs,
+  runManagedPublishRequest: ManagedPublishRunner,
+): Promise<void> {
+  const endpointUrl = readManagedPublishUrl(args, runtimeEnv);
+  const timeoutMs =
+    readPositiveIntegerEnv(runtimeEnv, 'SEATBELT_MANAGED_PUBLISH_TIMEOUT_MS') ??
+    DEFAULT_MANAGED_PUBLISH_TIMEOUT_MS;
+  const maxPayloadBytes =
+    readPositiveIntegerEnv(runtimeEnv, 'SEATBELT_MANAGED_PUBLISH_MAX_BYTES') ??
+    DEFAULT_MANAGED_PUBLISH_MAX_BYTES;
+
+  const request = buildManagedPublishRequest(validatedArtifact, logEntry, runtimeEnv);
+  const result = await runManagedPublishRequest({
+    endpointUrl,
+    request,
+    timeoutMs,
+    maxPayloadBytes,
+  });
+
+  console.log('[upload] Managed publish succeeded.');
+  console.log(`[upload] Deployment URL: ${result.deploymentUrl}`);
+
+  if (result.artifactUrl) {
+    console.log(`[upload] Artifact URL: ${result.artifactUrl}`);
+  } else {
+    console.log(
+      `[upload] Artifact URL: ${appendPathToUrl(result.deploymentUrl, 'simulation-results.json')}`,
+    );
+  }
+
+  if (result.metadataUrl) {
+    console.log(`[upload] Metadata URL: ${result.metadataUrl}`);
+  } else {
+    console.log(
+      `[upload] Metadata URL: ${appendPathToUrl(result.deploymentUrl, 'publish-metadata.json')}`,
+    );
+  }
+
+  if (result.duplicateOfPublishId) {
+    console.log(
+      `[upload] Duplicate artifact detected. Existing publish: ${result.duplicateOfPublishId}`,
+    );
+  }
+}
+
 async function runVercelPublish(
   artifactRaw: string,
   logEntry: PublishLogEntry,
@@ -471,7 +822,14 @@ export async function runUpload(
     const validated = validatePublishArtifact(parsedArtifact);
     const artifactHash = computeArtifactHash(rawArtifact);
 
-    const mode: PublishMode = args.publish ? 'upload-scaffold' : 'validate-only';
+    const publishProvider = args.publish ? resolvePublishProvider(args, runtimeEnv) : undefined;
+    const mode: PublishMode =
+      publishProvider === 'managed'
+        ? 'managed-relay'
+        : args.publish
+          ? 'upload-scaffold'
+          : 'validate-only';
+
     const logEntry = buildLogEntry(validated, artifactPath, mode, artifactHash);
     appendPublishLog(args.logPath, logEntry);
 
@@ -485,6 +843,19 @@ export async function runUpload(
       return 0;
     }
 
+    if (publishProvider === 'managed') {
+      console.log('[upload] Publish provider: managed relay (Phase 1C scaffold).');
+      await runManagedPublish(
+        validated,
+        logEntry,
+        runtimeEnv,
+        args,
+        overrides.runManagedPublish ?? defaultManagedPublishRunner,
+      );
+      return 0;
+    }
+
+    console.log('[upload] Publish provider: BYO Vercel.');
     await runVercelPublish(rawArtifact, logEntry, runtimeEnv, runCommand);
     return 0;
   } catch (error) {

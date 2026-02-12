@@ -217,9 +217,32 @@ DAO_NAME=Uniswap
 GOVERNOR_ADDRESS=0x408ED6354d4973f66138C91495F2f2FCbd8724C3
 ```
 
-### Uploading validated artifacts to Vercel (`bun upload`)
+### Uploading validated artifacts (`bun upload`)
 
-One-time setup (machine + project link):
+Usage:
+
+```bash
+# Validate artifact + write publish metadata log only
+bun upload --validate-only
+
+# Validate artifact + publish (provider selected by --publish-provider / env)
+bun upload --publish
+```
+
+Phase 1C scaffold adds provider selection:
+
+```bash
+# Auto-select provider (managed relay if SEATBELT_ENABLE_MANAGED_PUBLISH=1, otherwise BYO Vercel)
+bun upload --publish --publish-provider auto
+
+# Explicit managed relay endpoint (zero-setup path scaffold)
+bun upload --publish --publish-provider managed --managed-publish-url https://publish.example/api/v1/publishes
+
+# Explicit BYO Vercel fallback
+bun upload --publish --publish-provider vercel
+```
+
+#### BYO Vercel setup (advanced fallback)
 
 ```bash
 # Install Vercel CLI once
@@ -240,16 +263,6 @@ export SEATBELT_VERCEL_ORG_ID="$VERCEL_ORG_ID"
 ```
 
 If both are set, `VERCEL_*` takes precedence over `SEATBELT_VERCEL_*`.
-
-Usage:
-
-```bash
-# Validate artifact + write publish metadata log only
-bun upload --validate-only
-
-# Validate artifact + publish to Vercel (non-interactive)
-bun upload --publish
-```
 
 Optional custom paths:
 

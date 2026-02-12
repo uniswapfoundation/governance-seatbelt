@@ -284,6 +284,139 @@ describe('bun upload command', () => {
     expect(readStringField(parsedLogEntry, 'mode')).toBe('upload-scaffold');
   });
 
+  it('routes auto publish provider to managed relay when feature flag is enabled', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'seatbelt-upload-managed-auto-'));
+    const artifactPath = fixturePath('simulation-results.proposed.json');
+    const logPath = join(tempDir, 'publish-log.jsonl');
+
+    let commandCalled = false;
+    let managedPublishCalled = false;
+
+    const runResult = await runWithCapturedConsole(
+      ['--artifact', artifactPath, '--publish', '--log', logPath],
+      {
+        env: {
+          SEATBELT_ENABLE_MANAGED_PUBLISH: '1',
+          SEATBELT_MANAGED_PUBLISH_URL: 'https://publish.example/api/v1/publishes',
+        },
+        runCommand: async () => {
+          commandCalled = true;
+          return {
+            exitCode: 0,
+            stdout: 'unused',
+            stderr: '',
+          };
+        },
+        runManagedPublish: async ({ endpointUrl, request }) => {
+          managedPublishCalled = true;
+          expect(endpointUrl).toBe('https://publish.example/api/v1/publishes');
+          expect(request.publishMetadata.simulation_type).toBe('proposed');
+          expect(request.provenance.source).toBe('seatbelt-cli');
+
+          return {
+            deploymentUrl: 'https://seatbelt-managed.vercel.app',
+          };
+        },
+      },
+    );
+
+    expect(runResult.code).toBe(0);
+    expect(commandCalled).toBe(false);
+    expect(managedPublishCalled).toBe(true);
+
+    expect(existsSync(logPath)).toBe(true);
+    const parsedLogEntry = readLogEntry(logPath);
+    expect(readStringField(parsedLogEntry, 'mode')).toBe('managed-relay');
+  });
+
+  it('supports explicit managed provider without Vercel credentials', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'seatbelt-upload-managed-explicit-'));
+    const artifactPath = fixturePath('simulation-results.executed.json');
+    const logPath = join(tempDir, 'publish-log.jsonl');
+
+    const runResult = await runWithCapturedConsole(
+      [
+        '--artifact',
+        artifactPath,
+        '--publish',
+        '--publish-provider',
+        'managed',
+        '--managed-publish-url',
+        'https://publish.example/api/v1/publishes',
+        '--log',
+        logPath,
+      ],
+      {
+        env: {},
+        runManagedPublish: async ({ request }) => ({
+          deploymentUrl: 'https://seatbelt-managed-explicit.vercel.app',
+          artifactUrl: 'https://seatbelt-managed-explicit.vercel.app/simulation-results.json',
+          metadataUrl: 'https://seatbelt-managed-explicit.vercel.app/publish-metadata.json',
+          duplicateOfPublishId: request.publishMetadata.publish_id,
+        }),
+      },
+    );
+
+    expect(runResult.code).toBe(0);
+    expect(runResult.logs.join('\n')).toContain('Managed publish succeeded');
+    expect(existsSync(logPath)).toBe(true);
+  });
+
+  it('allows explicit BYO Vercel fallback even when managed relay flag is enabled', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'seatbelt-upload-vercel-override-'));
+    const artifactPath = fixturePath('simulation-results.proposed.json');
+    const logPath = join(tempDir, 'publish-log.jsonl');
+
+    let commandInvocationCount = 0;
+
+    const runResult = await runWithCapturedConsole(
+      ['--artifact', artifactPath, '--publish', '--publish-provider', 'vercel', '--log', logPath],
+      {
+        env: {
+          SEATBELT_ENABLE_MANAGED_PUBLISH: '1',
+          SEATBELT_MANAGED_PUBLISH_URL: 'https://publish.example/api/v1/publishes',
+          VERCEL_TOKEN: 'test_token',
+          VERCEL_PROJECT_ID: 'prj_123',
+          VERCEL_ORG_ID: 'team_456',
+        },
+        runCommand: async () => {
+          commandInvocationCount += 1;
+          return {
+            exitCode: 0,
+            stdout: 'Production: https://seatbelt-fallback.vercel.app',
+            stderr: '',
+          };
+        },
+      },
+    );
+
+    expect(runResult.code).toBe(0);
+    expect(commandInvocationCount).toBe(1);
+    const parsedLogEntry = readLogEntry(logPath);
+    expect(readStringField(parsedLogEntry, 'mode')).toBe('upload-scaffold');
+  });
+
+  it('enforces managed publish payload size limits before network calls', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'seatbelt-upload-managed-size-limit-'));
+    const artifactPath = fixturePath('simulation-results.proposed.json');
+    const logPath = join(tempDir, 'publish-log.jsonl');
+
+    const runResult = await runWithCapturedConsole(
+      ['--artifact', artifactPath, '--publish', '--log', logPath],
+      {
+        env: {
+          SEATBELT_ENABLE_MANAGED_PUBLISH: '1',
+          SEATBELT_MANAGED_PUBLISH_URL: 'https://publish.example/api/v1/publishes',
+          SEATBELT_MANAGED_PUBLISH_MAX_BYTES: '32',
+        },
+      },
+    );
+
+    expect(runResult.code).toBe(1);
+    expect(runResult.errors.join('\n')).toContain('Managed publish payload is too large');
+    expect(existsSync(logPath)).toBe(true);
+  });
+
   it('surfaces vercel deploy failures with CLI output', async () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'seatbelt-upload-publish-failure-'));
     const artifactPath = fixturePath('simulation-results.proposed.json');
