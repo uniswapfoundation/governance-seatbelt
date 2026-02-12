@@ -174,25 +174,42 @@ function readNonEmptyEnv(
   return trimmed;
 }
 
+function readPrimaryOrAliasEnv(
+  env: Record<string, string | undefined>,
+  primaryName: string,
+  aliasName: string,
+): string | undefined {
+  const primaryValue = readNonEmptyEnv(env, primaryName);
+  if (primaryValue) {
+    return primaryValue;
+  }
+
+  return readNonEmptyEnv(env, aliasName);
+}
+
+function formatEnvPair(primaryName: string, aliasName: string): string {
+  return `${primaryName} (or ${aliasName})`;
+}
+
 function readVercelPublishEnv(env: Record<string, string | undefined>): VercelPublishEnv {
-  const token = readNonEmptyEnv(env, 'VERCEL_TOKEN');
-  const projectId = readNonEmptyEnv(env, 'VERCEL_PROJECT_ID');
-  const orgId = readNonEmptyEnv(env, 'VERCEL_ORG_ID');
+  const token = readPrimaryOrAliasEnv(env, 'VERCEL_TOKEN', 'SEATBELT_VERCEL_TOKEN');
+  const projectId = readPrimaryOrAliasEnv(env, 'VERCEL_PROJECT_ID', 'SEATBELT_VERCEL_PROJECT_ID');
+  const orgId = readPrimaryOrAliasEnv(env, 'VERCEL_ORG_ID', 'SEATBELT_VERCEL_ORG_ID');
 
   const missing: string[] = [];
   if (!token) {
-    missing.push('VERCEL_TOKEN');
+    missing.push(formatEnvPair('VERCEL_TOKEN', 'SEATBELT_VERCEL_TOKEN'));
   }
   if (!projectId) {
-    missing.push('VERCEL_PROJECT_ID');
+    missing.push(formatEnvPair('VERCEL_PROJECT_ID', 'SEATBELT_VERCEL_PROJECT_ID'));
   }
   if (!orgId) {
-    missing.push('VERCEL_ORG_ID');
+    missing.push(formatEnvPair('VERCEL_ORG_ID', 'SEATBELT_VERCEL_ORG_ID'));
   }
 
   if (missing.length > 0) {
     throw new Error(
-      `Vercel publish is missing required environment variables: ${missing.join(', ')}.\nSet these before running bun upload --publish:\n  export VERCEL_TOKEN="<token>"\n  export VERCEL_PROJECT_ID="<project-id>"\n  export VERCEL_ORG_ID="<team-or-user-id>"`,
+      `Vercel publish is missing required environment variables: ${missing.join(', ')}.\nSet these before running bun upload --publish (VERCEL_* takes precedence when both are set):\n  export VERCEL_TOKEN="<token>"\n  export VERCEL_PROJECT_ID="<project-id>"\n  export VERCEL_ORG_ID="<team-or-user-id>"\n  # Or use SEATBELT_VERCEL_TOKEN / SEATBELT_VERCEL_PROJECT_ID / SEATBELT_VERCEL_ORG_ID`,
     );
   }
 

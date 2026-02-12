@@ -232,7 +232,14 @@ vercel link --yes
 export VERCEL_TOKEN="<token-from-vercel-account-settings>"
 export VERCEL_PROJECT_ID="<projectId-from-.vercel/project.json>"
 export VERCEL_ORG_ID="<orgId-from-.vercel/project.json>"
+
+# Optional aliases if your env naming is namespaced
+export SEATBELT_VERCEL_TOKEN="$VERCEL_TOKEN"
+export SEATBELT_VERCEL_PROJECT_ID="$VERCEL_PROJECT_ID"
+export SEATBELT_VERCEL_ORG_ID="$VERCEL_ORG_ID"
 ```
+
+If both are set, `VERCEL_*` takes precedence over `SEATBELT_VERCEL_*`.
 
 Usage:
 

@@ -140,9 +140,89 @@ describe('bun upload command', () => {
     expect(runResult.code).toBe(1);
     expect(commandCalled).toBe(false);
     expect(runResult.errors.join('\n')).toContain('VERCEL_TOKEN');
+    expect(runResult.errors.join('\n')).toContain('SEATBELT_VERCEL_TOKEN');
     expect(runResult.errors.join('\n')).toContain('VERCEL_PROJECT_ID');
+    expect(runResult.errors.join('\n')).toContain('SEATBELT_VERCEL_PROJECT_ID');
     expect(runResult.errors.join('\n')).toContain('VERCEL_ORG_ID');
+    expect(runResult.errors.join('\n')).toContain('SEATBELT_VERCEL_ORG_ID');
     expect(existsSync(logPath)).toBe(true);
+  });
+
+  it('uses SEATBELT_VERCEL_* aliases when VERCEL_* vars are absent', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'seatbelt-upload-publish-alias-'));
+    const artifactPath = fixturePath('simulation-results.proposed.json');
+    const logPath = join(tempDir, 'publish-log.jsonl');
+
+    let commandInvocationCount = 0;
+
+    const runResult = await runWithCapturedConsole(
+      ['--artifact', artifactPath, '--publish', '--log', logPath],
+      {
+        env: {
+          SEATBELT_VERCEL_TOKEN: 'alias_token',
+          SEATBELT_VERCEL_PROJECT_ID: 'alias_project',
+          SEATBELT_VERCEL_ORG_ID: 'alias_org',
+        },
+        runCommand: async (command, args, options) => {
+          commandInvocationCount += 1;
+
+          expect(command).toBe('vercel');
+          expect(args).toEqual(['deploy', '--yes', '--prod', '--token', 'alias_token']);
+          expect(options.env.VERCEL_TOKEN).toBe('alias_token');
+          expect(options.env.VERCEL_PROJECT_ID).toBe('alias_project');
+          expect(options.env.VERCEL_ORG_ID).toBe('alias_org');
+
+          return {
+            exitCode: 0,
+            stdout: 'Production: https://seatbelt-upload-alias.vercel.app',
+            stderr: '',
+          };
+        },
+      },
+    );
+
+    expect(runResult.code).toBe(0);
+    expect(commandInvocationCount).toBe(1);
+  });
+
+  it('prefers VERCEL_* over SEATBELT_VERCEL_* when both are set', async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'seatbelt-upload-publish-precedence-'));
+    const artifactPath = fixturePath('simulation-results.proposed.json');
+    const logPath = join(tempDir, 'publish-log.jsonl');
+
+    let commandInvocationCount = 0;
+
+    const runResult = await runWithCapturedConsole(
+      ['--artifact', artifactPath, '--publish', '--log', logPath],
+      {
+        env: {
+          VERCEL_TOKEN: 'primary_token',
+          VERCEL_PROJECT_ID: 'primary_project',
+          VERCEL_ORG_ID: 'primary_org',
+          SEATBELT_VERCEL_TOKEN: 'alias_token',
+          SEATBELT_VERCEL_PROJECT_ID: 'alias_project',
+          SEATBELT_VERCEL_ORG_ID: 'alias_org',
+        },
+        runCommand: async (command, args, options) => {
+          commandInvocationCount += 1;
+
+          expect(command).toBe('vercel');
+          expect(args).toEqual(['deploy', '--yes', '--prod', '--token', 'primary_token']);
+          expect(options.env.VERCEL_TOKEN).toBe('primary_token');
+          expect(options.env.VERCEL_PROJECT_ID).toBe('primary_project');
+          expect(options.env.VERCEL_ORG_ID).toBe('primary_org');
+
+          return {
+            exitCode: 0,
+            stdout: 'Production: https://seatbelt-upload-precedence.vercel.app',
+            stderr: '',
+          };
+        },
+      },
+    );
+
+    expect(runResult.code).toBe(0);
+    expect(commandInvocationCount).toBe(1);
   });
 
   it('runs non-interactive vercel deploy for bun upload --publish', async () => {

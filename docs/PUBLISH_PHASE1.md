@@ -39,11 +39,13 @@ Current log destination: `.seatbelt/publish-log.jsonl`
 
 ## Day 3 Vercel publish implementation
 
-`bun upload --publish` now performs a real, non-interactive Vercel deploy using:
+`bun upload --publish` now performs a real, non-interactive Vercel deploy using either:
 
-- `VERCEL_TOKEN`
-- `VERCEL_PROJECT_ID`
-- `VERCEL_ORG_ID`
+- `VERCEL_TOKEN` or `SEATBELT_VERCEL_TOKEN`
+- `VERCEL_PROJECT_ID` or `SEATBELT_VERCEL_PROJECT_ID`
+- `VERCEL_ORG_ID` or `SEATBELT_VERCEL_ORG_ID`
+
+Precedence: if both variants are set, `VERCEL_*` wins.
 
 The command deploys a local temporary bundle containing:
 
@@ -68,6 +70,11 @@ vercel link --yes
 export VERCEL_TOKEN="<token-from-vercel-account-settings>"
 export VERCEL_PROJECT_ID="<projectId-from-.vercel/project.json>"
 export VERCEL_ORG_ID="<orgId-from-.vercel/project.json>"
+
+# Optional aliases (supported for teams that namespace env vars)
+export SEATBELT_VERCEL_TOKEN="$VERCEL_TOKEN"
+export SEATBELT_VERCEL_PROJECT_ID="$VERCEL_PROJECT_ID"
+export SEATBELT_VERCEL_ORG_ID="$VERCEL_ORG_ID"
 ```
 
 Tip: copy those `export` lines into your shell profile or secret manager.
