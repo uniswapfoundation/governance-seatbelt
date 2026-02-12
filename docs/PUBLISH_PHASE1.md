@@ -1,6 +1,6 @@
 # Phase 1 Publish Contract (Vercel-first)
 
-This document captures the Day 1 publish guardrails used by `bun upload`.
+This document captures the publish guardrails used by `bun upload`.
 
 ## Canonical artifact input
 
@@ -37,8 +37,50 @@ On successful validation, `bun upload` records:
 
 Current log destination: `.seatbelt/publish-log.jsonl`
 
+## Day 3 Vercel publish implementation
+
+`bun upload --publish` now performs a real, non-interactive Vercel deploy using:
+
+- `VERCEL_TOKEN`
+- `VERCEL_PROJECT_ID`
+- `VERCEL_ORG_ID`
+
+The command deploys a local temporary bundle containing:
+
+- `simulation-results.json` (validated artifact)
+- `publish-metadata.json` (publish metadata)
+- `index.html` (minimal viewer/links)
+
+No Git import flow is required.
+
+## One-time setup (exact commands)
+
+Run from repo root:
+
+```bash
+# 1) Install Vercel CLI (once per machine)
+bun add -g vercel
+
+# 2) Link this repo to the target Vercel project (writes .vercel/project.json)
+vercel link --yes
+
+# 3) Create a token in Vercel Dashboard and export required vars
+export VERCEL_TOKEN="<token-from-vercel-account-settings>"
+export VERCEL_PROJECT_ID="<projectId-from-.vercel/project.json>"
+export VERCEL_ORG_ID="<orgId-from-.vercel/project.json>"
+```
+
+Tip: copy those `export` lines into your shell profile or secret manager.
+
 ## Command shape
 
-- Validate-only: `bun upload --validate-only`
-- Publish scaffold hook: `bun upload --publish`
-  - Day 1 status: Vercel deploy hook reserved and intentionally blocked until Day 3 wiring.
+```bash
+# Validate + metadata log only
+bun upload --validate-only
+
+# Validate + deploy to Vercel
+bun upload --publish
+
+# Optional custom paths
+bun upload --artifact frontend/public/simulation-results.json --log .seatbelt/publish-log.jsonl --publish
+```

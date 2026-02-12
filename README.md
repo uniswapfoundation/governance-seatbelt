@@ -217,6 +217,39 @@ DAO_NAME=Uniswap
 GOVERNOR_ADDRESS=0x408ED6354d4973f66138C91495F2f2FCbd8724C3
 ```
 
+### Uploading validated artifacts to Vercel (`bun upload`)
+
+One-time setup (machine + project link):
+
+```bash
+# Install Vercel CLI once
+bun add -g vercel
+
+# Link this repository to the target Vercel project
+vercel link --yes
+
+# Export required publish credentials
+export VERCEL_TOKEN="<token-from-vercel-account-settings>"
+export VERCEL_PROJECT_ID="<projectId-from-.vercel/project.json>"
+export VERCEL_ORG_ID="<orgId-from-.vercel/project.json>"
+```
+
+Usage:
+
+```bash
+# Validate artifact + write publish metadata log only
+bun upload --validate-only
+
+# Validate artifact + publish to Vercel (non-interactive)
+bun upload --publish
+```
+
+Optional custom paths:
+
+```bash
+bun upload --artifact frontend/public/simulation-results.json --log .seatbelt/publish-log.jsonl --publish
+```
+
 ### Running Simulations
 
 There are two modes of operation:

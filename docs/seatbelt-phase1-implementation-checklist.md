@@ -35,9 +35,9 @@ Source plan: `research/seatbelt-phase1-vercel-execution-plan.md`
 
 ## Day 3 — `bun upload` Vercel publish path
 
-- [~] Scaffold `bun upload` command shape and validation wiring.
-- [ ] Build/inject publish bundle from validated artifact.
-- [ ] Wire Vercel deploy step (auth/link/project) and return share URL.
+- [x] Scaffold `bun upload` command shape and validation wiring.
+- [x] Build/inject publish bundle from validated artifact.
+- [x] Wire Vercel deploy step (auth/link/project) and return share URL.
 - [ ] Add duplicate publish protection keyed by artifact hash.
 
 ## Day 4 — E2E hardening
