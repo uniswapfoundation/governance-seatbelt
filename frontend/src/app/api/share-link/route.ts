@@ -7,7 +7,11 @@ import { NextResponse } from 'next/server';
 const DEFAULT_MAX_SIMULATION_RESULTS_BYTES = 25 * 1024 * 1024; // 25MB
 const DEFAULT_RELAY_TIMEOUT_MS = 120_000;
 const DEFAULT_RELAY_URL = 'https://seatbelt-relay-beta.vercel.app';
+const DEFAULT_SHARE_LINK_RATE_LIMIT_MAX_REQUESTS = 5;
+const DEFAULT_SHARE_LINK_RATE_LIMIT_WINDOW_MS = 60_000;
 const LOCAL_SIMULATION_RESULTS_FILE = path.join(process.cwd(), 'public', 'simulation-results.json');
+
+const shareLinkRequestTimestampsByClient = new Map<string, number[]>();
 
 type ShareLinkResult =
   | {
@@ -45,6 +49,74 @@ function getRelayUrl(): string {
   }
 
   return DEFAULT_RELAY_URL;
+}
+
+function getShareLinkRateLimitMaxRequests(): number {
+  const raw = process.env.SHARE_LINK_RATE_LIMIT_MAX_REQUESTS;
+  if (!raw) return DEFAULT_SHARE_LINK_RATE_LIMIT_MAX_REQUESTS;
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_SHARE_LINK_RATE_LIMIT_MAX_REQUESTS;
+  }
+
+  return Math.floor(parsed);
+}
+
+function getShareLinkRateLimitWindowMs(): number {
+  const raw = process.env.SHARE_LINK_RATE_LIMIT_WINDOW_MS;
+  if (!raw) return DEFAULT_SHARE_LINK_RATE_LIMIT_WINDOW_MS;
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_SHARE_LINK_RATE_LIMIT_WINDOW_MS;
+  }
+
+  return Math.floor(parsed);
+}
+
+function readClientIdentifier(request: Request): string {
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  if (forwardedFor) {
+    const firstForwardedIp = forwardedFor.split(',')[0]?.trim();
+    if (firstForwardedIp) {
+      return firstForwardedIp;
+    }
+  }
+
+  const realIp = request.headers.get('x-real-ip')?.trim();
+  if (realIp) {
+    return realIp;
+  }
+
+  return 'unknown';
+}
+
+function enforceShareLinkRateLimit(
+  request: Request,
+): { allowed: true } | { allowed: false; retryAfterSeconds: number } {
+  const now = Date.now();
+  const rateLimitWindowMs = getShareLinkRateLimitWindowMs();
+  const maxRequests = getShareLinkRateLimitMaxRequests();
+  const cutoff = now - rateLimitWindowMs;
+  const clientIdentifier = readClientIdentifier(request);
+
+  const previousTimestamps = shareLinkRequestTimestampsByClient.get(clientIdentifier) ?? [];
+  const recentTimestamps = previousTimestamps.filter((timestamp) => timestamp > cutoff);
+
+  if (recentTimestamps.length >= maxRequests) {
+    shareLinkRequestTimestampsByClient.set(clientIdentifier, recentTimestamps);
+
+    const oldestTimestamp = recentTimestamps[0] ?? now;
+    const retryAfterMs = Math.max(oldestTimestamp + rateLimitWindowMs - now, 1);
+
+    return { allowed: false, retryAfterSeconds: Math.ceil(retryAfterMs / 1000) };
+  }
+
+  recentTimestamps.push(now);
+  shareLinkRequestTimestampsByClient.set(clientIdentifier, recentTimestamps);
+
+  return { allowed: true };
 }
 
 function appendPathToUrl(baseUrl: string, pathSegment: string): string {
@@ -149,8 +221,21 @@ async function publishViaManagedRelay(
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    const rateLimitResult = enforceShareLinkRateLimit(request);
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: 'Rate limit exceeded. Try again later.' },
+        {
+          status: 429,
+          headers: {
+            'retry-after': String(rateLimitResult.retryAfterSeconds),
+          },
+        },
+      );
+    }
+
     const maxBytes = getMaxSimulationResultsBytes();
     const readResult = readRawArtifact(maxBytes);
 
