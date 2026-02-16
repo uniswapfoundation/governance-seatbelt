@@ -13,8 +13,7 @@ const overrideChainId = process.env.NEXT_PUBLIC_CHAIN_ID
   : null;
 
 const mainnetRpcUrl =
-  process.env.NEXT_PUBLIC_MAINNET_RPC_URL ??
-  (isProduction ? undefined : 'https://eth.llamarpc.com');
+  process.env.NEXT_PUBLIC_MAINNET_RPC_URL ?? 'https://eth.llamarpc.com';
 
 const getChain = (): { chain: Chain; rpcUrl: string } => {
   if (overrideChainId && overrideChainId !== mainnet.id) {
