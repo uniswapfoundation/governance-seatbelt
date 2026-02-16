@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { useHrefWithArtifact } from '@/hooks/use-artifact-navigation';
 import { useSimulationResults } from '@/hooks/use-simulation-results';
 import { parseSimulationType } from '@/lib/write-actions';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
@@ -73,6 +74,8 @@ function NavbarConnect() {
 
 export function Navbar() {
   const pathname = usePathname();
+  const reportHref = useHrefWithArtifact('/');
+  const actionHref = useHrefWithArtifact('/action');
   const { data: simulationData } = useSimulationResults();
 
   const rawSimulationType = simulationData?.report.structuredReport?.metadata?.simulationType;
@@ -106,16 +109,16 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-2">
+            <Link href={reportHref} className="flex items-center gap-2">
               <h1 className="text-xl font-semibold">Seatbelt</h1>
             </Link>
 
             <div className="hidden md:flex items-center gap-1">
-              <NavLink href="/" active={pathname === '/'}>
+              <NavLink href={reportHref} active={pathname === '/'}>
                 <FileTextIcon className="h-4 w-4" />
                 Report
               </NavLink>
-              <NavLink href="/action" active={pathname === '/action'}>
+              <NavLink href={actionHref} active={pathname === '/action'}>
                 {getActionIcon()}
                 {getActionLabel()}
               </NavLink>

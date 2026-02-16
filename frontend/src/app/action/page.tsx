@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Toaster } from '@/components/ui/sonner';
+import { useHrefWithArtifact } from '@/hooks/use-artifact-navigation';
 import { useSimulationResults } from '@/hooks/use-simulation-results';
 import { useWriteExecuteProposal } from '@/hooks/use-write-execute-proposal';
 import { useWriteProposeNew } from '@/hooks/use-write-propose-new';
@@ -19,6 +20,7 @@ import {
   ShieldCheckIcon,
 } from 'lucide-react';
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { useAccount } from 'wagmi';
 
@@ -36,10 +38,20 @@ export default function ActionPage() {
   const { isConnected } = useAccount();
 
   return (
+    <Suspense>
+      <ActionPageContent isConnected={isConnected} />
+    </Suspense>
+  );
+}
+
+function ActionPageContent({ isConnected }: { isConnected: boolean }) {
+  const reportHref = useHrefWithArtifact('/');
+
+  return (
     <div className="min-h-screen px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <div className="mx-auto max-w-5xl xl:max-w-6xl space-y-6">
         <Button variant="ghost" size="sm" asChild className="gap-2">
-          <Link href="/">
+          <Link href={reportHref}>
             <ArrowLeftIcon className="h-4 w-4" />
             Back to Report
           </Link>
@@ -56,6 +68,7 @@ export default function ActionPage() {
 }
 
 function ActionSection({ isConnected }: { isConnected: boolean }) {
+  const reportHref = useHrefWithArtifact('/');
   const { data: simulationData, error: simulationError } = useSimulationResults();
   const {
     mutate: proposeNew,
@@ -222,7 +235,7 @@ function ActionSection({ isConnected }: { isConnected: boolean }) {
                 </div>
               )}
               <Button variant="outline" size="sm" className="w-full mt-2" asChild>
-                <Link href="/">View Full Report</Link>
+                <Link href={reportHref}>View Full Report</Link>
               </Button>
             </CardContent>
           </Card>

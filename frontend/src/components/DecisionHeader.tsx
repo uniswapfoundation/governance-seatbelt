@@ -1,6 +1,9 @@
+'use client';
+
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useShareLink } from '@/hooks/use-share-link';
 import type { StructuredSimulationReport } from '@/hooks/use-simulation-results';
 import {
   ActivityIcon,
@@ -11,6 +14,8 @@ import {
   GithubIcon,
   GlobeIcon,
   HelpCircleIcon,
+  Link2Icon,
+  Loader2Icon,
   ShieldCheckIcon,
   XCircleIcon,
 } from 'lucide-react';
@@ -22,6 +27,7 @@ interface DecisionHeaderProps {
 }
 
 export function DecisionHeader({ report }: DecisionHeaderProps) {
+  const { hasArtifact, isGenerating, onShare } = useShareLink();
   const checks = report.checks ?? [];
   const skippedChecks = checks.filter((check) => check.status === 'skipped');
   const skippedCount = skippedChecks.length;
@@ -82,18 +88,41 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
               )}
             </div>
 
-            {repoCommit && repoUrl && (
-              <Button variant="outline" size="sm" className="h-7 sm:h-8 gap-1.5 text-xs" asChild>
-                <a
-                  href={`${repoUrl}/commit/${repoCommit}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <GithubIcon className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline font-medium">{repoName}</span>
-                </a>
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 sm:h-8 gap-1.5 text-xs"
+                onClick={onShare}
+                disabled={isGenerating}
+              >
+                {isGenerating ? (
+                  <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Link2Icon className="h-3.5 w-3.5" />
+                )}
+                <span className="font-medium">
+                  {isGenerating
+                    ? 'Building Report…'
+                    : hasArtifact
+                      ? 'Copy Share Link'
+                      : 'Generate Share Link'}
+                </span>
               </Button>
-            )}
+
+              {repoCommit && repoUrl && (
+                <Button variant="outline" size="sm" className="h-7 sm:h-8 gap-1.5 text-xs" asChild>
+                  <a
+                    href={`${repoUrl}/commit/${repoCommit}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <GithubIcon className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline font-medium">{repoName}</span>
+                  </a>
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Title + Summary */}

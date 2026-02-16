@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import { Suspense } from 'react';
 import './globals.css';
 import { Navbar } from '@/components/Navbar';
 import ContextProvider from '@/context';
@@ -20,7 +21,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <ContextProvider>
-          <Navbar />
+          <Suspense>
+            <Navbar />
+          </Suspense>
           <main className="pt-20">{children}</main>
         </ContextProvider>
       </body>

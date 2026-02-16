@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { useHrefWithArtifact } from '@/hooks/use-artifact-navigation';
 import type { Proposal } from '@/hooks/use-simulation-results';
 import {
   ArrowRightIcon,
@@ -125,6 +126,7 @@ export function ProposalSummary({
   className,
 }: ProposalSummaryProps) {
   const { isConnected } = useAccount();
+  const actionHref = useHrefWithArtifact('/action');
   const callCount = proposal.targets.length;
 
   const config = getStateConfig(proposalState, simulationType);
@@ -157,7 +159,7 @@ export function ProposalSummary({
           </div>
           {config.showButton && config.buttonText && (
             <Button asChild size="sm" className="gap-2 w-full sm:w-auto shrink-0">
-              <Link href="/action">
+              <Link href={actionHref}>
                 {config.buttonText}
                 <ArrowRightIcon className="h-4 w-4" />
               </Link>

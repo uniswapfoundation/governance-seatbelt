@@ -1,4 +1,8 @@
+'use client';
+
+import { normalizeArtifactUrl } from '@/lib/share-link';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'next/navigation';
 import type { Address } from 'viem';
 
 export interface Proposal {
@@ -228,54 +232,106 @@ export interface SimulationResponse {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isIssueSummaryItem(value: unknown): value is { path: string; message: string } {
+  if (!isRecord(value)) return false;
+
+  const path = Reflect.get(value, 'path');
+  const message = Reflect.get(value, 'message');
+
+  return typeof path === 'string' && typeof message === 'string';
+}
+
+function getErrorSummary(errorData: unknown): string {
+  if (!isRecord(errorData)) {
+    return 'Failed to fetch simulation results';
+  }
+
+  const errorMessage = Reflect.get(errorData, 'error');
+  const issues = Reflect.get(errorData, 'issues');
+
+  const issuesSummary = Array.isArray(issues)
+    ? issues
+        .filter(isIssueSummaryItem)
+        .map((issue) => `${issue.path}: ${issue.message}`)
+        .join('; ')
+    : '';
+
+  const baseMessage =
+    typeof errorMessage === 'string' ? errorMessage : 'Failed to fetch simulation results';
+  return issuesSummary ? `${baseMessage} (${issuesSummary})` : baseMessage;
+}
+
+function isSimulationResponseArray(value: unknown): value is SimulationResponse[] {
+  if (!Array.isArray(value) || value.length === 0) return false;
+
+  return value.every((entry) => {
+    if (!isRecord(entry)) return false;
+
+    const proposalData = Reflect.get(entry, 'proposalData');
+    if (!isRecord(proposalData)) return false;
+
+    const values = Reflect.get(proposalData, 'values');
+    if (!Array.isArray(values)) return false;
+
+    const report = Reflect.get(entry, 'report');
+    return isRecord(report);
+  });
+}
+
 /**
  * Hook to fetch simulation results from the API
  */
 export function useSimulationResults() {
+  const searchParams = useSearchParams();
+  const artifactUrl = normalizeArtifactUrl(searchParams.get('artifact'));
+
   return useQuery<
     SimulationResponse[],
     Error,
     { proposalData: Proposal; report: SimulationResponse['report'] }
   >({
-    queryKey: ['simulationResults'],
+    queryKey: ['simulationResults', artifactUrl ?? 'local'],
     queryFn: async () => {
-      const response = await fetch('/api/simulation-results');
-      if (!response.ok) {
-        const errorData = await response.json();
-        const issuesSummary =
-          Array.isArray(errorData.issues) && errorData.issues.length > 0
-            ? ` (${errorData.issues.map((issue: { path: string; message: string }) => `${issue.path}: ${issue.message}`).join('; ')})`
-            : '';
-        throw new Error(
-          `${errorData.error || 'Failed to fetch simulation results'}${issuesSummary}`,
-        );
+      const requestParams = new URLSearchParams();
+      if (artifactUrl) {
+        requestParams.set('artifact', artifactUrl);
       }
 
-      const data = (await response.json()) as SimulationResponse[];
+      const endpoint = requestParams.size
+        ? `/api/simulation-results?${requestParams.toString()}`
+        : '/api/simulation-results';
 
-      // Validate the data structure
-      if (!data || !Array.isArray(data) || data.length === 0) {
+      const response = await fetch(endpoint, { cache: 'no-store' });
+      if (!response.ok) {
+        const errorData: unknown = await response.json();
+        throw new Error(getErrorSummary(errorData));
+      }
+
+      const data: unknown = await response.json();
+      if (!isSimulationResponseArray(data)) {
         throw new Error('Invalid simulation results: no results found');
       }
 
       return data;
     },
     select: (data) => {
-      // Get the first result
       const firstResult = data[0];
 
-      // Ensure proposalData and values exist
-      if (!firstResult.proposalData || !firstResult.proposalData.values) {
-        throw new Error('Invalid simulation results: missing proposalData.values');
-      }
+      const proposalData: Proposal = {
+        id: firstResult.proposalData.id || 'unknown',
+        targets: firstResult.proposalData.targets,
+        values: firstResult.proposalData.values.map((value) => BigInt(value)),
+        signatures: firstResult.proposalData.signatures,
+        calldatas: firstResult.proposalData.calldatas,
+        description: firstResult.proposalData.description,
+      };
 
       return {
-        proposalData: {
-          ...firstResult.proposalData,
-          // Add id if it doesn't exist
-          id: firstResult.proposalData.id || 'unknown',
-          values: firstResult.proposalData.values.map((value) => BigInt(value)),
-        } as Proposal,
+        proposalData,
         report: firstResult.report,
       };
     },

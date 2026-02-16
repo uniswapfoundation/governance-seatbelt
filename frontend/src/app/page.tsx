@@ -9,6 +9,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { useSimulationResults } from '@/hooks/use-simulation-results';
 import { parseSimulationType } from '@/lib/write-actions';
 import { AlertTriangleIcon, InfoIcon } from 'lucide-react';
+import { Suspense } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 
 function ErrorFallback({ error }: { error: Error }) {
@@ -30,9 +31,11 @@ export default function Home() {
   return (
     <div className="min-h-screen px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <div className="mx-auto max-w-5xl xl:max-w-6xl">
-        <ErrorBoundary FallbackComponent={ErrorFallback}>
-          <ReportSection />
-        </ErrorBoundary>
+        <Suspense fallback={<LoadingSkeleton />}>
+          <ErrorBoundary FallbackComponent={ErrorFallback}>
+            <ReportSection />
+          </ErrorBoundary>
+        </Suspense>
         <Toaster position="bottom-right" closeButton />
       </div>
     </div>
