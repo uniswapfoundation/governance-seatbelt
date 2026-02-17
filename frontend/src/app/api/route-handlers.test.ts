@@ -108,6 +108,18 @@ function readArtifactUrl(payload: unknown): string | null {
   return typeof artifactUrl === 'string' ? artifactUrl : null;
 }
 
+function readFetchRequestUrl(input: RequestInfo | URL): string {
+  if (input instanceof URL) {
+    return input.toString();
+  }
+
+  if (typeof input === 'string') {
+    return input;
+  }
+
+  return input.url;
+}
+
 beforeEach(() => {
   restoreEnvironment();
   restoreSimulationResultsFile();
@@ -156,6 +168,33 @@ describe('/api/simulation-results', () => {
     expect(readMarkdownReport(payload)).toBe('');
   });
 
+  it('normalizes base deployment artifact urls to simulation-results.json before fetch', async () => {
+    let requestedUrl = '';
+
+    globalThis.fetch = createMockFetch(
+      async (input: RequestInfo | URL, _init?: RequestInit): Promise<Response> => {
+        requestedUrl = readFetchRequestUrl(input);
+        return new Response(VALID_SIMULATION_RESULTS_JSON, {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        });
+      },
+    );
+
+    const response = await getSimulationResults(
+      new Request(
+        'http://localhost/api/simulation-results?artifact=https%3A%2F%2Fseatbelt-publish.vercel.app%2Fdeployment%2Fxyz',
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(requestedUrl).toBe(
+      'https://seatbelt-publish.vercel.app/deployment/xyz/simulation-results.json',
+    );
+  });
+
   it('rejects private-network artifact targets even if explicitly configured', async () => {
     process.env.SIMULATION_RESULTS_ALLOWED_ARTIFACT_HOSTS = '10.0.0.1';
 
@@ -176,6 +215,26 @@ describe('/api/simulation-results', () => {
 
     const payload: unknown = await response.json();
     expect(readErrorMessage(payload)).toBe('Artifact URL must not target private networks');
+  });
+
+  it('rejects custom ports for non-localhost artifact urls', async () => {
+    let fetchCalls = 0;
+    globalThis.fetch = createMockFetch(async (): Promise<Response> => {
+      fetchCalls += 1;
+      return new Response('{}', { status: 200 });
+    });
+
+    const response = await getSimulationResults(
+      new Request(
+        'http://localhost/api/simulation-results?artifact=https%3A%2F%2Fseatbelt-publish.vercel.app%3A444%2Fsimulation-results.json',
+      ),
+    );
+
+    expect(response.status).toBe(400);
+    expect(fetchCalls).toBe(0);
+
+    const payload: unknown = await response.json();
+    expect(readErrorMessage(payload)).toBe('Artifact URL must not include custom ports');
   });
 
   it('rejects redirecting artifacts', async () => {

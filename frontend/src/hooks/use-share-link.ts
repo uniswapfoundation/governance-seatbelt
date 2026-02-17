@@ -54,11 +54,14 @@ async function requestShareArtifact(): Promise<string> {
   }
 
   const artifactUrl = Reflect.get(payload, 'artifactUrl');
-  if (typeof artifactUrl !== 'string' || !normalizeArtifactUrl(artifactUrl)) {
+  const normalizedArtifactUrl =
+    typeof artifactUrl === 'string' ? normalizeArtifactUrl(artifactUrl) : null;
+
+  if (!normalizedArtifactUrl) {
     throw new Error('Share link response is invalid');
   }
 
-  return artifactUrl;
+  return normalizedArtifactUrl;
 }
 
 function getCanonicalViewerUrl(): string {

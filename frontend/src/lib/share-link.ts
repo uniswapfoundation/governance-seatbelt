@@ -1,5 +1,6 @@
 const ARTIFACT_QUERY_PARAM = 'artifact';
 const INTERNAL_BASE_URL = 'https://seatbelt.local';
+const SIMULATION_RESULTS_FILENAME = 'simulation-results.json';
 
 function isAbsoluteUrl(value: string): boolean {
   try {
@@ -14,6 +15,19 @@ function supportsArtifactProtocol(url: URL): boolean {
   return url.protocol === 'https:' || url.protocol === 'http:';
 }
 
+function hasSimulationResultsSuffix(pathname: string): boolean {
+  return pathname.endsWith(`/${SIMULATION_RESULTS_FILENAME}`);
+}
+
+function normalizeArtifactPathname(pathname: string): string {
+  if (hasSimulationResultsSuffix(pathname)) {
+    return pathname;
+  }
+
+  const basePathname = pathname.endsWith('/') ? pathname : `${pathname}/`;
+  return `${basePathname}${SIMULATION_RESULTS_FILENAME}`;
+}
+
 export function normalizeArtifactUrl(value: string | null | undefined): string | null {
   if (!value) return null;
 
@@ -25,6 +39,7 @@ export function normalizeArtifactUrl(value: string | null | undefined): string |
     if (!supportsArtifactProtocol(parsed)) return null;
     if (parsed.username || parsed.password) return null;
 
+    parsed.pathname = normalizeArtifactPathname(parsed.pathname);
     parsed.hash = '';
     return parsed.toString();
   } catch {
