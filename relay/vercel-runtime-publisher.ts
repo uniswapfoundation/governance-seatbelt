@@ -229,6 +229,11 @@ function buildDeploymentRequestBody(input: {
         file: 'index.html',
         data: buildPublishLandingPage(input.publishLogEntry),
       },
+      {
+        file: 'vercel.json',
+        // Force static-file deployment even if the target Vercel project has a framework preset.
+        data: `${JSON.stringify({ framework: null }, null, 2)}\n`,
+      },
     ],
   };
 }

@@ -446,6 +446,11 @@ function prepareDeployDirectory(
   writeFileSync(join(deployDir, 'simulation-results.json'), artifactRaw);
   writeFileSync(join(deployDir, 'publish-metadata.json'), JSON.stringify(publishLogEntry, null, 2));
   writeFileSync(join(deployDir, 'index.html'), buildPublishLandingPage(publishLogEntry));
+  // Force static-file deployment even if the target Vercel project has a framework preset.
+  writeFileSync(
+    join(deployDir, 'vercel.json'),
+    `${JSON.stringify({ framework: null }, null, 2)}\n`,
+  );
 
   return deployDir;
 }
