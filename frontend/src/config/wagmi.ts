@@ -52,8 +52,9 @@ const walletConnectProjectId =
 export const projectId = process.env.NEXT_PUBLIC_PROJECT_ID;
 export const walletConnectEnabled = walletConnectProjectId !== null;
 
-export const config = walletConnectEnabled
-  ? getDefaultConfig({
+function createWagmiClientConfig() {
+  if (walletConnectProjectId !== null) {
+    return getDefaultConfig({
       appName: 'Governance Seatbelt',
       projectId: walletConnectProjectId,
       chains: [chain],
@@ -61,12 +62,17 @@ export const config = walletConnectEnabled
         [chain.id]: http(rpcUrl),
       },
       ssr: true,
-    })
-  : createConfig({
-      chains: [chain],
-      transports: {
-        [chain.id]: http(rpcUrl),
-      },
-      connectors: [injected()],
-      ssr: true,
     });
+  }
+
+  return createConfig({
+    chains: [chain],
+    transports: {
+      [chain.id]: http(rpcUrl),
+    },
+    connectors: [injected()],
+    ssr: true,
+  });
+}
+
+export const config = createWagmiClientConfig();
