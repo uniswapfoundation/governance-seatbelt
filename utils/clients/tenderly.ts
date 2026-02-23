@@ -27,8 +27,14 @@ import type {
 } from '../../types.d';
 import { GOVERNOR_ABI } from '../abis/GovernorBravo';
 import { timelockAbi } from '../abis/Timelock';
-import { parseArbitrumL1L2Messages } from '../bridges/arbitrum';
-import { parseOptimismL1L2Messages } from '../bridges/optimism';
+import {
+  parseArbitrumL1L2Messages,
+  parseArbitrumL1L2MessagesFromProposal,
+} from '../bridges/arbitrum';
+import {
+  parseOptimismL1L2Messages,
+  parseOptimismL1L2MessagesFromProposal,
+} from '../bridges/optimism';
 import {
   BLOCK_GAS_LIMIT,
   TENDERLY_ACCESS_TOKEN,
@@ -841,10 +847,31 @@ export async function handleCrossChainSimulations(
   // 1. Parse source simulation for cross-chain messages
   console.log('[CrossChainHandler] Parsing source sim for messages...');
 
-  // Parse messages from both Arbitrum and Optimism bridges
+  // Parse from call trace
   const arbMessages = parseArbitrumL1L2Messages(result.sim);
   const opMessages = parseOptimismL1L2Messages(result.sim);
-  const extractedMessages = [...arbMessages, ...opMessages];
+  let extractedMessages = [...arbMessages, ...opMessages];
+
+  // Fallback: if trace yielded nothing, extract from proposal targets/calldatas (e.g. sim 94)
+  if (extractedMessages.length === 0 && result.proposal?.targets?.length && result.proposal?.calldatas?.length) {
+    const l1Sender = result.deps?.timelock?.address;
+    const arbFromProposal = parseArbitrumL1L2MessagesFromProposal(
+      result.proposal.targets,
+      result.proposal.calldatas,
+      l1Sender,
+    );
+    const opFromProposal = parseOptimismL1L2MessagesFromProposal(
+      result.proposal.targets,
+      result.proposal.calldatas,
+      l1Sender,
+    );
+    extractedMessages = [...arbFromProposal, ...opFromProposal];
+    if (extractedMessages.length > 0) {
+      console.log(
+        `[CrossChainHandler] Using ${extractedMessages.length} message(s) from proposal (trace had none).`,
+      );
+    }
+  }
 
   if (extractedMessages.length === 0) {
     console.log('[CrossChainHandler] No cross-chain messages detected.');

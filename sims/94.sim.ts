@@ -52,12 +52,12 @@ const CELO_V4_POOL_MANAGER = getAddress('0x288dc841A52FCA2707c6947B3A777c5E56cd8
 // Placeholder addresses — replace with actual deployed addresses before real proposal run
 const OP_FEE_ADAPTER = getAddress('0xec23Cf5A1db3dcC6595385D28B2a4D9B52503Be4');
 const OP_TOKEN_JAR = getAddress('0xb13285DF724ea75f3f1E9912010B7e491dCd5EE3');
-const BASE_FEE_ADAPTER = getAddress('	0xaBEA76658b205696d49B5F91b2a03536cB8A3bE1');
+const BASE_FEE_ADAPTER = getAddress('0xaBEA76658b205696d49B5F91b2a03536cB8A3bE1');
 const BASE_TOKEN_JAR = getAddress('0x9bD25e67bF390437C8fAF480AC735a27BcF6168c');
 const ARB_FEE_ADAPTER = getAddress('0xFF7aD5dA31fECdC678796c88B05926dB896b0699');
 const ARB_TOKEN_JAR = getAddress('0x95E337C5B155385945D407f5396387D0c2a3A263');
 const MAINNET_V3_FEE_ADAPTER = getAddress('0x5E74C9f42EEd283bFf3744fBD1889d398d40867d');
-const MAINNET_V3_OPEN_FEE_ADAPTER = getAddress('0x3e40DB80450f025b01E45c58b0aF763C7A29a8bd');
+const MAINNET_V3_OPEN_FEE_ADAPTER = getAddress('0xf2371551Fe3937Db7c750f4DfABe5c2fFFdcBf5A');
 const CELO_CROSS_CHAIN_ACCOUNT = getAddress('0x044aAF330d7fD6AE683EEc5c1C1d1fFf5196B6b7');
 
 const SEND_MESSAGE_ABI = parseAbi([
@@ -287,7 +287,7 @@ If this proposal passes, it will execute ten transactions:
 /// Transition to v3OpenFeeAdapter on Mainnet
 
 /// Change the owner on UniswapV3Factory to v3OpenFeeAdapter
-v3_FEE_ADAPTER.setFactoryOwner(address(v3OpenFeeAdapter));
+V3_FEE_ADAPTER.setFactoryOwner(address(v3OpenFeeAdapter));
 
 /// Enable fees on Arbitrum, Base, and OP Mainnet. For each chain:
 
@@ -347,8 +347,8 @@ Because these transactions are crosschain, governance front ends may not decode 
 | TokenJar | [\`0x9bD25e67bF390437C8fAF480AC735a27BcF6168c\`](https://basescan.org/address/0x9bD25e67bF390437C8fAF480AC735a27BcF6168c) |
 | Releaser (OptimismBridgedResourceFirepit) | [\`0xFf77c0ED0B6b13A20446969107E5867abc46f53a\`](https://basescan.org/address/0xFf77c0ED0B6b13A20446969107E5867abc46f53a) |
 | V3OpenFeeAdapter | [\`0xaBEA76658b205696d49B5F91b2a03536cB8A3bE1\`](https://basescan.org/address/0xaBEA76658b205696d49B5F91b2a03536cB8A3bE1) |
-| UniswapV3Factory | \`0x33128a8fC17869897dcE68Ed026d694621f6FDfD\` |
-| UniswapV2Factory | \`0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6\` |
+| UniswapV3Factory | [\`0x33128a8fC17869897dcE68Ed026d694621f6FDfD\`](https://basescan.org/address/0x33128a8fC17869897dcE68Ed026d694621f6FDfD) |
+| UniswapV2Factory | [\`0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6\`](https://basescan.org/address/0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6) |
 
 **Celo**
 

@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import type { CallTrace } from '../../types';
-import { parseArbitrumL1L2Messages } from '../../utils/bridges/arbitrum';
-import { parseOptimismL1L2Messages } from '../../utils/bridges/optimism';
+import {
+  parseArbitrumL1L2Messages,
+  parseArbitrumL1L2MessagesFromProposal,
+} from '../../utils/bridges/arbitrum';
+import {
+  parseOptimismL1L2Messages,
+  parseOptimismL1L2MessagesFromProposal,
+} from '../../utils/bridges/optimism';
 import { createRealisticSimulation } from './test-utils';
 
 describe('Cross-Chain Bridge Parsing Integration Tests', () => {
@@ -275,6 +281,52 @@ describe('Cross-Chain Bridge Parsing Integration Tests', () => {
 
       // Should find exactly 5 valid messages with unique calldata
       expect(messages).toHaveLength(5);
+    });
+  });
+
+  describe('Proposal-based extraction (fallback when trace is not decodeable)', () => {
+    const arbInbox = '0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f';
+    const opMessenger = '0x25ace71c97B33Cc4729CF772ae268934F7ab5fA1';
+    const arbCreateRetryableCalldata =
+      '0x679b6ded000000000000000000000000912ce59144191c1204e64559fe8253a0e49e654800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a46fc7c680000000000000000000000000002bad8182c09f50c8318d769245bea52c32be46cd0000000000000000000000002bad8182c09f50c8318d769245bea52c32be46cd0000000000000000000000000000000000000000000000000000000000030d40000000000000000000000000000000000000000000000000000000003b9aca0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000044a9059cbb00000000000000000000000066ccbf509cd28c2fc0f40b4469d6b6aa1fc0fed300000000000000000000000000000000000000000000152d02c7e14af680000000000000000000000000000000000000000000000000000000000000';
+
+    test('parseArbitrumL1L2MessagesFromProposal extracts messages for inbox targets', () => {
+      const targets = ['0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', arbInbox];
+      const calldatas = ['0xdead', arbCreateRetryableCalldata];
+      const messages = parseArbitrumL1L2MessagesFromProposal(targets, calldatas);
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({
+        bridgeType: 'ArbitrumL1L2',
+        destinationChainId: '42161',
+        l2TargetAddress: '0x912CE59144191C1204E64559FE8253a0e49E6548',
+      });
+    });
+
+    test('parseArbitrumL1L2MessagesFromProposal ignores non-inbox targets', () => {
+      const targets = ['0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984'];
+      const calldatas = ['0x679b6ded000000000000000000000000912ce59144191c1204e64559fe8253a0e49e6548'];
+      const messages = parseArbitrumL1L2MessagesFromProposal(targets, calldatas);
+      expect(messages).toHaveLength(0);
+    });
+
+    test('parseOptimismL1L2MessagesFromProposal extracts messages for messenger targets', () => {
+      const sendMessageCalldata =
+        '0x3dbb202b0000000000000000000000004200000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000f42400000000000000000000000000000000000000000000000000000000000000004d0e30db000000000000000000000000000000000000000000000000000000000';
+      const targets = ['0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', opMessenger];
+      const calldatas = ['0xdead', sendMessageCalldata];
+      const messages = parseOptimismL1L2MessagesFromProposal(targets, calldatas);
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({
+        bridgeType: 'OptimismL1L2',
+        destinationChainId: '10',
+      });
+    });
+
+    test('parseOptimismL1L2MessagesFromProposal ignores non-messenger targets', () => {
+      const targets = ['0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984'];
+      const calldatas = ['0x3dbb202b0000000000000000000000000000000000000000000000000000000000000000'];
+      const messages = parseOptimismL1L2MessagesFromProposal(targets, calldatas);
+      expect(messages).toHaveLength(0);
     });
   });
 });

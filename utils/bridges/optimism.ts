@@ -1,5 +1,5 @@
 import type { Address, Hex } from 'viem';
-import { decodeFunctionData, getAddress, parseAbi } from 'viem';
+import { decodeFunctionData, getAddress, parseAbi, slice, toFunctionSelector } from 'viem';
 import type { CallTrace, TenderlySimulation } from '../../types.d';
 import type { ExtractedCrossChainMessage } from '../../types.d';
 
@@ -17,6 +17,10 @@ const OPTIMISM_MESSENGERS: Record<string, Address> = {
 const SEND_MESSAGE_ABI = parseAbi([
   'function sendMessage(address _target, bytes _message, uint32 _minGasLimit)',
 ]);
+
+const SEND_MESSAGE_SELECTOR = toFunctionSelector(
+  'function sendMessage(address _target, bytes _message, uint32 _minGasLimit)',
+);
 
 // Uniswap-specific pattern: L1 messages often target an L2 "CrossChainAccount" forwarder which then
 // executes the real call. Simulating the forwarded call directly (from the forwarder) produces a
@@ -112,6 +116,11 @@ export function parseOptimismL1L2Messages(
       console.log(
         `[Optimism Parser] Skipping call with invalid input length: ${call.input?.length || 0} chars (min: ${VALIDATION_CONSTANTS.MIN_SEND_MESSAGE_INPUT_LENGTH})`,
       );
+      continue;
+    }
+
+    // Skip calls that are not sendMessage (e.g. raw/internal calldata with 0x00000000 selector)
+    if (slice(call.input as Hex, 0, 4) !== SEND_MESSAGE_SELECTOR) {
       continue;
     }
 
@@ -214,4 +223,92 @@ export function parseOptimismL1L2Messages(
   }
 
   return extractedMessages;
+}
+
+/**
+ * Extracts Optimism L1->L2 messages from a proposal's targets and calldatas.
+ * Used when the simulation call trace does not yield decodeable messenger calls.
+ *
+ * @param targets Proposal target addresses (L1).
+ * @param calldatas Proposal calldatas (ABI-encoded for each target).
+ * @param l1Sender Address treated as the L1 sender on L2 (e.g. timelock). Optional.
+ * @returns ExtractedCrossChainMessage[] for each sendMessage call found.
+ */
+export function parseOptimismL1L2MessagesFromProposal(
+  targets: readonly string[],
+  calldatas: readonly string[],
+  l1Sender?: Address,
+): ExtractedCrossChainMessage[] {
+  const messages: ExtractedCrossChainMessage[] = [];
+  const messengerAddresses = new Set(
+    Object.values(OPTIMISM_MESSENGERS).map((a) => a.toLowerCase()),
+  );
+  const l2From = l1Sender ? getAddress(l1Sender) : getAddress('0x0000000000000000000000000000000000000000');
+
+  for (let i = 0; i < Math.min(targets.length, calldatas.length); i++) {
+    const target = targets[i];
+    const data = calldatas[i];
+    if (!target || !data || !messengerAddresses.has(getAddress(target).toLowerCase())) continue;
+    if (
+      data === '0x' ||
+      data.length < VALIDATION_CONSTANTS.MIN_SEND_MESSAGE_INPUT_LENGTH
+    )
+      continue;
+    if (slice(data as Hex, 0, 4) !== SEND_MESSAGE_SELECTOR) continue;
+
+    const destinationChainId = getChainIdFromMessenger(getAddress(target));
+    if (!destinationChainId) continue;
+
+    try {
+      const { args } = decodeFunctionData({
+        abi: SEND_MESSAGE_ABI,
+        data: data as Hex,
+      });
+      const [targetAddress, messageData] = args;
+      if (messageData.length > VALIDATION_CONSTANTS.MAX_MESSAGE_LENGTH * 2) continue;
+
+      let l2TargetAddress = getAddress(targetAddress);
+      let l2InputData = messageData as Hex;
+      let l2FromAddress = l2From;
+      if (destinationChainId === '130') {
+        l2FromAddress = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D' as Address;
+      }
+
+      const expectedForwarder = L2_CROSS_CHAIN_ACCOUNTS[destinationChainId];
+      if (expectedForwarder && getAddress(targetAddress) === getAddress(expectedForwarder)) {
+        try {
+          const decodedForward = decodeFunctionData({
+            abi: L2_CROSS_CHAIN_ACCOUNT_FORWARD_ABI,
+            data: messageData as Hex,
+          });
+          if (decodedForward.functionName === 'forward') {
+            const [forwardTarget, forwardData] = decodedForward.args;
+            l2FromAddress = getAddress(expectedForwarder);
+            l2TargetAddress = getAddress(forwardTarget);
+            l2InputData = forwardData as Hex;
+          }
+        } catch {
+          // keep direct call to forwarder
+        }
+      }
+
+      messages.push({
+        bridgeType: 'OptimismL1L2',
+        destinationChainId,
+        l2TargetAddress,
+        l2InputData,
+        l2Value: '0',
+        l2FromAddress,
+      });
+    } catch {
+      // Skip invalid calldata
+    }
+  }
+
+  if (messages.length > 0) {
+    console.log(
+      `[Optimism Parser] Extracted ${messages.length} L1->L2 message(s) from proposal targets/calldatas.`,
+    );
+  }
+  return messages;
 }
