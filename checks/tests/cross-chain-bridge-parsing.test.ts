@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { encodeFunctionData, parseAbi } from 'viem';
 import type { CallTrace } from '../../types';
 import {
   parseArbitrumL1L2Messages,
@@ -128,6 +129,44 @@ describe('Cross-Chain Bridge Parsing Integration Tests', () => {
 
       expect(opMessage?.l2TargetAddress).toBe('0x4200000000000000000000000000000000000006');
       expect(baseMessage?.l2TargetAddress).toBe('0x4200000000000000000000000000000000000006');
+    });
+
+    test('should parse depositTransaction portal calls', () => {
+      const setOwnerAbi = parseAbi(['function setOwner(address _owner)']);
+      const portalAbi = parseAbi([
+        'function depositTransaction(address _to, uint256 _value, uint64 _gasLimit, bool _isCreation, bytes _data)',
+      ]);
+      const setOwnerData = encodeFunctionData({
+        abi: setOwnerAbi,
+        functionName: 'setOwner',
+        args: ['0x1111111111111111111111111111111111111111'],
+      });
+
+      const depositCalldata = encodeFunctionData({
+        abi: portalAbi,
+        functionName: 'depositTransaction',
+        args: ['0x42aE7Ec7ff020412639d443E245D936429Fbe717', 0n, 200000n, false, setOwnerData],
+      });
+
+      const portalSimulation = createRealisticSimulation([
+        {
+          to: '0x88e529A6ccd302c948689Cd5156C83D4614FAE92',
+          from: '0x1a9C8182C09F50C8318d769245beA52c32BE35BC',
+          input: depositCalldata,
+          value: '0',
+          calls: [],
+        },
+      ]);
+
+      const messages = parseOptimismL1L2Messages(portalSimulation);
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({
+        bridgeType: 'OptimismL1L2',
+        destinationChainId: '1868',
+        l2TargetAddress: '0x42aE7Ec7ff020412639d443E245D936429Fbe717',
+        l2FromAddress: '0x2BAD8182C09F50c8318d769245beA52C32Be46CD',
+      });
+      expect(messages[0].l2InputData).toBe(setOwnerData);
     });
 
     test('should handle complex nested Optimism calls', () => {
@@ -304,7 +343,9 @@ describe('Cross-Chain Bridge Parsing Integration Tests', () => {
 
     test('parseArbitrumL1L2MessagesFromProposal ignores non-inbox targets', () => {
       const targets = ['0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984'];
-      const calldatas = ['0x679b6ded000000000000000000000000912ce59144191c1204e64559fe8253a0e49e6548'];
+      const calldatas = [
+        '0x679b6ded000000000000000000000000912ce59144191c1204e64559fe8253a0e49e6548',
+      ];
       const messages = parseArbitrumL1L2MessagesFromProposal(targets, calldatas);
       expect(messages).toHaveLength(0);
     });
@@ -324,9 +365,59 @@ describe('Cross-Chain Bridge Parsing Integration Tests', () => {
 
     test('parseOptimismL1L2MessagesFromProposal ignores non-messenger targets', () => {
       const targets = ['0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984'];
-      const calldatas = ['0x3dbb202b0000000000000000000000000000000000000000000000000000000000000000'];
+      const calldatas = [
+        '0x3dbb202b0000000000000000000000000000000000000000000000000000000000000000',
+      ];
       const messages = parseOptimismL1L2MessagesFromProposal(targets, calldatas);
       expect(messages).toHaveLength(0);
+    });
+
+    test('parseOptimismL1L2MessagesFromProposal parses worldchain messenger targets', () => {
+      const sendMessageCalldata =
+        '0x3dbb202b0000000000000000000000004200000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000f42400000000000000000000000000000000000000000000000000000000000000004d0e30db000000000000000000000000000000000000000000000000000000000';
+      const worldchainMessenger = '0xf931a81D18B1766d15695ffc7c1920a62b7e710a';
+      const targets = ['0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', worldchainMessenger];
+      const calldatas = ['0xdead', sendMessageCalldata];
+      const messages = parseOptimismL1L2MessagesFromProposal(targets, calldatas);
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({
+        bridgeType: 'OptimismL1L2',
+        destinationChainId: '480',
+      });
+    });
+
+    test('parseOptimismL1L2MessagesFromProposal parses portal depositTransaction targets', () => {
+      const setOwnerAbi = parseAbi(['function setOwner(address _owner)']);
+      const portalAbi = parseAbi([
+        'function depositTransaction(address _to, uint256 _value, uint64 _gasLimit, bool _isCreation, bytes _data)',
+      ]);
+      const setOwnerData = encodeFunctionData({
+        abi: setOwnerAbi,
+        functionName: 'setOwner',
+        args: ['0x1111111111111111111111111111111111111111'],
+      });
+      const depositCalldata = encodeFunctionData({
+        abi: portalAbi,
+        functionName: 'depositTransaction',
+        args: ['0x42aE7Ec7ff020412639d443E245D936429Fbe717', 0n, 200000n, false, setOwnerData],
+      });
+
+      const soneiumPortal = '0x88e529A6ccd302c948689Cd5156C83D4614FAE92';
+      const l1Sender = '0x1a9C8182C09F50C8318d769245beA52c32BE35BC';
+      const messages = parseOptimismL1L2MessagesFromProposal(
+        [soneiumPortal],
+        [depositCalldata],
+        l1Sender,
+      );
+
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({
+        bridgeType: 'OptimismL1L2',
+        destinationChainId: '1868',
+        l2TargetAddress: '0x42aE7Ec7ff020412639d443E245D936429Fbe717',
+        l2FromAddress: '0x2BAD8182C09F50c8318d769245beA52C32Be46CD',
+      });
+      expect(messages[0].l2InputData).toBe(setOwnerData);
     });
   });
 });

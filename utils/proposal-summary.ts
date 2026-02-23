@@ -96,10 +96,14 @@ const CHAIN_NAMES: Record<number, string> = {
   42161: 'Arbitrum',
   10: 'Optimism',
   8453: 'Base',
-  1301: 'Unichain',
+  130: 'Unichain',
+  196: 'XLayer',
+  480: 'Worldchain',
+  42220: 'Celo',
   57073: 'Ink',
   1868: 'Soneium',
   60808: 'BOB',
+  7777777: 'Zora',
 };
 
 function formatHumanList(items: string[]): string {
@@ -215,7 +219,7 @@ function findOpStackChainIds(l2Checks?: Record<number, AllCheckResults>): number
   if (!l2Checks) return [];
 
   // OP Stack chains in order of priority
-  const opStackChains = [10, 8453, 1301, 57073, 1868, 60808];
+  const opStackChains = [10, 8453, 130, 196, 480, 42220, 57073, 1868, 60808, 7777777];
   return opStackChains.filter((chainId) => Boolean(l2Checks[chainId]));
 }
 

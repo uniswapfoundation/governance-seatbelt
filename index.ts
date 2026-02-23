@@ -28,6 +28,8 @@ import {
 } from './utils/contracts/governor';
 import { PROPOSAL_STATES } from './utils/contracts/governor-bravo';
 
+const L2_CHECK_SUPPORTED_CHAIN_IDS = new Set([10, 8453, 42161, 130, 57073, 1868, 60808]);
+
 /**
  * @notice Run the complete simulation pipeline (source + cross-chain)
  */
@@ -71,7 +73,18 @@ async function processDestinationSimulations(
 
   if (destinationSimulations) {
     for (const destSim of destinationSimulations) {
-      if (destSim.sim) {
+      if (destSim.status !== 'success' || !destSim.sim) {
+        continue;
+      }
+
+      if (!L2_CHECK_SUPPORTED_CHAIN_IDS.has(destSim.chainId)) {
+        console.log(
+          `[Index][L2_CHECK_SKIP] Skipping destination checks for unsupported chain ${destSim.chainId}.`,
+        );
+        continue;
+      }
+
+      try {
         const l2Deps = {
           ...deps,
           publicClient: getClientForChain(destSim.chainId),
@@ -83,6 +96,11 @@ async function processDestinationSimulations(
           l2Deps,
           destSim.chainId,
           destinationSimulations,
+        );
+      } catch (error) {
+        console.error(
+          `[Index][L2_CHECK_FAILURE] Failed to run L2 checks for chain ${destSim.chainId}; continuing without destination checks for this chain.`,
+          error,
         );
       }
     }

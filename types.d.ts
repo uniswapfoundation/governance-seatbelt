@@ -89,7 +89,7 @@ export interface SimulationResult {
   destinationSimulations?: Array<{
     chainId: number;
     bridgeType: string; // e.g., 'ArbitrumL1L2'
-    status: 'success' | 'failure';
+    status: 'success' | 'failure' | 'skipped';
     error?: string; // Optional error message on failure
     sim?: TenderlySimulation; // Tenderly result for the destination sim
     l2Params?: ExtractedCrossChainMessage;
@@ -690,7 +690,7 @@ export interface CrossChainMessagePreview {
   chainName: string;
   blockExplorerBaseUrl: string;
   bridgeType: string;
-  status: 'success' | 'failure';
+  status: 'success' | 'failure' | 'skipped';
   error?: string;
   l2FromAddress?: Address;
   l2TargetAddress?: Address;

@@ -830,6 +830,19 @@ async function simulateExecuted(config: SimulationConfigExecuted): Promise<Simul
  * @param sourceResult The result of the source chain simulation.
  * @returns The potentially augmented SimulationResult including destination sim info.
  */
+
+const TENDERLY_DESTINATION_SUPPORTED_CHAIN_IDS = new Set([
+  10, // Optimism
+  130, // Unichain
+  8453, // Base
+  42161, // Arbitrum
+  57073, // Ink
+  60808, // Bob
+  1868, // Soneium
+  42220, // Celo
+  480, // Worldchain
+]);
+
 export async function handleCrossChainSimulations(
   sourceResult: SimulationResult,
 ): Promise<SimulationResult> {
@@ -853,7 +866,11 @@ export async function handleCrossChainSimulations(
   let extractedMessages = [...arbMessages, ...opMessages];
 
   // Fallback: if trace yielded nothing, extract from proposal targets/calldatas (e.g. sim 94)
-  if (extractedMessages.length === 0 && result.proposal?.targets?.length && result.proposal?.calldatas?.length) {
+  if (
+    extractedMessages.length === 0 &&
+    result.proposal?.targets?.length &&
+    result.proposal?.calldatas?.length
+  ) {
     const l1Sender = result.deps?.timelock?.address;
     const arbFromProposal = parseArbitrumL1L2MessagesFromProposal(
       result.proposal.targets,
@@ -885,12 +902,26 @@ export async function handleCrossChainSimulations(
 
   const destinationResults = await Promise.all(
     extractedMessages.map(async (message) => {
+      const destinationChainId = Number(message.destinationChainId);
       console.log(`[CrossChainHandler] Simulating L2 message to: ${message.l2TargetAddress}`);
+
+      if (!TENDERLY_DESTINATION_SUPPORTED_CHAIN_IDS.has(destinationChainId)) {
+        const reason = `Skipping destination sim: chain ${destinationChainId} is not currently supported in this Tenderly workflow.`;
+        console.warn(`[CrossChainHandler] ${reason}`);
+        return {
+          chainId: destinationChainId,
+          bridgeType: message.bridgeType,
+          status: 'skipped' as const,
+          error: reason,
+          l2Params: message,
+        };
+      }
+
       try {
         const { save: saveSimulation, saveIfFails: saveSimulationIfFails } =
           getTenderlySaveFlags(true);
         const destinationPayload: TenderlyPayload = {
-          network_id: message.destinationChainId.toString() as TenderlyPayload['network_id'],
+          network_id: destinationChainId.toString() as TenderlyPayload['network_id'],
           from: message.l2FromAddress ?? DEFAULT_SIMULATION_ADDRESS,
           to: message.l2TargetAddress,
           input: message.l2InputData,
@@ -914,7 +945,7 @@ export async function handleCrossChainSimulations(
             `[CrossChainHandler] Destination sim SUCCESS for L2 target: ${message.l2TargetAddress}`,
           );
           return {
-            chainId: Number(message.destinationChainId),
+            chainId: destinationChainId,
             bridgeType: message.bridgeType,
             status: 'success' as const,
             sim: destSim,
@@ -926,7 +957,7 @@ export async function handleCrossChainSimulations(
         );
         const errorMsg = destSim.transaction?.transaction_info?.call_trace?.error_reason;
         return {
-          chainId: Number(message.destinationChainId),
+          chainId: destinationChainId,
           bridgeType: message.bridgeType,
           status: 'failure' as const,
           error: errorMsg,
@@ -939,7 +970,7 @@ export async function handleCrossChainSimulations(
           error,
         );
         return {
-          chainId: Number(message.destinationChainId),
+          chainId: destinationChainId,
           bridgeType: message.bridgeType,
           status: 'failure' as const,
           error: `Simulation API call failed: ${(error as Error).message}`,

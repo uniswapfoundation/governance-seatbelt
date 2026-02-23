@@ -1377,7 +1377,9 @@ async function formatCrossChainExecutiveSummary(
 
       const total = sims.length;
       const succeeded = sims.filter((s) => s.status === 'success').length;
-      const statusIcon = succeeded === total ? '✅' : succeeded === 0 ? '❌' : '⚠️';
+      const failed = sims.filter((s) => s.status === 'failure').length;
+      const skipped = sims.filter((s) => s.status === 'skipped').length;
+      const statusIcon = failed > 0 ? '❌' : skipped > 0 ? '⚠️' : succeeded === total ? '✅' : '⚠️';
 
       const uniqueCalls = new Set<string>();
       for (const sim of sims) {
@@ -1391,7 +1393,8 @@ async function formatCrossChainExecutiveSummary(
       const callsText =
         uniqueCalls.size > 0 ? ` • ${Array.from(uniqueCalls).slice(0, 3).join(', ')}` : '';
 
-      return `${statusIcon} ${chainName} (${chainId}) ${succeeded}/${total} succeeded${callsText}`;
+      const skippedText = skipped > 0 ? `, ${skipped} skipped` : '';
+      return `${statusIcon} ${chainName} (${chainId}) ${succeeded}/${total} succeeded${skippedText}${callsText}`;
     }),
   );
 
@@ -1441,7 +1444,8 @@ async function formatCrossChainResults(
 
             if (!l2Target) return `  - Message ${index + 1}: No target address`;
 
-            const statusIcon = sim.status === 'success' ? '✅' : '❌';
+            const statusIcon =
+              sim.status === 'success' ? '✅' : sim.status === 'skipped' ? '⚠️' : '❌';
             const label = getSimulationContractLabel(sim.sim, l2Target);
             const targetText = label
               ? `Target: ${label} ${toAddressLink(l2Target, blockExplorerUrl)}`
@@ -1462,7 +1466,15 @@ async function formatCrossChainResults(
 
       // Get overall chain status
       const allSuccessful = sims.every((sim) => sim.status === 'success');
-      const status = allSuccessful ? '✅ Succeeded' : '❌ Failed';
+      const hasFailures = sims.some((sim) => sim.status === 'failure');
+      const hasSkips = sims.some((sim) => sim.status === 'skipped');
+      const status = hasFailures
+        ? '❌ Failed'
+        : hasSkips
+          ? '⚠️ Partial (some destination sims skipped)'
+          : allSuccessful
+            ? '✅ Succeeded'
+            : '⚠️ Partial';
 
       // Format check results for this chain
       let checkResults = '';
