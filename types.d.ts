@@ -603,6 +603,31 @@ export interface CoverageMetadata {
   runnerOs?: string;
 }
 
+export interface CheckRetryDiagnostic {
+  checkId: string;
+  checkName: string;
+  retries: number;
+  outcome: 'success' | 'failed';
+  lastError: string;
+}
+
+export interface FailedCheckExecutionDiagnostic {
+  checkId: string;
+  checkName: string;
+  reason: string;
+  retryable: boolean;
+  retries: number;
+}
+
+export interface ChainExecutionDiagnostics {
+  chainId: number;
+  attemptedChecks: string[];
+  failedChecks: FailedCheckExecutionDiagnostic[];
+  retries: CheckRetryDiagnostic[];
+  partial: boolean;
+  partialReason?: string;
+}
+
 export interface CoverageData {
   metadata: CoverageMetadata;
   checks: CheckCoverage[];
@@ -613,6 +638,7 @@ export interface CoverageData {
     failed: number;
     inferredSkips: number;
   };
+  executionDiagnostics?: Record<number, ChainExecutionDiagnostics>;
 }
 
 /**
@@ -622,7 +648,7 @@ export interface SimulationCheck {
   checkId?: string;
   chainId?: number;
   title: string;
-  status: 'passed' | 'warning' | 'failed' | 'skipped';
+  status: 'passed' | 'warning' | 'failed' | 'skipped' | 'inconclusive';
   skipReason?: string;
   warningCount?: number;
   errorCount?: number;
@@ -712,7 +738,7 @@ export interface CrossChainPreview {
     chainId: number;
     chainName: string;
     blockExplorerBaseUrl?: string;
-    status: 'success' | 'warning' | 'error';
+    status: 'success' | 'warning' | 'error' | 'inconclusive';
     checks: SimulationCheck[];
   }>;
 }
@@ -765,7 +791,7 @@ export interface ChainSimulationReport {
   chainId: number;
   chainName: string;
   blockExplorerBaseUrl?: string;
-  status: 'success' | 'warning' | 'error';
+  status: 'success' | 'warning' | 'error' | 'inconclusive';
   checks: SimulationCheck[];
   stateChanges: SimulationStateChange[];
   events: SimulationEvent[];

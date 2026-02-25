@@ -5,10 +5,14 @@
 import { existsSync } from 'node:fs';
 import { getAddress } from 'viem';
 import { generateAndSaveReports } from './presentation/report';
-import { buildCoverageFromResults, buildCoverageMetadata, runChecksForChain } from './run-checks';
+import {
+  appendDestinationCoverageDiagnostics,
+  buildCoverageFromResults,
+  buildCoverageMetadata,
+  processDestinationChecks,
+  runChecksForChainWithDiagnostics,
+} from './run-checks';
 import type {
-  AllCheckResults,
-  CheckResult,
   GovernorType,
   ProposalData,
   SimulationConfig,
@@ -17,7 +21,7 @@ import type {
   SimulationResult,
 } from './types';
 import { cacheProposal, getCachedProposal, needsSimulation } from './utils/cache/proposalCache';
-import { getChainConfig, getClientForChain, publicClient } from './utils/clients/client';
+import { getChainConfig, publicClient } from './utils/clients/client';
 import { handleCrossChainSimulations, simulate } from './utils/clients/tenderly';
 import { DAO_NAME, GOVERNOR_ADDRESS, REPORTS_OUTPUT_DIRECTORY, SIM_NAME } from './utils/constants';
 import {
@@ -29,114 +33,12 @@ import {
 } from './utils/contracts/governor';
 import { PROPOSAL_STATES } from './utils/contracts/governor-bravo';
 
-const L2_CHECK_SUPPORTED_CHAIN_IDS = new Set([
-  10, // Optimism
-  8453, // Base
-  42161, // Arbitrum
-  130, // Unichain
-  57073, // Ink
-  1868, // Soneium
-  60808, // Bob
-  196, // X Layer
-  42220, // Celo
-  480, // World Chain
-  7777777, // Zora
-]);
-
 /**
  * @notice Run the complete simulation pipeline (source + cross-chain)
  */
 async function runSimulationPipeline(config: SimulationConfig): Promise<SimulationResult> {
   const sourceResult = await simulate(config);
   return await handleCrossChainSimulations(sourceResult);
-}
-
-function dedupeStrings(messages: string[]): string[] {
-  const seen = new Set<string>();
-  const deduped: string[] = [];
-  for (const message of messages) {
-    if (seen.has(message)) continue;
-    seen.add(message);
-    deduped.push(message);
-  }
-  return deduped;
-}
-
-function dedupeJsonValues<T>(items: T[]): T[] {
-  const seen = new Set<string>();
-  const deduped: T[] = [];
-  for (const item of items) {
-    const key = JSON.stringify(item, (_, value) =>
-      typeof value === 'bigint' ? value.toString() : value,
-    );
-    if (seen.has(key)) continue;
-    seen.add(key);
-    deduped.push(item);
-  }
-  return deduped;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function mergeCheckResult(current: CheckResult, next: CheckResult): CheckResult {
-  const info = dedupeStrings([...current.info, ...next.info]);
-  const warnings = dedupeStrings([...current.warnings, ...next.warnings]);
-  const errors = dedupeStrings([...current.errors, ...next.errors]);
-
-  // Treat merged checks as skipped only when all merged runs were skipped.
-  const skippedReasons = [current.skipped?.reason, next.skipped?.reason].filter(
-    (reason): reason is string => Boolean(reason),
-  );
-  const skipped =
-    current.skipped && next.skipped && skippedReasons.length > 0
-      ? { reason: dedupeStrings(skippedReasons).join(' | ') }
-      : undefined;
-
-  const permissionsDiffMerged = dedupeJsonValues([
-    ...(current.permissionsDiff ?? []),
-    ...(next.permissionsDiff ?? []),
-  ]);
-  const permissionsDiff = permissionsDiffMerged.length > 0 ? permissionsDiffMerged : undefined;
-
-  let data = current.data ?? next.data;
-  if (current.data !== undefined && next.data !== undefined) {
-    if (Array.isArray(current.data) && Array.isArray(next.data)) {
-      data = dedupeJsonValues([...current.data, ...next.data]);
-    } else if (isPlainObject(current.data) && isPlainObject(next.data)) {
-      data = { ...current.data, ...next.data };
-    }
-  }
-
-  return {
-    info,
-    warnings,
-    errors,
-    ...(data !== undefined ? { data } : {}),
-    ...(skipped ? { skipped } : {}),
-    ...(permissionsDiff ? { permissionsDiff } : {}),
-  };
-}
-
-function mergeAllCheckResults(current: AllCheckResults, next: AllCheckResults): AllCheckResults {
-  const merged: AllCheckResults = { ...current };
-
-  for (const [checkId, nextCheck] of Object.entries(next)) {
-    const currentCheck = merged[checkId];
-
-    if (!currentCheck) {
-      merged[checkId] = nextCheck;
-      continue;
-    }
-
-    merged[checkId] = {
-      name: currentCheck.name || nextCheck.name,
-      result: mergeCheckResult(currentCheck.result, nextCheck.result),
-    };
-  }
-
-  return merged;
 }
 
 /**
@@ -160,57 +62,6 @@ async function fetchBlockData(
     start: startBlock,
     end: endBlock,
   };
-}
-
-/**
- * @notice Process cross-chain destination simulations and run checks
- */
-async function processDestinationSimulations(
-  proposal: SimulationResult['proposal'],
-  deps: ProposalData,
-  destinationSimulations: SimulationResult['destinationSimulations'],
-) {
-  const destinationChecks: Record<number, AllCheckResults> = {};
-
-  if (destinationSimulations) {
-    for (const destSim of destinationSimulations) {
-      if (destSim.status !== 'success' || !destSim.sim) {
-        continue;
-      }
-
-      if (!L2_CHECK_SUPPORTED_CHAIN_IDS.has(destSim.chainId)) {
-        console.log(
-          `[Index][L2_CHECK_SKIP] Skipping destination checks for unsupported chain ${destSim.chainId}.`,
-        );
-        continue;
-      }
-
-      try {
-        const l2Deps = {
-          ...deps,
-          publicClient: getClientForChain(destSim.chainId),
-          chainConfig: getChainConfig(destSim.chainId),
-        };
-        const checkResults = await runChecksForChain(
-          proposal,
-          destSim.sim,
-          l2Deps,
-          destSim.chainId,
-          destinationSimulations,
-        );
-        destinationChecks[destSim.chainId] = destinationChecks[destSim.chainId]
-          ? mergeAllCheckResults(destinationChecks[destSim.chainId], checkResults)
-          : checkResults;
-      } catch (error) {
-        console.error(
-          `[Index][L2_CHECK_FAILURE] Failed to run L2 checks for chain ${destSim.chainId}; continuing without destination checks for this chain.`,
-          error,
-        );
-      }
-    }
-  }
-
-  return destinationChecks;
 }
 
 /**
@@ -243,99 +94,32 @@ async function processSimulation(
   // The fallbackDeps parameter is only used if simulationResult.deps is undefined,
   // which shouldn't happen in normal operation
 
-  // Run checks for mainnet using runChecksForChain for consistency
+  // Run checks for mainnet using resilient check execution
   console.log(`  Running checks for proposal ${proposalId}...`);
-  const mainnetResults = await runChecksForChain(
+  const mainnetRun = await runChecksForChainWithDiagnostics(
     proposal,
     sim,
     finalDeps,
     1, // Mainnet chain ID
     destinationSimulations,
   );
+  const mainnetResults = mainnetRun.results;
 
   // Fetch block data
   const blocks = await fetchBlockData(proposal, latestBlock);
 
   // Process destination simulations and run checks
-  const destinationChecks = await processDestinationSimulations(
-    proposal,
-    finalDeps,
-    destinationSimulations,
-  );
+  const { destinationChecks, executionDiagnostics: destinationExecutionDiagnostics } =
+    await processDestinationChecks(proposal, finalDeps, destinationSimulations);
 
   // Build coverage data - include mainnet (chainId 1) and all L2 chains
   const coverageMetadata = buildCoverageMetadata();
   const coverage = buildCoverageFromResults(mainnetResults, coverageMetadata, 1);
 
-  // Merge L2 check coverage into the main coverage
-  for (const [chainIdStr, destResults] of Object.entries(destinationChecks)) {
-    const chainId = Number(chainIdStr);
-    const l2Coverage = buildCoverageFromResults(destResults, coverageMetadata, chainId);
-
-    // Append L2 checks to the main coverage
-    coverage.checks.push(...l2Coverage.checks);
-
-    // Aggregate summary totals
-    coverage.summary.total += l2Coverage.summary.total;
-    coverage.summary.ran += l2Coverage.summary.ran;
-    coverage.summary.skipped += l2Coverage.summary.skipped;
-    coverage.summary.failed += l2Coverage.summary.failed;
-    coverage.summary.inferredSkips += l2Coverage.summary.inferredSkips;
-  }
-
-  // Ensure every destination chain appears in coverage, even when checks did not run.
-  const coveredChainIds = new Set(Object.keys(destinationChecks).map((id) => Number(id)));
-  const simsByChain = new Map<
-    number,
-    Array<NonNullable<SimulationResult['destinationSimulations']>[number]>
-  >();
-  for (const destinationSim of destinationSimulations ?? []) {
-    const list = simsByChain.get(destinationSim.chainId) ?? [];
-    list.push(destinationSim);
-    simsByChain.set(destinationSim.chainId, list);
-  }
-
-  for (const [chainId, chainSims] of simsByChain.entries()) {
-    if (coveredChainIds.has(chainId)) continue;
-
-    let status: 'skipped' | 'failed' = 'skipped';
-    let skipReason: string | undefined;
-
-    const failures = chainSims.filter((sim) => sim.status === 'failure');
-    const skips = chainSims.filter((sim) => sim.status === 'skipped');
-    const successes = chainSims.filter((sim) => sim.status === 'success');
-
-    if (failures.length > 0) {
-      status = 'failed';
-      const reasons = failures.map((sim) => sim.error).filter(Boolean);
-      skipReason = reasons.length > 0 ? reasons.join(' | ') : 'Destination simulation failed.';
-    } else if (!L2_CHECK_SUPPORTED_CHAIN_IDS.has(chainId)) {
-      status = 'skipped';
-      skipReason = `L2 checks are not supported for chain ${chainId}.`;
-    } else if (skips.length > 0) {
-      status = 'skipped';
-      const reasons = skips.map((sim) => sim.error).filter(Boolean);
-      skipReason = reasons.length > 0 ? reasons.join(' | ') : 'Destination simulation skipped.';
-    } else if (successes.length > 0) {
-      status = 'failed';
-      skipReason =
-        'Destination simulation succeeded but no L2 checks were recorded for this chain.';
-    } else {
-      status = 'skipped';
-      skipReason = 'No destination simulation result was available for this chain.';
-    }
-
-    coverage.checks.push({
-      checkId: 'crossChainDestination',
-      checkName: 'Cross-chain destination simulation status',
-      status,
-      skipReason,
-      chainId,
-    });
-    coverage.summary.total += 1;
-    if (status === 'skipped') coverage.summary.skipped += 1;
-    else coverage.summary.failed += 1;
-  }
+  appendDestinationCoverageDiagnostics(coverage, destinationChecks, destinationSimulations, {
+    1: mainnetRun.diagnostics,
+    ...destinationExecutionDiagnostics,
+  });
 
   // Log coverage summary
   console.log(

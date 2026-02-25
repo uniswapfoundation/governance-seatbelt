@@ -195,6 +195,7 @@ function getSimulationContractLabel(
 async function buildCrossChainPreview(
   destinationSimulations: NonNullable<SimulationResult['destinationSimulations']>,
   destinationChecks?: Record<number, AllCheckResults>,
+  coverage?: CoverageData,
 ): Promise<StructuredSimulationReport['crossChain']> {
   const messages = await Promise.all(
     destinationSimulations.map(async (dest) => {
@@ -234,31 +235,106 @@ async function buildCrossChainPreview(
     }),
   );
 
-  const chains =
-    destinationChecks && Object.keys(destinationChecks).length > 0
-      ? Object.entries(destinationChecks)
-          .map(([chainIdStr, checks]) => {
-            const chainId = Number(chainIdStr);
+  const destinationChainReports = new Map<
+    number,
+    {
+      chainId: number;
+      chainName: string;
+      blockExplorerBaseUrl?: string;
+      status: 'success' | 'warning' | 'error' | 'inconclusive';
+      checks: SimulationCheck[];
+    }
+  >();
 
-            let blockExplorerBaseUrl = 'https://etherscan.io';
-            try {
-              blockExplorerBaseUrl = getChainConfig(chainId).blockExplorer.baseUrl;
-            } catch {
-              // Ignore unknown chain configs.
-            }
+  for (const [chainIdStr, checks] of Object.entries(destinationChecks ?? {})) {
+    const chainId = Number(chainIdStr);
 
-            return {
-              chainId,
-              chainName: getChainName(chainId),
-              blockExplorerBaseUrl,
-              status: getStatusForChecks(checks),
-              checks: formatChecksForStructuredReport(checks, chainId),
-            };
-          })
-          .sort((a, b) => a.chainId - b.chainId)
-      : undefined;
+    let blockExplorerBaseUrl = 'https://etherscan.io';
+    try {
+      blockExplorerBaseUrl = getChainConfig(chainId).blockExplorer.baseUrl;
+    } catch {
+      // Ignore unknown chain configs.
+    }
 
-  return { messages, destinationChains: chains };
+    destinationChainReports.set(chainId, {
+      chainId,
+      chainName: getChainName(chainId),
+      blockExplorerBaseUrl,
+      status: getStatusForChecks(checks, chainId, coverage),
+      checks: formatChecksForStructuredReport(checks, chainId),
+    });
+  }
+
+  for (const [chainIdStr, diagnostics] of Object.entries(coverage?.executionDiagnostics ?? {})) {
+    const chainId = Number(chainIdStr);
+    if (chainId === 1 || !diagnostics.partial) continue;
+
+    const partialReason =
+      diagnostics.partialReason ?? 'Destination checks were partial/inconclusive.';
+    const existing = destinationChainReports.get(chainId);
+
+    if (existing) {
+      const hasExecutionSummary = existing.checks.some(
+        (check) => check.checkId === 'destinationCheckExecution',
+      );
+      if (!hasExecutionSummary) {
+        existing.checks.push({
+          checkId: 'destinationCheckExecution',
+          chainId,
+          title: 'Destination check execution diagnostics',
+          status: 'inconclusive',
+          skipReason: partialReason,
+          details: `**Inconclusive**: ${partialReason}`,
+          info: [],
+          warnings: [],
+          errors: [],
+          data: {
+            executionDiagnostics: diagnostics,
+          },
+        });
+      }
+      existing.status = 'inconclusive';
+      destinationChainReports.set(chainId, existing);
+      continue;
+    }
+
+    let blockExplorerBaseUrl = 'https://etherscan.io';
+    try {
+      blockExplorerBaseUrl = getChainConfig(chainId).blockExplorer.baseUrl;
+    } catch {
+      // Ignore unknown chain configs.
+    }
+
+    destinationChainReports.set(chainId, {
+      chainId,
+      chainName: getChainName(chainId),
+      blockExplorerBaseUrl,
+      status: 'inconclusive',
+      checks: [
+        {
+          checkId: 'destinationCheckExecution',
+          chainId,
+          title: 'Destination check execution diagnostics',
+          status: 'inconclusive',
+          skipReason: partialReason,
+          details: `**Inconclusive**: ${partialReason}`,
+          info: [],
+          warnings: [],
+          errors: [],
+          data: {
+            executionDiagnostics: diagnostics,
+          },
+        },
+      ],
+    });
+  }
+
+  const chains = Array.from(destinationChainReports.values()).sort((a, b) => a.chainId - b.chainId);
+
+  return {
+    messages,
+    ...(chains.length > 0 ? { destinationChains: chains } : {}),
+  };
 }
 
 // --- Repository and Tenderly utilities ---
@@ -689,17 +765,65 @@ function extractCalldata(
   return undefined;
 }
 
-function getStatusForChecks(value: AllCheckResults): 'success' | 'warning' | 'error' {
+function getExecutionFailureData(
+  result: AllCheckResults[string]['result'],
+): { reason?: string } | undefined {
+  const data = result.data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined;
+
+  const executionFailure = Reflect.get(data, 'executionFailure');
+  if (
+    !executionFailure ||
+    typeof executionFailure !== 'object' ||
+    Array.isArray(executionFailure)
+  ) {
+    return undefined;
+  }
+
+  const reason = Reflect.get(executionFailure, 'reason');
+  return typeof reason === 'string' ? { reason } : {};
+}
+
+function isChainMarkedPartial(
+  chainId: number | undefined,
+  coverage?: CoverageData,
+): { partial: boolean; reason?: string } {
+  if (chainId == null || !coverage?.executionDiagnostics) {
+    return { partial: false };
+  }
+
+  const diagnostics = coverage.executionDiagnostics[chainId];
+  if (!diagnostics?.partial) {
+    return { partial: false };
+  }
+
+  return {
+    partial: true,
+    reason: diagnostics.partialReason,
+  };
+}
+
+function getStatusForChecks(
+  value: AllCheckResults,
+  chainId?: number,
+  coverage?: CoverageData,
+): 'success' | 'warning' | 'error' | 'inconclusive' {
   let hasErrors = false;
   let hasWarnings = false;
+  let hasInconclusive = false;
 
   for (const checkId in value) {
     const { result } = value[checkId];
     if (result.errors.length > 0) hasErrors = true;
     if (result.warnings.length > 0) hasWarnings = true;
+    if (getExecutionFailureData(result)) hasInconclusive = true;
   }
 
+  const partialChain = isChainMarkedPartial(chainId, coverage);
+  if (partialChain.partial) hasInconclusive = true;
+
   if (hasErrors) return 'error';
+  if (hasInconclusive) return 'inconclusive';
   if (hasWarnings) return 'warning';
   return 'success';
 }
@@ -711,11 +835,15 @@ function formatChecksForStructuredReport(
   return Object.entries(value).map(([checkId, check]) => {
     const { name, result } = check;
     const { errors, warnings, info, skipped } = result;
+    const executionFailure = getExecutionFailureData(result);
 
-    let checkStatus: 'passed' | 'warning' | 'failed' | 'skipped' = 'passed';
+    let checkStatus: 'passed' | 'warning' | 'failed' | 'skipped' | 'inconclusive' = 'passed';
     let skipReason: string | undefined;
 
-    if (skipped) {
+    if (executionFailure) {
+      checkStatus = 'inconclusive';
+      skipReason = skipped?.reason ?? executionFailure.reason;
+    } else if (skipped) {
       checkStatus = 'skipped';
       skipReason = skipped.reason;
     } else if (errors.length > 0) {
@@ -725,6 +853,7 @@ function formatChecksForStructuredReport(
     }
 
     const details = [
+      ...(executionFailure?.reason ? [`**Inconclusive**: ${executionFailure.reason}`] : []),
       ...(skipped ? [`**Skipped**: ${skipped.reason}`] : []),
       ...errors.map((msg) => `**Error**: ${msg}`),
       ...warnings.map((msg) => `**Warning**: ${msg}`),
@@ -787,6 +916,7 @@ function generateStructuredReport(
   simulationId?: string,
   simulation?: TenderlySimulation,
   destinationChecks?: Record<number, AllCheckResults>,
+  coverage?: CoverageData,
   proposalState?: string,
 ): StructuredSimulationReport {
   // Validate required fields
@@ -809,14 +939,25 @@ function generateStructuredReport(
   // Determine overall status
   let status: 'success' | 'warning' | 'error' | 'inconclusive' = 'success';
 
-  // Set status based on conditions (skips are informational and do not make the report inconclusive)
-  status = getStatusForChecks(checks);
-
-  // Format checks
-  const formattedChecks: SimulationCheck[] = formatChecksForStructuredReport(checks, chainId ?? 1);
-
   // Get chain configuration for explorer URL
   const targetChainId = chainId ?? 1; // Default to mainnet
+
+  // Set status from source-chain checks first.
+  status = getStatusForChecks(checks, targetChainId, coverage);
+
+  const partialDestinationChains = Object.entries(coverage?.executionDiagnostics ?? {})
+    .filter(
+      ([chainIdStr, diagnostics]) => Number(chainIdStr) !== targetChainId && diagnostics.partial,
+    )
+    .map(([chainIdStr]) => Number(chainIdStr));
+
+  if (status !== 'error' && partialDestinationChains.length > 0) {
+    status = 'inconclusive';
+  }
+
+  // Format checks
+  const formattedChecks: SimulationCheck[] = formatChecksForStructuredReport(checks, targetChainId);
+
   let blockExplorerBaseUrl = 'https://etherscan.io';
   try {
     const chainConfig = getChainConfig(targetChainId);
@@ -854,48 +995,129 @@ function generateStructuredReport(
       ? 'completed successfully'
       : status === 'warning'
         ? 'completed with warnings'
-        : 'completed with errors';
+        : status === 'inconclusive'
+          ? 'completed with inconclusive checks'
+          : 'completed with errors';
 
   const mainStateChanges = extractStateChanges(checks);
   const mainEvents = extractEvents(checks);
+
+  const destinationChainReports = new Map<
+    number,
+    NonNullable<StructuredSimulationReport['chainReports']>[number]
+  >();
+
+  for (const [chainIdStr, destinationResults] of Object.entries(destinationChecks ?? {})) {
+    const destChainId = Number(chainIdStr);
+
+    let destBlockExplorerBaseUrl = 'https://etherscan.io';
+    try {
+      destBlockExplorerBaseUrl = getChainConfig(destChainId).blockExplorer.baseUrl;
+    } catch {
+      // Ignore unknown chain configs.
+    }
+
+    destinationChainReports.set(destChainId, {
+      chainId: destChainId,
+      chainName: getChainName(destChainId),
+      blockExplorerBaseUrl: destBlockExplorerBaseUrl,
+      status: getStatusForChecks(destinationResults, destChainId, coverage),
+      checks: formatChecksForStructuredReport(destinationResults, destChainId),
+      stateChanges: extractStateChanges(destinationResults),
+      events: extractEvents(destinationResults),
+    });
+  }
+
+  for (const [chainIdStr, diagnostics] of Object.entries(coverage?.executionDiagnostics ?? {})) {
+    const destChainId = Number(chainIdStr);
+    if (destChainId === targetChainId || !diagnostics.partial) continue;
+
+    const partialReason =
+      diagnostics.partialReason ?? 'Destination checks were partial/inconclusive.';
+    const existing = destinationChainReports.get(destChainId);
+
+    if (existing) {
+      existing.status = 'inconclusive';
+      const hasExecutionSummary = existing.checks.some(
+        (check) => check.checkId === 'destinationCheckExecution',
+      );
+      if (!hasExecutionSummary) {
+        existing.checks.push({
+          checkId: 'destinationCheckExecution',
+          chainId: destChainId,
+          title: 'Destination check execution diagnostics',
+          status: 'inconclusive',
+          skipReason: partialReason,
+          details: `**Inconclusive**: ${partialReason}`,
+          info: [],
+          warnings: [],
+          errors: [],
+          data: {
+            executionDiagnostics: diagnostics,
+          },
+        });
+      }
+      destinationChainReports.set(destChainId, existing);
+      continue;
+    }
+
+    let destBlockExplorerBaseUrl = 'https://etherscan.io';
+    try {
+      destBlockExplorerBaseUrl = getChainConfig(destChainId).blockExplorer.baseUrl;
+    } catch {
+      // Ignore unknown chain configs.
+    }
+
+    destinationChainReports.set(destChainId, {
+      chainId: destChainId,
+      chainName: getChainName(destChainId),
+      blockExplorerBaseUrl: destBlockExplorerBaseUrl,
+      status: 'inconclusive',
+      checks: [
+        {
+          checkId: 'destinationCheckExecution',
+          chainId: destChainId,
+          title: 'Destination check execution diagnostics',
+          status: 'inconclusive',
+          skipReason: partialReason,
+          details: `**Inconclusive**: ${partialReason}`,
+          info: [],
+          warnings: [],
+          errors: [],
+          data: {
+            executionDiagnostics: diagnostics,
+          },
+        },
+      ],
+      stateChanges: [],
+      events: [],
+    });
+  }
 
   const chainReports: StructuredSimulationReport['chainReports'] = [
     {
       chainId: targetChainId,
       chainName: getChainName(targetChainId),
       blockExplorerBaseUrl,
-      status: getStatusForChecks(checks),
+      status: getStatusForChecks(checks, targetChainId, coverage),
       checks: formattedChecks,
       stateChanges: mainStateChanges,
       events: mainEvents,
     },
-    ...Object.entries(destinationChecks ?? {}).map(([chainIdStr, destChecks]) => {
-      const destChainId = Number(chainIdStr);
-
-      let destBlockExplorerBaseUrl = 'https://etherscan.io';
-      try {
-        destBlockExplorerBaseUrl = getChainConfig(destChainId).blockExplorer.baseUrl;
-      } catch {
-        // Ignore unknown chain configs.
-      }
-
-      return {
-        chainId: destChainId,
-        chainName: getChainName(destChainId),
-        blockExplorerBaseUrl: destBlockExplorerBaseUrl,
-        status: getStatusForChecks(destChecks),
-        checks: formatChecksForStructuredReport(destChecks, destChainId),
-        stateChanges: extractStateChanges(destChecks),
-        events: extractEvents(destChecks),
-      };
-    }),
+    ...Array.from(destinationChainReports.values()).sort((a, b) => a.chainId - b.chainId),
   ];
+
+  const partialReasonText = partialDestinationChains.length
+    ? ` Partial destination checks on chain(s): ${partialDestinationChains
+        .map((destChainId) => `${getChainName(destChainId)} (${destChainId})`)
+        .join(', ')}.`
+    : '';
 
   return {
     title,
     proposalText,
     status,
-    summary: `${plainLanguageSummary}. Simulation ${statusText}.`,
+    summary: `${plainLanguageSummary}. Simulation ${statusText}.${partialReasonText}`,
     checks: formattedChecks,
     stateChanges: mainStateChanges,
     events: mainEvents,
@@ -987,6 +1209,7 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
         simulationId,
         simulation,
         destinationChecks,
+        coverage,
         proposalState,
       );
 
@@ -1107,6 +1330,7 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     simulation?.simulation?.id,
     simulation,
     destinationChecks,
+    coverage,
     proposalState,
   );
 
@@ -1151,6 +1375,7 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
       structuredReport.crossChain = await buildCrossChainPreview(
         destinationSimulations,
         destinationChecks,
+        coverage,
       );
     } catch (error) {
       console.warn('[Report] Failed to build cross-chain preview:', error);
@@ -1310,25 +1535,31 @@ function getOverallStatusFromChecks(checks: AllCheckResults): {
   skipped: Array<{ checkId: string; name: string; reason: string }>;
   warningCount: number;
   errorCount: number;
+  inconclusiveCount: number;
 } {
   const skipped: Array<{ checkId: string; name: string; reason: string }> = [];
   let warningCount = 0;
   let errorCount = 0;
+  let inconclusiveCount = 0;
 
   for (const checkId in checks) {
     const { name, result } = checks[checkId];
     if (result.skipped) skipped.push({ checkId, name, reason: result.skipped.reason });
+    if (getExecutionFailureData(result)) inconclusiveCount += 1;
     warningCount += result.warnings.length;
     errorCount += result.errors.length;
   }
 
   if (errorCount > 0) {
-    return { status: 'error', skipped, warningCount, errorCount };
+    return { status: 'error', skipped, warningCount, errorCount, inconclusiveCount };
+  }
+  if (inconclusiveCount > 0) {
+    return { status: 'inconclusive', skipped, warningCount, errorCount, inconclusiveCount };
   }
   if (warningCount > 0) {
-    return { status: 'warning', skipped, warningCount, errorCount };
+    return { status: 'warning', skipped, warningCount, errorCount, inconclusiveCount };
   }
-  return { status: 'success', skipped, warningCount, errorCount };
+  return { status: 'success', skipped, warningCount, errorCount, inconclusiveCount };
 }
 
 async function formatExecutiveSummary(
@@ -1337,7 +1568,8 @@ async function formatExecutiveSummary(
   destinationSimulations?: SimulationResult['destinationSimulations'],
   destinationChecks?: Record<number, AllCheckResults>,
 ): Promise<string> {
-  const { status, skipped, warningCount, errorCount } = getOverallStatusFromChecks(checks);
+  const { status, skipped, warningCount, errorCount, inconclusiveCount } =
+    getOverallStatusFromChecks(checks);
 
   const statusLabel =
     status === 'success'
@@ -1346,7 +1578,7 @@ async function formatExecutiveSummary(
         ? 'WARNING'
         : status === 'error'
           ? 'ERROR'
-          : 'SUCCESS';
+          : 'INCONCLUSIVE';
 
   const skippedText =
     skipped.length > 0
@@ -1364,7 +1596,7 @@ async function formatExecutiveSummary(
 
   return [
     `- Action: ${actionSummary}`,
-    `- Result: **${statusLabel}** (errors: ${errorCount}, warnings: ${warningCount}, skipped: ${skipped.length})${skippedText}`,
+    `- Result: **${statusLabel}** (errors: ${errorCount}, warnings: ${warningCount}, inconclusive: ${inconclusiveCount}, skipped: ${skipped.length})${skippedText}`,
     ...(crossChainSummary ? [`- Cross-chain: ${crossChainSummary}`] : []),
   ].join('\n');
 }
