@@ -20,6 +20,14 @@ This document provides a reference for the API keys and secrets required by gove
 |--------|---------|-------------|
 | `OPTIMISM_RPC_URL` | Optimism L2 access | Cross-chain proposals targeting Optimism |
 | `BASE_RPC_URL` | Base L2 access | Cross-chain proposals targeting Base |
+| `UNICHAIN_RPC_URL` | Unichain L2 access | Cross-chain proposals targeting Unichain |
+| `INK_RPC_URL` | Ink L2 access | Cross-chain proposals targeting Ink |
+| `SONEIUM_RPC_URL` | Soneium L2 access | Cross-chain proposals targeting Soneium |
+| `BOB_RPC_URL` | BOB L2 access | Cross-chain proposals targeting BOB |
+| `CELO_RPC_URL` | Celo L2 access | Cross-chain proposals targeting Celo |
+| `WORLDCHAIN_RPC_URL` | World Chain L2 access | Cross-chain proposals targeting World Chain |
+| `XLAYER_RPC_URL` | X Layer L2 access | Cross-chain proposals targeting X Layer |
+| `ZORA_RPC_URL` | Zora RPC access (preview/decode only) | Needed for Zora reads; destination Tenderly sim is currently unsupported |
 | `ALCHEMY_API_KEY` | Fallback for optional chain RPCs | When chain-specific RPC URLs aren't set |
 
 ## Local Development

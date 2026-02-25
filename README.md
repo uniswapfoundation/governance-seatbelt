@@ -203,6 +203,19 @@ MAINNET_RPC_URL=yourMainnetRpcUrl
 # URL to your Arbitrum mainnet RPC (required for cross-chain).
 ARBITRUM_RPC_URL=yourArbitrumRpcUrl
 
+# Optional chain-specific RPC URLs for OP-stack destination checks.
+# If omitted, Seatbelt falls back to public defaults or ALCHEMY_API_KEY where available.
+OPTIMISM_RPC_URL=yourOptimismRpcUrl
+BASE_RPC_URL=yourBaseRpcUrl
+UNICHAIN_RPC_URL=yourUnichainRpcUrl
+INK_RPC_URL=yourInkRpcUrl
+SONEIUM_RPC_URL=yourSoneiumRpcUrl
+BOB_RPC_URL=yourBobRpcUrl
+CELO_RPC_URL=yourCeloRpcUrl
+WORLDCHAIN_RPC_URL=yourWorldchainRpcUrl
+XLAYER_RPC_URL=yourXLayerRpcUrl
+ZORA_RPC_URL=yourZoraRpcUrl
+
 # Tenderly access token.
 # Access token is obtained from the Tenderly UI via Account > Authorization > Generate Access Token.
 TENDERLY_ACCESS_TOKEN=yourAccessToken
@@ -261,6 +274,8 @@ There are two modes of operation:
 When running either of those two modes locally, reports will be saved into a `reports/` folder in the root of the repository.
 The specific path will be `./reports/${daoName}/${governorAddress}/${proposalId}.${extension}`.
 The `reports/` folder is gitignored, so when searching for reports in this directory your editor may hide the files by default.
+
+Cross-chain note: Seatbelt currently treats Zora (`7777777`) as explicitly unsupported for destination Tenderly simulation in this workflow, and reports it as skipped with a clear reason. Other touched chains may still be decoded and included in cross-chain previews.
 
 ### Running Tests
 

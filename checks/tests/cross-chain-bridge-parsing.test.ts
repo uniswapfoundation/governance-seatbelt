@@ -386,6 +386,20 @@ describe('Cross-Chain Bridge Parsing Integration Tests', () => {
       });
     });
 
+    test('parseOptimismL1L2MessagesFromProposal parses celo messenger targets', () => {
+      const sendMessageCalldata =
+        '0x3dbb202b0000000000000000000000004200000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000f42400000000000000000000000000000000000000000000000000000000000000004d0e30db000000000000000000000000000000000000000000000000000000000';
+      const celoMessenger = '0x1AC1181fc4e4F877963680587AEAa2C90D7EbB95';
+      const targets = ['0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', celoMessenger];
+      const calldatas = ['0xdead', sendMessageCalldata];
+      const messages = parseOptimismL1L2MessagesFromProposal(targets, calldatas);
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({
+        bridgeType: 'OptimismL1L2',
+        destinationChainId: '42220',
+      });
+    });
+
     test('parseOptimismL1L2MessagesFromProposal parses portal depositTransaction targets', () => {
       const setOwnerAbi = parseAbi(['function setOwner(address _owner)']);
       const portalAbi = parseAbi([
@@ -415,6 +429,40 @@ describe('Cross-Chain Bridge Parsing Integration Tests', () => {
         bridgeType: 'OptimismL1L2',
         destinationChainId: '1868',
         l2TargetAddress: '0x42aE7Ec7ff020412639d443E245D936429Fbe717',
+        l2FromAddress: '0x2BAD8182C09F50c8318d769245beA52C32Be46CD',
+      });
+      expect(messages[0].l2InputData).toBe(setOwnerData);
+    });
+
+    test('parseOptimismL1L2MessagesFromProposal parses x layer portal depositTransaction targets', () => {
+      const setOwnerAbi = parseAbi(['function setOwner(address _owner)']);
+      const portalAbi = parseAbi([
+        'function depositTransaction(address _to, uint256 _value, uint64 _gasLimit, bool _isCreation, bytes _data)',
+      ]);
+      const setOwnerData = encodeFunctionData({
+        abi: setOwnerAbi,
+        functionName: 'setOwner',
+        args: ['0x2222222222222222222222222222222222222222'],
+      });
+      const depositCalldata = encodeFunctionData({
+        abi: portalAbi,
+        functionName: 'depositTransaction',
+        args: ['0x4B2ab38DBF28D31D467aA8993f6c2585981D6804', 0n, 200000n, false, setOwnerData],
+      });
+
+      const xLayerPortal = '0x64057ad1DdAc804d0D26A7275b193D9DACa19993';
+      const l1Sender = '0x1a9C8182C09F50C8318d769245beA52c32BE35BC';
+      const messages = parseOptimismL1L2MessagesFromProposal(
+        [xLayerPortal],
+        [depositCalldata],
+        l1Sender,
+      );
+
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({
+        bridgeType: 'OptimismL1L2',
+        destinationChainId: '196',
+        l2TargetAddress: '0x4B2ab38DBF28D31D467aA8993f6c2585981D6804',
         l2FromAddress: '0x2BAD8182C09F50c8318d769245beA52C32Be46CD',
       });
       expect(messages[0].l2InputData).toBe(setOwnerData);

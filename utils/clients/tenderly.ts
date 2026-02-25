@@ -840,10 +840,24 @@ const TENDERLY_DESTINATION_SUPPORTED_CHAIN_IDS = new Set([
   57073, // Ink
   60808, // Bob
   1868, // Soneium
-  196, // XLayer
+  196, // X Layer
   42220, // Celo
-  480, // Worldchain
+  480, // World Chain
 ]);
+
+const TENDERLY_UNSUPPORTED_DESTINATION_REASONS: Record<number, string> = {
+  7777777:
+    'Zora destination simulation is explicitly unsupported because this Seatbelt Tenderly workflow does not currently have validated Tenderly network support for chain 7777777.',
+};
+
+function getTenderlyUnsupportedDestinationReason(chainId: number): string {
+  const explicitReason = TENDERLY_UNSUPPORTED_DESTINATION_REASONS[chainId];
+  if (explicitReason) {
+    return explicitReason;
+  }
+
+  return `chain ${chainId} is not currently supported in this Tenderly workflow.`;
+}
 
 export async function handleCrossChainSimulations(
   sourceResult: SimulationResult,
@@ -936,7 +950,7 @@ export async function handleCrossChainSimulations(
       console.log(`[CrossChainHandler] Simulating L2 message to: ${message.l2TargetAddress}`);
 
       if (!TENDERLY_DESTINATION_SUPPORTED_CHAIN_IDS.has(destinationChainId)) {
-        const reason = `Skipping destination sim: chain ${destinationChainId} is not currently supported in this Tenderly workflow.`;
+        const reason = `Skipping destination sim: ${getTenderlyUnsupportedDestinationReason(destinationChainId)}`;
         console.warn(`[CrossChainHandler] ${reason}`);
         return {
           chainId: destinationChainId,

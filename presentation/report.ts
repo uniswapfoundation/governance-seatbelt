@@ -101,6 +101,9 @@ const KNOWN_FUNCTION_SELECTORS: Record<string, string> = {
   // WETH9-style
   '0xd0e30db0': 'deposit()',
   '0x2e1a7d4d': 'withdraw(uint256)',
+  // Common ownership / protocol-fee administration selectors used in cross-chain sims
+  '0x13af4035': 'setOwner(address)',
+  '0xf46901ed': 'setFeeTo(address)',
 };
 
 const CONTRACT_ABI_CACHE = new Map<string, Abi | null>();

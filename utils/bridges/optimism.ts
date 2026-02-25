@@ -55,9 +55,11 @@ const OPTIMISM_ALIAS_OFFSET = BigInt('0x1111000000000000000000000000000000001111
 const L2_CROSS_CHAIN_ACCOUNTS: Partial<Record<string, Address>> = {
   '10': '0xa1dD330d602c32622AA270Ea73d078B803Cb3518', // Optimism
   '8453': '0x31FAfd4889FA1269F7a13A66eE0fB458f27D72A9', // Base
-  '480': '0xcb2436774C3e191c85056d248EF4260ce5f27A9D', // Worldchain
+  '480': '0xcb2436774C3e191c85056d248EF4260ce5f27A9D', // World Chain
   '7777777': '0x36eEC182D0B24Df3DC23115D64DB521A93D5154f', // Zora
 };
+// Note: Celo and X Layer intentionally rely on selector-based forward decoding when payloads
+// use varying forwarder addresses (e.g. proposal placeholders), rather than strict address checks.
 
 const L2_CROSS_CHAIN_ACCOUNT_FORWARD_ABI = parseAbi([
   'function forward(address target, bytes data)',
