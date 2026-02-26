@@ -607,7 +607,7 @@ export const checkPermissionDiff: ProposalCheck = {
     );
 
     for (const intent of ownershipIntentEvidence) {
-      const matchedTransition = rawAddressTransitions.find((transition) => {
+      const matchingTransitions = rawAddressTransitions.filter((transition) => {
         if (transition.contractAddress.toLowerCase() !== intent.contractAddress.toLowerCase()) {
           return false;
         }
@@ -617,8 +617,10 @@ export const checkPermissionDiff: ProposalCheck = {
         return transition.previous.toLowerCase() !== zeroAddress;
       });
 
-      if (!matchedTransition) continue;
+      if (matchingTransitions.length !== 1) continue;
       if (hasOwnershipDiff(permissionsDiff, intent.contractAddress, intent.newOwner)) continue;
+
+      const [matchedTransition] = matchingTransitions;
 
       permissionsDiff.push({
         kind: 'ownership_transferred',
