@@ -18,10 +18,13 @@ function topicAddress(address: string): string {
   return padTopic(address);
 }
 
+const GOVERNOR = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const TIMELOCK = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+
 function createDeps(chainId: number, blockExplorerBaseUrl: string): ProposalData {
   return {
-    governor: {},
-    timelock: {},
+    governor: { address: GOVERNOR },
+    timelock: { address: TIMELOCK },
     publicClient: {},
     chainConfig: {
       chainId,
@@ -315,7 +318,7 @@ describe('checkPermissionDiff', () => {
   test('infers ownership transfer from admin-driven setOwner with confirmed owner slot change', async () => {
     const contract = '0x4b2ab38dbf28d31d467aa8993f6c2585981d6804';
     const previousOwner = '0x2bad8182c09f50c8318d769245bea52c32be46cd';
-    const adminCaller = '0x1111111111111111111111111111111111111111';
+    const adminCaller = TIMELOCK;
     const newOwner = '0x2222222222222222222222222222222222222222';
 
     const setOwnerCalldata = encodeFunctionData({
@@ -344,6 +347,102 @@ describe('checkPermissionDiff', () => {
               dirty: topicAddress(newOwner),
             },
           ],
+        },
+      ],
+    });
+
+    const deps = createDeps(196, 'https://www.oklink.com/xlayer');
+    const result = await checkPermissionDiff.checkProposal(createProposalEvent(), sim, deps);
+
+    const ownership = result.permissionsDiff?.find((d) => d.kind === 'ownership_transferred');
+    expect(ownership).toMatchObject({
+      contractAddress: getAddress(contract),
+      previous: getAddress(previousOwner),
+      next: getAddress(newOwner),
+      via: 'state_diff',
+    });
+  });
+
+  test('infers ownership transfer for governor-driven setOwner with confirmed owner slot change', async () => {
+    const contract = '0x4b2ab38dbf28d31d467aa8993f6c2585981d6804';
+    const previousOwner = '0x2bad8182c09f50c8318d769245bea52c32be46cd';
+    const adminCaller = GOVERNOR;
+    const newOwner = '0x2222222222222222222222222222222222222222';
+
+    const setOwnerCalldata = encodeFunctionData({
+      abi: parseAbi(['function setOwner(address owner)']),
+      functionName: 'setOwner',
+      args: [newOwner],
+    });
+
+    const sim = createSimulation({
+      logs: [],
+      callTrace: {
+        from: adminCaller,
+        to: contract,
+        input: setOwnerCalldata,
+      },
+      stateDiff: [
+        {
+          soltype: null,
+          original: {},
+          dirty: {},
+          raw: [
+            {
+              address: contract,
+              key: '0x0000000000000000000000000000000000000000000000000000000000000003',
+              original: topicAddress(previousOwner),
+              dirty: topicAddress(newOwner),
+            },
+          ],
+        },
+      ],
+    });
+
+    const deps = createDeps(196, 'https://www.oklink.com/xlayer');
+    const result = await checkPermissionDiff.checkProposal(createProposalEvent(), sim, deps);
+
+    const ownership = result.permissionsDiff?.find((d) => d.kind === 'ownership_transferred');
+    expect(ownership).toMatchObject({
+      contractAddress: getAddress(contract),
+      previous: getAddress(previousOwner),
+      next: getAddress(newOwner),
+      via: 'state_diff',
+    });
+  });
+
+  test('infers ownership transfer when identical setOwner transition is duplicated in raw entries', async () => {
+    const contract = '0x4b2ab38dbf28d31d467aa8993f6c2585981d6804';
+    const previousOwner = '0x2bad8182c09f50c8318d769245bea52c32be46cd';
+    const adminCaller = TIMELOCK;
+    const newOwner = '0x2222222222222222222222222222222222222222';
+
+    const setOwnerCalldata = encodeFunctionData({
+      abi: parseAbi(['function setOwner(address owner)']),
+      functionName: 'setOwner',
+      args: [newOwner],
+    });
+
+    const duplicatedRawEntry = {
+      address: contract,
+      key: '0x0000000000000000000000000000000000000000000000000000000000000003',
+      original: topicAddress(previousOwner),
+      dirty: topicAddress(newOwner),
+    };
+
+    const sim = createSimulation({
+      logs: [],
+      callTrace: {
+        from: adminCaller,
+        to: contract,
+        input: setOwnerCalldata,
+      },
+      stateDiff: [
+        {
+          soltype: null,
+          original: {},
+          dirty: {},
+          raw: [duplicatedRawEntry, duplicatedRawEntry],
         },
       ],
     });
@@ -444,6 +543,96 @@ describe('checkPermissionDiff', () => {
         },
       ],
     });
+
+    const deps = createDeps(196, 'https://www.oklink.com/xlayer');
+    const result = await checkPermissionDiff.checkProposal(createProposalEvent(), sim, deps);
+
+    expect(result.permissionsDiff).toEqual([]);
+    expect(result.info).toContain('Permission changes: none');
+  });
+
+  test('does not infer ownership transfer for non-privileged setOwner caller without caller-owner match', async () => {
+    const contract = '0x4b2ab38dbf28d31d467aa8993f6c2585981d6804';
+    const caller = '0x1111111111111111111111111111111111111111';
+    const previousOtherAddress = '0x3333333333333333333333333333333333333333';
+    const intendedOwner = '0x2222222222222222222222222222222222222222';
+
+    const setOwnerCalldata = encodeFunctionData({
+      abi: parseAbi(['function setOwner(address owner)']),
+      functionName: 'setOwner',
+      args: [intendedOwner],
+    });
+
+    const sim = createSimulation({
+      logs: [],
+      callTrace: {
+        from: caller,
+        to: contract,
+        input: setOwnerCalldata,
+      },
+      stateDiff: [
+        {
+          soltype: null,
+          original: {},
+          dirty: {},
+          raw: [
+            {
+              address: contract,
+              key: '0x0000000000000000000000000000000000000000000000000000000000000003',
+              original: topicAddress(previousOtherAddress),
+              dirty: topicAddress(intendedOwner),
+            },
+          ],
+        },
+      ],
+    });
+
+    const deps = createDeps(196, 'https://www.oklink.com/xlayer');
+    const result = await checkPermissionDiff.checkProposal(createProposalEvent(), sim, deps);
+
+    expect(result.permissionsDiff).toEqual([]);
+    expect(result.info).toContain('Permission changes: none');
+  });
+
+  test('does not infer ownership transfer when caller is missing from trace', async () => {
+    const contract = '0x4b2ab38dbf28d31d467aa8993f6c2585981d6804';
+    const previousOwner = '0x2bad8182c09f50c8318d769245bea52c32be46cd';
+    const intendedOwner = '0x2222222222222222222222222222222222222222';
+
+    const setOwnerCalldata = encodeFunctionData({
+      abi: parseAbi(['function setOwner(address owner)']),
+      functionName: 'setOwner',
+      args: [intendedOwner],
+    });
+
+    const sim = createSimulation({
+      logs: [],
+      callTrace: {
+        from: TIMELOCK,
+        to: contract,
+        input: setOwnerCalldata,
+      },
+      stateDiff: [
+        {
+          soltype: null,
+          original: {},
+          dirty: {},
+          raw: [
+            {
+              address: contract,
+              key: '0x0000000000000000000000000000000000000000000000000000000000000003',
+              original: topicAddress(previousOwner),
+              dirty: topicAddress(intendedOwner),
+            },
+          ],
+        },
+      ],
+    });
+
+    const trace = sim.transaction.transaction_info.call_trace;
+    if (trace) {
+      Reflect.deleteProperty(trace, 'from');
+    }
 
     const deps = createDeps(196, 'https://www.oklink.com/xlayer');
     const result = await checkPermissionDiff.checkProposal(createProposalEvent(), sim, deps);

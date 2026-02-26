@@ -152,6 +152,7 @@ type OwnershipIntentEvidence = {
 
 type RawAddressTransition = {
   contractAddress: `0x${string}`;
+  slotKey: `0x${string}`;
   previous?: `0x${string}`;
   next: `0x${string}`;
 };
@@ -271,7 +272,7 @@ function parseAddressFromStorageWord(value: unknown): `0x${string}` | null {
   return maybeAddress(`0x${raw.slice(24)}`);
 }
 
-function isLinearStorageSlotKey(value: unknown): boolean {
+function isLinearStorageSlotKey(value: unknown): value is `0x${string}` {
   if (typeof value !== 'string' || !isHex(value)) return false;
   if (value.length !== 66) return false;
 
@@ -304,6 +305,7 @@ function extractRawAddressTransitions(stateDiffs: unknown): RawAddressTransition
 
       transitions.push({
         contractAddress,
+        slotKey: raw.key,
         previous: previous ?? undefined,
         next,
       });
@@ -606,7 +608,19 @@ export const checkPermissionDiff: ProposalCheck = {
       sim.transaction.transaction_info.state_diff,
     );
 
+    const trustedOwnershipCallers = new Set<string>();
+    const governorAddress = maybeAddress(deps.governor?.address);
+    const timelockAddress = maybeAddress(deps.timelock?.address);
+    if (governorAddress) trustedOwnershipCallers.add(governorAddress.toLowerCase());
+    if (timelockAddress) trustedOwnershipCallers.add(timelockAddress.toLowerCase());
+
     for (const intent of ownershipIntentEvidence) {
+      // Intentional safety bias: if the trace omits caller identity, skip fallback inference
+      // rather than risk attributing ownership changes to the wrong storage transition.
+      if (!intent.caller) continue;
+      const callerLower = intent.caller.toLowerCase();
+      const isTrustedCaller = trustedOwnershipCallers.has(callerLower);
+
       const matchingTransitions = rawAddressTransitions.filter((transition) => {
         if (transition.contractAddress.toLowerCase() !== intent.contractAddress.toLowerCase()) {
           return false;
@@ -614,13 +628,31 @@ export const checkPermissionDiff: ProposalCheck = {
         if (transition.next.toLowerCase() !== intent.newOwner.toLowerCase()) return false;
         if (!transition.previous) return false;
 
-        return transition.previous.toLowerCase() !== zeroAddress;
+        const previousLower = transition.previous.toLowerCase();
+        if (previousLower === zeroAddress) return false;
+
+        if (isTrustedCaller) return true;
+
+        return previousLower === callerLower;
       });
 
-      if (matchingTransitions.length !== 1) continue;
-      if (hasOwnershipDiff(permissionsDiff, intent.contractAddress, intent.newOwner)) continue;
+      let matchedTransition: RawAddressTransition | null = null;
+      const uniqueTransitionKeys = new Set<string>();
+      for (const transition of matchingTransitions) {
+        const key = `${transition.slotKey.toLowerCase()}:${transition.previous?.toLowerCase() ?? ''}:${transition.next.toLowerCase()}`;
+        if (uniqueTransitionKeys.has(key)) continue;
 
-      const [matchedTransition] = matchingTransitions;
+        uniqueTransitionKeys.add(key);
+        if (uniqueTransitionKeys.size > 1) {
+          matchedTransition = null;
+          break;
+        }
+
+        matchedTransition = transition;
+      }
+
+      if (uniqueTransitionKeys.size !== 1 || !matchedTransition) continue;
+      if (hasOwnershipDiff(permissionsDiff, intent.contractAddress, intent.newOwner)) continue;
 
       permissionsDiff.push({
         kind: 'ownership_transferred',
