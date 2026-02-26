@@ -607,9 +607,6 @@ export const checkPermissionDiff: ProposalCheck = {
     );
 
     for (const intent of ownershipIntentEvidence) {
-      if (!intent.caller) continue;
-      const callerLower = intent.caller.toLowerCase();
-
       const matchedTransition = rawAddressTransitions.find((transition) => {
         if (transition.contractAddress.toLowerCase() !== intent.contractAddress.toLowerCase()) {
           return false;
@@ -617,10 +614,7 @@ export const checkPermissionDiff: ProposalCheck = {
         if (transition.next.toLowerCase() !== intent.newOwner.toLowerCase()) return false;
         if (!transition.previous) return false;
 
-        const previousLower = transition.previous.toLowerCase();
-        if (previousLower === zeroAddress) return false;
-
-        return previousLower === callerLower;
+        return transition.previous.toLowerCase() !== zeroAddress;
       });
 
       if (!matchedTransition) continue;

@@ -312,6 +312,54 @@ describe('checkPermissionDiff', () => {
     expect(result.info).toContain('Permission changes: none');
   });
 
+  test('infers ownership transfer from admin-driven setOwner with confirmed owner slot change', async () => {
+    const contract = '0x4b2ab38dbf28d31d467aa8993f6c2585981d6804';
+    const previousOwner = '0x2bad8182c09f50c8318d769245bea52c32be46cd';
+    const adminCaller = '0x1111111111111111111111111111111111111111';
+    const newOwner = '0x2222222222222222222222222222222222222222';
+
+    const setOwnerCalldata = encodeFunctionData({
+      abi: parseAbi(['function setOwner(address owner)']),
+      functionName: 'setOwner',
+      args: [newOwner],
+    });
+
+    const sim = createSimulation({
+      logs: [],
+      callTrace: {
+        from: adminCaller,
+        to: contract,
+        input: setOwnerCalldata,
+      },
+      stateDiff: [
+        {
+          soltype: null,
+          original: {},
+          dirty: {},
+          raw: [
+            {
+              address: contract,
+              key: '0x0000000000000000000000000000000000000000000000000000000000000003',
+              original: topicAddress(previousOwner),
+              dirty: topicAddress(newOwner),
+            },
+          ],
+        },
+      ],
+    });
+
+    const deps = createDeps(196, 'https://www.oklink.com/xlayer');
+    const result = await checkPermissionDiff.checkProposal(createProposalEvent(), sim, deps);
+
+    const ownership = result.permissionsDiff?.find((d) => d.kind === 'ownership_transferred');
+    expect(ownership).toMatchObject({
+      contractAddress: getAddress(contract),
+      previous: getAddress(previousOwner),
+      next: getAddress(newOwner),
+      via: 'state_diff',
+    });
+  });
+
   test('does not infer ownership transfer from setOwner intent alone', async () => {
     const contract = '0x4b2ab38dbf28d31d467aa8993f6c2585981d6804';
     const currentOwner = '0x2bad8182c09f50c8318d769245bea52c32be46cd';
