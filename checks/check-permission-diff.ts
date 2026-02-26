@@ -82,10 +82,10 @@ function toAddressLink(address: string, blockExplorerBaseUrl: string): string {
   return `[${address}](${blockExplorerBaseUrl}/address/${address})`;
 }
 
-const OWNERSHIP_FUNCTION_ABI = parseAbi([
-  'function setOwner(address owner)',
-  'function transferOwnership(address newOwner)',
-]);
+// Intentional: fallback ownership inference is limited to `setOwner`-style calls.
+// `transferOwnership` often mutates pending-owner fields first, which causes false positives
+// if we infer ownership changes from raw slot transitions alone.
+const OWNERSHIP_FUNCTION_ABI = parseAbi(['function setOwner(address owner)']);
 
 const OWNER_ARG_NAMES = new Set(['owner', '_owner', 'newowner', 'new_owner']);
 
@@ -164,12 +164,7 @@ function isOwnershipFunctionName(value: string | undefined): boolean {
   if (!value) return false;
   const normalized = value.replace(/\s+/g, '').toLowerCase();
 
-  return (
-    normalized === 'setowner' ||
-    normalized.startsWith('setowner(') ||
-    normalized === 'transferownership' ||
-    normalized.startsWith('transferownership(')
-  );
+  return normalized === 'setowner' || normalized.startsWith('setowner(');
 }
 
 function extractOwnerArgFromDecodedInput(decodedInput: unknown): `0x${string}` | null {

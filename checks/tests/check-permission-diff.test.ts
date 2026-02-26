@@ -438,7 +438,7 @@ describe('checkPermissionDiff', () => {
     expect(result.info).toContain('Permission changes: none');
   });
 
-  test('infers ownership transfer from transferOwnership when previous owner matches caller', async () => {
+  test('does not infer ownership transfer from transferOwnership even when owner-like slot changes', async () => {
     const contract = '0x4b2ab38dbf28d31d467aa8993f6c2585981d6804';
     const currentOwner = '0x2bad8182c09f50c8318d769245bea52c32be46cd';
     const newOwner = '0x2222222222222222222222222222222222222222';
@@ -476,16 +476,11 @@ describe('checkPermissionDiff', () => {
     const deps = createDeps(196, 'https://www.oklink.com/xlayer');
     const result = await checkPermissionDiff.checkProposal(createProposalEvent(), sim, deps);
 
-    const ownership = result.permissionsDiff?.find((d) => d.kind === 'ownership_transferred');
-    expect(ownership).toMatchObject({
-      contractAddress: getAddress(contract),
-      previous: getAddress(currentOwner),
-      next: getAddress(newOwner),
-      via: 'state_diff',
-    });
+    expect(result.permissionsDiff).toEqual([]);
+    expect(result.info).toContain('Permission changes: none');
   });
 
-  test('infers transferOwnership when owner-slot transition appears after pending-owner write', async () => {
+  test('does not infer ownership transfer from transferOwnership with multiple owner-like slot changes', async () => {
     const contract = '0x4b2ab38dbf28d31d467aa8993f6c2585981d6804';
     const currentOwner = '0x2bad8182c09f50c8318d769245bea52c32be46cd';
     const newOwner = '0x2222222222222222222222222222222222222222';
@@ -529,13 +524,8 @@ describe('checkPermissionDiff', () => {
     const deps = createDeps(196, 'https://www.oklink.com/xlayer');
     const result = await checkPermissionDiff.checkProposal(createProposalEvent(), sim, deps);
 
-    const ownership = result.permissionsDiff?.find((d) => d.kind === 'ownership_transferred');
-    expect(ownership).toMatchObject({
-      contractAddress: getAddress(contract),
-      previous: getAddress(currentOwner),
-      next: getAddress(newOwner),
-      via: 'state_diff',
-    });
+    expect(result.permissionsDiff).toEqual([]);
+    expect(result.info).toContain('Permission changes: none');
   });
 
   test('reports none when there are no permission changes', async () => {
