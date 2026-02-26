@@ -87,8 +87,6 @@ const OWNERSHIP_FUNCTION_ABI = parseAbi([
   'function transferOwnership(address newOwner)',
 ]);
 
-const OWNERSHIP_SELECTORS = new Set(['0x13af4035', '0xf2fde38b']);
-
 const OWNER_ARG_NAMES = new Set(['owner', '_owner', 'newowner', 'new_owner']);
 
 const KNOWN_ROLE_NAMES: Array<{ name: string; id: `0x${string}` }> = [
@@ -205,9 +203,6 @@ function parseOwnershipIntentFromInput(input: string | undefined): {
   newOwner: `0x${string}`;
 } | null {
   if (!input || !isHex(input) || input.length < 10) return null;
-
-  const selector = input.slice(0, 10).toLowerCase();
-  if (!OWNERSHIP_SELECTORS.has(selector)) return null;
 
   try {
     const decoded = decodeFunctionData({ abi: OWNERSHIP_FUNCTION_ABI, data: input });
