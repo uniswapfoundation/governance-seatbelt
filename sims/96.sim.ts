@@ -66,7 +66,9 @@ Undelegating these tokens addresses potential misalignment created by the Franch
 
 This proposal invokes \`recallMany\` on the FranchiserFactory contract (0xf754A7E347F81cFdc70AF9FbCCe9Df3D826360FA) to retrieve all UNI currently delegated through the Franchiser system, returning the recalled tokens to the Governance Timelock (0x1a9C8182C09F50C8318d769245beA52c32BE35BC).
 
-Eight Franchiser delegations are targeted for undelegation, totaling 12.5M UNI across recipients including the Uniswap Foundation (2.5M), Anode (2.5M), Axia Network (2.25M), PGov (2.25M), Wintermute (1.9M), Keyrock (494K), KPK (453K), and Atiselsts.eth (154K).
+Eight Franchiser delegations are targeted for undelegation, totaling ~12.5M UNI across recipients: the Uniswap Foundation (2,500,001.19), Anode (2,499,858), Axia Network (2.25M), PGov (2.25M), Wintermute (1.9M), Keyrock (494K), KPK (453K), and Atiselsts.eth (154K).
+
+The UF Franchiser has accumulated ~1.19 UNI of unrelated inbound transfers from third parties since it was funded. \`recall\` always sweeps the full balance (the Franchiser contract has no partial-recall option), so those stray amounts will return to the Treasury along with the original 2.5M.
 
 The Timelock is not self-delegated, so this proposal results in a net decrease in active voting power across the ecosystem.`;
 
