@@ -1,9 +1,9 @@
 /**
  * @notice Simulation configuration for proposal 97.
  *
- * Action 1: Polygon — FxPortal fee activation (V2 setFeeTo, V3 setOwner).
- * Action 2: Celo — Wormhole fee activation and CrossChainAccount handoff.
- * Action 3: BNB Chain — Wormhole fee activation (V2 setFeeTo, V3 setOwner).
+ * Action 1: Celo — Wormhole fee activation and CrossChainAccount handoff.
+ * Action 2: BNB Chain — Wormhole fee activation (V2 setFeeTo, V3 setOwner).
+ * Action 3: Polygon — FxPortal fee activation (V2 setFeeTo, V3 setOwner).
  */
 import {
   encodeAbiParameters,
@@ -53,39 +53,7 @@ const SEND_MESSAGE_TO_CHILD_ABI = parseAbi([
   'function sendMessageToChild(address _receiver, bytes calldata _data)',
 ]);
 
-// Action 1: Polygon FxPortal — V2 setFeeTo + V3 setOwner
-const polygonBatch = encodeAbiParameters(
-  parseAbiParameters('address[] targets, uint256[] values, bytes[] datas'),
-  [
-    [POLYGON_V2_FACTORY, POLYGON_V3_FACTORY],
-    [0n, 0n],
-    [
-      encodeFunctionData({
-        abi: V2_FACTORY_ABI,
-        functionName: 'setFeeTo',
-        args: [POLYGON_TOKEN_JAR],
-      }),
-      encodeFunctionData({
-        abi: SET_OWNER_ABI,
-        functionName: 'setOwner',
-        args: [POLYGON_V3_OPEN_FEE_ADAPTER],
-      }),
-    ],
-  ],
-);
-
-const call0 = {
-  target: POLYGON_FX_ROOT,
-  calldata: encodeFunctionData({
-    abi: SEND_MESSAGE_TO_CHILD_ABI,
-    functionName: 'sendMessageToChild',
-    args: [POLYGON_FX_RECEIVER, polygonBatch],
-  }),
-  value: 0n,
-  signature: '',
-};
-
-// Action 2: Celo Wormhole — V2 fees + CrossChainAccount handoff + V3 fee adapter
+// Action 1: Celo Wormhole — V2 fees + CrossChainAccount handoff + V3 fee adapter
 const celoTargets = [
   CELO_V2_FACTORY,
   CELO_V2_FACTORY,
@@ -116,7 +84,7 @@ const celoDatas = [
   }),
 ] as const;
 
-const call1 = {
+const call0 = {
   target: WORMHOLE_SENDER,
   calldata: encodeFunctionData({
     abi: WORMHOLE_SEND_MESSAGE_ABI,
@@ -133,7 +101,7 @@ const call1 = {
   signature: '',
 };
 
-// Action 3: BNB Wormhole — V2 setFeeTo + V3 setOwner
+// Action 2: BNB Wormhole — V2 setFeeTo + V3 setOwner
 const bnbTargets = [BNB_V2_FACTORY, BNB_V3_FACTORY] as const;
 const bnbValues = [0n, 0n] as const;
 const bnbDatas = [
@@ -149,7 +117,7 @@ const bnbDatas = [
   }),
 ] as const;
 
-const call2 = {
+const call1 = {
   target: WORMHOLE_SENDER,
   calldata: encodeFunctionData({
     abi: WORMHOLE_SEND_MESSAGE_ABI,
@@ -166,20 +134,45 @@ const call2 = {
   signature: '',
 };
 
+// Action 3: Polygon FxPortal — V2 setFeeTo + V3 setOwner
+const polygonBatch = encodeAbiParameters(
+  parseAbiParameters('address[] targets, uint256[] values, bytes[] datas'),
+  [
+    [POLYGON_V2_FACTORY, POLYGON_V3_FACTORY],
+    [0n, 0n],
+    [
+      encodeFunctionData({
+        abi: V2_FACTORY_ABI,
+        functionName: 'setFeeTo',
+        args: [POLYGON_TOKEN_JAR],
+      }),
+      encodeFunctionData({
+        abi: SET_OWNER_ABI,
+        functionName: 'setOwner',
+        args: [POLYGON_V3_OPEN_FEE_ADAPTER],
+      }),
+    ],
+  ],
+);
+
+const call2 = {
+  target: POLYGON_FX_ROOT,
+  calldata: encodeFunctionData({
+    abi: SEND_MESSAGE_TO_CHILD_ABI,
+    functionName: 'sendMessageToChild',
+    args: [POLYGON_FX_RECEIVER, polygonBatch],
+  }),
+  value: 0n,
+  signature: '',
+};
+
 const calls = [call0, call1, call2];
 
 const description = `# Protocol Fee Expansion: Proposal 97
 
-This proposal executes three cross-chain actions to activate protocol fees on Polygon, Celo, and BNB Chain.
+This proposal executes three cross-chain actions to activate protocol fees on Celo, BNB Chain, and Polygon.
 
-## Action 1 — Polygon
-
-\`POLYGON_FX_ROOT.sendMessageToChild(ETHEREUM_PROXY, abi.encode(targets, values, datas))\`:
-
-- \`V2_FACTORY.setFeeTo(TOKEN_JAR)\`
-- \`V3_FACTORY.setOwner(V3_OPEN_FEE_ADAPTER)\`
-
-## Action 2 — Celo
+## Action 1 — Celo
 
 \`WORMHOLE_SENDER.sendMessage(targets, values, datas, UNISWAP_WORMHOLE_MESSAGE_RECEIVER, CELO_CHAIN_ID)\`:
 
@@ -188,9 +181,16 @@ This proposal executes three cross-chain actions to activate protocol fees on Po
 - \`V3_FACTORY.setOwner(V3_OPEN_FEE_ADAPTER)\`
 - \`V4_POOL_MANAGER.transferOwnership(CROSS_CHAIN_ACCOUNT)\`
 
-## Action 3 — BNB Chain
+## Action 2 — BNB Chain
 
 \`WORMHOLE_SENDER.sendMessage(targets, values, datas, UNISWAP_WORMHOLE_MESSAGE_RECEIVER, BNB_CHAIN_ID)\`:
+
+- \`V2_FACTORY.setFeeTo(TOKEN_JAR)\`
+- \`V3_FACTORY.setOwner(V3_OPEN_FEE_ADAPTER)\`
+
+## Action 3 — Polygon
+
+\`POLYGON_FX_ROOT.sendMessageToChild(ETHEREUM_PROXY, abi.encode(targets, values, datas))\`:
 
 - \`V2_FACTORY.setFeeTo(TOKEN_JAR)\`
 - \`V3_FACTORY.setOwner(V3_OPEN_FEE_ADAPTER)\`
