@@ -16,17 +16,12 @@ import {
 import type { SimulationConfigNew } from '../types';
 import { WORMHOLE_SEND_MESSAGE_ABI } from '../utils/bridges/wormhole';
 
-const WORMHOLE_SENDER = getAddress('0xf5F4496219F31CDCBa6130B5402873624585615a');
-
-// ─── Ethereum (FxPortal root) ───
+// ─── Ethereum ───
 const POLYGON_FX_ROOT = getAddress('0xfe5e5D361b2ad62c541bAb87C45a0B9B018389a2');
 const POLYGON_FX_RECEIVER = getAddress('0x8a1B966aC46F42275860f905dbC75EfBfDC12374');
+const WORMHOLE_SENDER = getAddress('0xf5F4496219F31CDCBa6130B5402873624585615a');
 
-// ─── Polygon (destination) ───
-const POLYGON_V2_FACTORY = getAddress('0x9e5A52f57b3038F1B8EeE45F28b3C1967e22799C');
-const POLYGON_V3_FACTORY = getAddress('0x1F98431c8aD98523631AE4a59f267346ea31F984');
-const POLYGON_TOKEN_JAR = getAddress('0xc6Ae6373CEcc9e595A6C8b9fe581925a8c84f70A');
-const POLYGON_V3_OPEN_FEE_ADAPTER = getAddress('0x3F07F08b45912dCd6691C5B9412975D5113B2910');
+
 
 // ─── Celo (destination) ───
 const CELO_WORMHOLE_RECEIVER = getAddress('0x0Eb863541278308c3A64F8E908BC646e27BFD071');
@@ -46,6 +41,13 @@ const BNB_TOKEN_JAR = getAddress('0xc6Ae6373CEcc9e595A6C8b9fe581925a8c84f70A');
 const BNB_V3_OPEN_FEE_ADAPTER = getAddress('0x3F07F08b45912dCd6691C5B9412975D5113B2910');
 const WORMHOLE_BNB_CHAIN_ID = 4;
 
+// ─── Polygon (destination) ───
+const POLYGON_V2_FACTORY = getAddress('0x9e5A52f57b3038F1B8EeE45F28b3C1967e22799C');
+const POLYGON_V3_FACTORY = getAddress('0x1F98431c8aD98523631AE4a59f267346ea31F984');
+const POLYGON_TOKEN_JAR = getAddress('0xc6Ae6373CEcc9e595A6C8b9fe581925a8c84f70A');
+const POLYGON_V3_OPEN_FEE_ADAPTER = getAddress('0x3F07F08b45912dCd6691C5B9412975D5113B2910');
+
+// ─── ABI fragments ───
 const V2_FACTORY_ABI = parseAbi(['function setFeeTo(address)', 'function setFeeToSetter(address)']);
 const SET_OWNER_ABI = parseAbi(['function setOwner(address _owner)']);
 const OWNED_ABI = parseAbi(['function transferOwnership(address newOwner)']);
@@ -136,10 +138,9 @@ const call1 = {
 
 // Action 3: Polygon FxPortal — V2 setFeeTo + V3 setOwner
 const polygonBatch = encodeAbiParameters(
-  parseAbiParameters('address[] targets, uint256[] values, bytes[] datas'),
+  parseAbiParameters('address[] targets, bytes[] datas, uint256[] values'),
   [
     [POLYGON_V2_FACTORY, POLYGON_V3_FACTORY],
-    [0n, 0n],
     [
       encodeFunctionData({
         abi: V2_FACTORY_ABI,
@@ -152,6 +153,7 @@ const polygonBatch = encodeAbiParameters(
         args: [POLYGON_V3_OPEN_FEE_ADAPTER],
       }),
     ],
+    [0n, 0n],
   ],
 );
 
@@ -190,7 +192,7 @@ This proposal executes three cross-chain actions to activate protocol fees on Ce
 
 ## Action 3 — Polygon
 
-\`POLYGON_FX_ROOT.sendMessageToChild(ETHEREUM_PROXY, abi.encode(targets, values, datas))\`:
+\`POLYGON_FX_ROOT.sendMessageToChild(ETHEREUM_PROXY, abi.encode(targets, datas, values))\`:
 
 - \`V2_FACTORY.setFeeTo(TOKEN_JAR)\`
 - \`V3_FACTORY.setOwner(V3_OPEN_FEE_ADAPTER)\`
