@@ -6,10 +6,11 @@ This document describes the bridge architecture, supported Uniswap cross-chain l
 
 Seatbelt simulates a governance proposal on the source chain, extracts bridge-specific execution jobs, runs destination simulations, and produces one combined report.
 
-Today the tool supports three bridge families:
+Today the tool supports four bridge families:
 
 - `ArbitrumL1L2`
 - `OptimismL1L2`
+- `PolygonFxL1L2`
 - `WormholeL1L2`
 
 Cross-chain proposal support is intentionally lane-based. Seatbelt only guarantees behavior for the lanes that are explicitly configured and validated in code.
@@ -29,7 +30,7 @@ The execution engine in [tenderly-execution-engine.ts](../utils/cross-chain/tend
 ### Supported Bridge Types
 
 ```typescript
-type BridgeType = 'ArbitrumL1L2' | 'OptimismL1L2' | 'WormholeL1L2';
+type BridgeType = 'ArbitrumL1L2' | 'OptimismL1L2' | 'PolygonFxL1L2' | 'WormholeL1L2';
 ```
 
 ### ArbitrumL1L2
@@ -43,6 +44,12 @@ type BridgeType = 'ArbitrumL1L2' | 'OptimismL1L2' | 'WormholeL1L2';
 - Source bridge call: `L1CrossDomainMessenger.sendMessage(address,bytes,uint32)`
 - Address model: L1 sender is preserved on L2
 - Main job: extract messenger payload and simulate the L2 call
+
+### PolygonFxL1L2
+
+- Source bridge call: `FxRoot.sendMessageToChild(address,bytes)`
+- Address model: destination execution calls the Polygon receiver from canonical `FxChild`
+- Main job: wrap the Fx message as `processMessageFromRoot(stateId, rootMessageSender, data)` and simulate the Polygon-side handoff
 
 ### WormholeL1L2
 

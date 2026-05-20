@@ -339,7 +339,28 @@ function hasOwnershipDiff(
 }
 
 function stableKey(item: PermissionsDiffItem): string {
-  return JSON.stringify(item, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
+  const contractAddress = item.contractAddress.toLowerCase();
+
+  switch (item.kind) {
+    case 'ownership_transferred':
+    case 'timelock_admin_changed':
+    case 'timelock_pending_admin_changed':
+      return [
+        item.kind,
+        contractAddress,
+        item.previous?.toLowerCase() ?? '',
+        item.next.toLowerCase(),
+      ].join(':');
+    case 'role_granted':
+    case 'role_revoked':
+      return [
+        item.kind,
+        contractAddress,
+        item.role.id.toLowerCase(),
+        item.account.toLowerCase(),
+        item.sender.toLowerCase(),
+      ].join(':');
+  }
 }
 
 function getContractNameFromSimulation(contract: TenderlyContract | undefined): string {

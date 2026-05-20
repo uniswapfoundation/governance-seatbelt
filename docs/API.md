@@ -208,7 +208,7 @@ export interface CrossChainJobPreview {
   chainId: number;
   chainName: string;
   blockExplorerBaseUrl: string;
-  bridgeType: string;                    // e.g. "ArbitrumL1L2" | "OptimismL1L2"
+  bridgeType: string;                    // e.g. "ArbitrumL1L2" | "OptimismL1L2" | "PolygonFxL1L2"
   status: 'success' | 'failure' | 'skipped';
   error?: string;
   l2FromAddress: `0x${string}`;

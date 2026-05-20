@@ -202,6 +202,60 @@ describe('checkPermissionDiff', () => {
     });
   });
 
+  test('deduplicates ownership transfers detected from both event logs and state diffs', async () => {
+    const ownershipTopic0 = eventTopic('OwnershipTransferred(address,address)');
+    const contractOwnable = '0x1111111111111111111111111111111111111111';
+    const prevOwner = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const nextOwner = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+
+    const sim = createSimulation({
+      logs: [
+        {
+          name: null,
+          anonymous: false,
+          inputs: [],
+          raw: {
+            address: contractOwnable,
+            topics: [ownershipTopic0, topicAddress(prevOwner), topicAddress(nextOwner)],
+            data: '0x',
+          },
+        },
+      ],
+      stateDiff: [
+        {
+          soltype: {
+            name: 'owner',
+            type: 'address',
+            storage_location: 'storage',
+            components: null,
+            offset: 0,
+            index: '0',
+            indexed: false,
+            simple_type: { type: 'address' },
+          },
+          original: prevOwner,
+          dirty: nextOwner,
+          raw: [{ address: contractOwnable, key: zeroHash, original: prevOwner, dirty: nextOwner }],
+        },
+      ],
+    });
+
+    const result = await checkPermissionDiff.checkProposal(
+      createProposalEvent(),
+      sim,
+      createDeps(1, 'https://etherscan.io'),
+    );
+
+    expect(result.permissionsDiff).toHaveLength(1);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.permissionsDiff?.[0]).toMatchObject({
+      kind: 'ownership_transferred',
+      contractAddress: getAddress(contractOwnable),
+      previous: getAddress(prevOwner),
+      next: getAddress(nextOwner),
+    });
+  });
+
   test('detects ownership transfer via decoded-call + raw state diff fallback for non-canonical cases', async () => {
     const ownerChangedTopic0 = eventTopic('OwnerChanged(address,address)');
     const contract = '0x4b2ab38dbf28d31d467aa8993f6c2585981d6804';

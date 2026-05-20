@@ -9,6 +9,12 @@ import {
 } from 'viem';
 import { bsc, celo, mainnet, monad, polygon, tempo } from 'viem/chains';
 import type { TenderlySimulation } from '../../types.d';
+import {
+  POLYGON_FX_CHILD,
+  POLYGON_FX_PROCESS_MESSAGE_ABI,
+  POLYGON_FX_ROOT,
+  POLYGON_FX_SEND_MESSAGE_ABI,
+} from '../../utils/bridges/polygon-fx';
 import { WORMHOLE_SEND_MESSAGE_ABI } from '../../utils/bridges/wormhole';
 import {
   LEGACY_BNB_WORMHOLE_MESSAGE_PAYLOAD_VERSION,
@@ -296,10 +302,11 @@ function makeWormholeCalldata(
 
 function makeSourceResult(
   calldatas: readonly `0x${string}`[],
-  options?: { simulationTimestamp?: bigint },
+  options?: { simulationTimestamp?: bigint; targets?: readonly `0x${string}`[] },
 ): CrossChainSourceResult {
   const sim = createMockSimulation([]);
   sim.transaction.status = true;
+  const targets = options?.targets ?? calldatas.map(() => WORMHOLE_PROPOSAL_TARGET);
 
   return {
     sim,
@@ -307,7 +314,7 @@ function makeSourceResult(
       id: 999n,
       proposalId: 999n,
       proposer: TIMELOCK_ADDRESS,
-      targets: calldatas.map(() => WORMHOLE_PROPOSAL_TARGET),
+      targets: [...targets],
       values: calldatas.map(() => 0n),
       signatures: calldatas.map(() => ''),
       calldatas: [...calldatas],
@@ -324,7 +331,7 @@ function makeSourceResult(
         blockExplorer: { baseUrl: 'https://etherscan.io' },
         rpcUrl: 'http://localhost:8545',
       },
-      targets: calldatas.map(() => WORMHOLE_PROPOSAL_TARGET),
+      targets: [...targets],
       touchedContracts: [],
     },
     latestBlock: {
@@ -336,6 +343,46 @@ function makeSourceResult(
 }
 
 describe('cross-chain destination execution engine', () => {
+  test('executes Polygon FxPortal messages through the FxChild handoff', async () => {
+    const polygonReceiver = getAddress('0x8a1B966aC46F42275860f905dbC75EfBfDC12374');
+    const childMessage = '0x12345678' as const;
+    const calldata = encodeFunctionData({
+      abi: POLYGON_FX_SEND_MESSAGE_ABI,
+      functionName: 'sendMessageToChild',
+      args: [polygonReceiver, childMessage],
+    });
+
+    enqueueSimulation(
+      makeSimulation({
+        id: 'polygon-fx-step',
+        chainId: polygon.id,
+      }),
+    );
+
+    const result = await handleCrossChainSimulations(
+      makeSourceResult([calldata], { targets: [POLYGON_FX_ROOT] }),
+    );
+
+    expect(mockedSendSimulation).toHaveBeenCalledTimes(1);
+    expect(transportCalls[0]).toMatchObject({
+      network_id: `${polygon.id}`,
+      from: POLYGON_FX_CHILD,
+      to: polygonReceiver,
+      value: '0',
+    });
+
+    const payloadInput = transportCalls[0]?.input;
+    expect(typeof payloadInput).toBe('string');
+    const decoded = decodeFunctionData({
+      abi: POLYGON_FX_PROCESS_MESSAGE_ABI,
+      data: payloadInput as Hex,
+    });
+    expect(decoded.functionName).toBe('processMessageFromRoot');
+    expect(decoded.args).toEqual([1n, getAddress(TIMELOCK_ADDRESS), childMessage]);
+    expect(result.destinationJobResults[0]?.bridgeType).toBe('PolygonFxL1L2');
+    expect(result.destinationJobResults[0]?.status).toBe('success');
+  });
+
   test('executes one simulated destination job per supported Wormhole lane', async () => {
     const calldatas = SUPPORTED_WORMHOLE_LANE_KEYS.map((laneKey) => {
       const lane = getWormholeLaneByKey(laneKey);

@@ -4,6 +4,7 @@ import type { WormholeReceiverRuntimeStateByKey } from '../cross-chain/wormhole-
 import type { SimulationStateObjects } from '../derived-state';
 import { extractArbitrumL1L2JobsFromProposal } from './arbitrum';
 import { extractOptimismL1L2JobsFromProposal } from './optimism';
+import { extractPolygonFxL1L2JobsFromProposal } from './polygon-fx';
 import { extractWormholeExecutionJobsFromProposal } from './wormhole';
 import { prepareWormholeExecution } from './wormhole-execution';
 
@@ -16,6 +17,7 @@ export type CrossChainProposalExtractionContext = {
 type CrossChainBridgeRuntimeStoreByType = {
   ArbitrumL1L2: Record<string, unknown>;
   OptimismL1L2: Record<string, unknown>;
+  PolygonFxL1L2: Record<string, unknown>;
   WormholeL1L2: WormholeReceiverRuntimeStateByKey;
 };
 
@@ -59,6 +61,11 @@ const CROSS_CHAIN_BRIDGE_ADAPTERS: readonly CrossChainBridgeAdapter[] = [
     bridgeType: 'OptimismL1L2',
     extractJobs: ({ targets, calldatas, l1Sender }) =>
       extractOptimismL1L2JobsFromProposal(targets, calldatas, l1Sender),
+  },
+  {
+    bridgeType: 'PolygonFxL1L2',
+    extractJobs: ({ targets, calldatas, l1Sender }) =>
+      extractPolygonFxL1L2JobsFromProposal(targets, calldatas, l1Sender),
   },
   {
     bridgeType: 'WormholeL1L2',
