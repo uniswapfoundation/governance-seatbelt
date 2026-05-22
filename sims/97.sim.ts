@@ -21,8 +21,6 @@ const POLYGON_FX_ROOT = getAddress('0xfe5e5D361b2ad62c541bAb87C45a0B9B018389a2')
 const POLYGON_FX_RECEIVER = getAddress('0x8a1B966aC46F42275860f905dbC75EfBfDC12374');
 const WORMHOLE_SENDER = getAddress('0xf5F4496219F31CDCBa6130B5402873624585615a');
 
-
-
 // ─── Celo (destination) ───
 const CELO_WORMHOLE_RECEIVER = getAddress('0x0Eb863541278308c3A64F8E908BC646e27BFD071');
 const CELO_V2_FACTORY = getAddress('0x114A43DF6C5f54EBB8A9d70Cd1951D3dD68004c7');
@@ -170,34 +168,94 @@ const call2 = {
 
 const calls = [call0, call1, call2];
 
-const description = `# Protocol Fee Expansion: Proposal 97
+const description = `# Protocol Fee Expansion: Vote 3
 
-This proposal executes three cross-chain actions to activate protocol fees on Celo, BNB Chain, and Polygon.
+## Proposal Spec
 
-## Action 1 — Celo
+If this proposal passes, it will execute three actions, each of which has multiple inner calls.
 
-\`WORMHOLE_SENDER.sendMessage(targets, values, datas, UNISWAP_WORMHOLE_MESSAGE_RECEIVER, CELO_CHAIN_ID)\`:
+On BNB Chain and Polygon, the actions will execute the following transactions: 
 
-- \`V2_FACTORY.setFeeTo(TOKEN_JAR)\`
-- \`V2_FACTORY.setFeeToSetter(CROSS_CHAIN_ACCOUNT)\`
-- \`V3_FACTORY.setOwner(V3_OPEN_FEE_ADAPTER)\`
-- \`V4_POOL_MANAGER.transferOwnership(CROSS_CHAIN_ACCOUNT)\`
+\`\`\`
+/// Set the recipient of V2 protocol fees to the TokenJar
+V2_FACTORY.setFeeTo(address(tokenJar));
 
-## Action 2 — BNB Chain
+/// Set the owner of the V3 Factory to the V3OpenFeeAdapter
+V3_FACTORY.setOwner(address(v3OpenFeeAdapter));
+\`\`\`
 
-\`WORMHOLE_SENDER.sendMessage(targets, values, datas, UNISWAP_WORMHOLE_MESSAGE_RECEIVER, BNB_CHAIN_ID)\`:
+On Celo, the action will execute the following transactions:
 
-- \`V2_FACTORY.setFeeTo(TOKEN_JAR)\`
-- \`V3_FACTORY.setOwner(V3_OPEN_FEE_ADAPTER)\`
+\`\`\`
+/// Set the recipient of V2 protocol fees to the TokenJar
+V2_FACTORY.setFeeTo(address(tokenJar));
 
-## Action 3 — Polygon
+/// Transfer feeToSetter role from Wormhole to the CrossChainAccount
+V2_FACTORY.setFeeToSetter(address(crossChainAccount));
 
-\`POLYGON_FX_ROOT.sendMessageToChild(ETHEREUM_PROXY, abi.encode(targets, datas, values))\`:
+/// Set the owner of the V3 Factory to the V3OpenFeeAdapter
+V3_FACTORY.setOwner(address(v3OpenFeeAdapter));
 
-- \`V2_FACTORY.setFeeTo(TOKEN_JAR)\`
-- \`V3_FACTORY.setOwner(V3_OPEN_FEE_ADAPTER)\`
+/// Transfer ownership of the V4 PoolManager to the CrossChainAccount
+POOL_MANAGER.transferOwnership(address(crossChainAccount));
+\`\`\`
 
-Because these transactions are cross-chain, governance front ends may not decode them correctly. Review the Seatbelt simulation report to confirm validity.
+### Relevant Addresses
+
+**Celo**
+
+| **Contract** | **Network** | **Address** |
+| --- | --- | --- |
+| TokenJar | Celo | [\`0x190c22c5085640D1cB60CeC88a4F736Acb59bb6B\`](https://celoscan.io/address/0x190c22c5085640D1cB60CeC88a4F736Acb59bb6B) |
+| V3OpenFeeAdapter | Celo | [\`0xB9952C01830306ea2fAAe1505f6539BD260Bfc48\`](https://celoscan.io/address/0xB9952C01830306ea2fAAe1505f6539BD260Bfc48) |
+| UniswapV3Factory | Celo | [\`0xAfE208a311B21f13EF87E33A90049fC17A7acDEc\`](https://celoscan.io/address/0xAfE208a311B21f13EF87E33A90049fC17A7acDEc) |
+| UniswapV2Factory | Celo | [\`0x114A43DF6C5f54EBB8A9d70Cd1951D3dD68004c7\`](https://celoscan.io/address/0x114A43DF6C5f54EBB8A9d70Cd1951D3dD68004c7) |
+| PoolManager | Celo | [\`0x288dc841A52FCA2707c6947B3A777c5E56cd87BC\`](https://celoscan.io/address/0x288dc841A52FCA2707c6947B3A777c5E56cd87BC) |
+| UniswapWormholeMessageReceiver | Celo | [\`0x0Eb863541278308c3A64F8E908BC646e27BFD071\`](https://celoscan.io/address/0x0Eb863541278308c3A64F8E908BC646e27BFD071) |
+| Celo CrossChainAccount | Celo | [\`0x044aAF330d7fD6AE683EEc5c1C1d1fFf5196B6b7\`](https://celoscan.io/address/0x044aAF330d7fD6AE683EEc5c1C1d1fFf5196B6b7) |
+| Wormhole Sender | Ethereum | [\`0xf5F4496219F31CDCBa6130B5402873624585615a\`](https://etherscan.io/address/0xf5F4496219F31CDCBa6130B5402873624585615a) |
+
+**BNB Chain**
+
+| **Contract** | **Network** | **Address** |
+| --- | --- | --- |
+| TokenJar | BNB Chain | [\`0xc6Ae6373CEcc9e595A6C8b9fe581925a8c84f70A\`](https://bscscan.com/address/0xc6Ae6373CEcc9e595A6C8b9fe581925a8c84f70A) |
+| V3OpenFeeAdapter | BNB Chain | [\`0x3F07F08b45912dCd6691C5B9412975D5113B2910\`](https://bscscan.com/address/0x3F07F08b45912dCd6691C5B9412975D5113B2910) |
+| UniswapV3Factory | BNB Chain | [\`0xdB1d10011AD0Ff90774D0C6Bb92e5C5c8b4461F7\`](https://bscscan.com/address/0xdB1d10011AD0Ff90774D0C6Bb92e5C5c8b4461F7) |
+| UniswapV2Factory | BNB Chain | [\`0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6\`](https://bscscan.com/address/0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6) |
+| UniswapWormholeMessageReceiver | BNB Chain | [\`0x341c1511141022cf8eE20824Ae0fFA3491F1302b\`](https://bscscan.com/address/0x341c1511141022cf8eE20824Ae0fFA3491F1302b) |
+| Wormhole Sender | Ethereum | [\`0xf5F4496219F31CDCBa6130B5402873624585615a\`](https://etherscan.io/address/0xf5F4496219F31CDCBa6130B5402873624585615a) |
+
+**Polygon**
+
+| **Contract** | **Network** | **Address** |
+| --- | --- | --- |
+| TokenJar | Polygon | [\`0xc6Ae6373CEcc9e595A6C8b9fe581925a8c84f70A\`](https://polygonscan.com/address/0xc6Ae6373CEcc9e595A6C8b9fe581925a8c84f70A) |
+| V3OpenFeeAdapter | Polygon | [\`0x3F07F08b45912dCd6691C5B9412975D5113B2910\`](https://polygonscan.com/address/0x3F07F08b45912dCd6691C5B9412975D5113B2910) |
+| UniswapV3Factory | Polygon | [\`0x1F98431c8aD98523631AE4a59f267346ea31F984\`](https://polygonscan.com/address/0x1F98431c8aD98523631AE4a59f267346ea31F984) |
+| UniswapV2Factory | Polygon | [\`0x9e5A52f57b3038F1B8EeE45F28b3C1967e22799C\`](https://polygonscan.com/address/0x9e5A52f57b3038F1B8EeE45F28b3C1967e22799C) |
+| Ethereum Proxy | Polygon | [\`0x8a1B966aC46F42275860f905dbC75EfBfDC12374\`](https://polygonscan.com/address/0x8a1B966aC46F42275860f905dbC75EfBfDC12374) |
+| Polygon Fx Root | Ethereum | [\`0xfe5e5D361b2ad62c541bAb87C45a0B9B018389a2\`](https://etherscan.io/address/0xfe5e5D361b2ad62c541bAb87C45a0B9B018389a2) |
+
+## Proposal
+
+This proposal continues the protocol fee rollout, following proposals [#93](https://vote.uniswapfoundation.org/proposals/93), [#94](https://vote.uniswapfoundation.org/proposals/94), and [#95](https://vote.uniswapfoundation.org/proposals/95). It uses the expedited governance process [approved](https://gov.uniswap.org/t/unification-proposal/25881#p-57882-protocol-fee-rollout-4) in UNIfication, where fee parameter update proposals can bypass the RFC stage and go directly to a five-day Snapshot followed by an onchain vote.
+
+Since protocol fees went live on Ethereum mainnet in late December, the rollout has extended to 73 additional chains (Arbitrum, Base, OP Mainnet, Soneium, X Layer, Worldchain, and Zora). The burn system is working as designed, with fees accumulating in TokenJars across chains. From there, searchers claim them in exchange for burning UNI by bridging it back to mainnet and sending it to the burn address.
+
+This proposal:
+
+* Extends the infrastructure for collecting and burning protocol fees to BNB Chain and Polygon
+* Enables v2 and v3 protocol fees on these chains
+* Completes Celo's fee activation through a corrected cross-chain governance path, which was approved in a previous [proposal](https://vote.uniswapfoundation.org/proposals/94) but did not execute due to a configuration error
+
+## Implementation Details
+
+Fees on each chain will be routed to the TokenJar on that respective chain. UNI burned on these chains is bridged back to Ethereum mainnet and sent to the burn address.
+
+Celo uses the [same architecture](https://github.com/Uniswap/protocol-fees/blob/main/src/releasers/OptimismBridgedResourceFirepit.sol) as other OP-stack chains. On BNB and Polygon, we make use of Wormhole’s Native Token Transfer (NTT) mechanism for multichain token management. Details on our implementation can be found [here](https://github.com/Uniswap/protocol-fees/blob/main/script/proposal-4/Index.md).
+
+Protocol fee levels are the same on all other chains where fees are live, see breakdown [here](https://developers.uniswap.org/docs/protocols/protocol-fee/concepts/fees#fee-split-table).
 `;
 
 export const config: SimulationConfigNew = {
