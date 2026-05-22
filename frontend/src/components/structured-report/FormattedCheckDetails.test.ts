@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { encodeEventTopics, getAddress, parseAbi } from 'viem';
 import { FormattedCheckDetails } from './FormattedCheckDetails';
+
+const MYSTERY_EVENT_ABI = parseAbi(['event MysteryEvent(address indexed account)']);
 
 function countOccurrences(source: string, token: string): number {
   return source.split(token).length - 1;
@@ -91,5 +94,48 @@ describe('FormattedCheckDetails target row rendering', () => {
     ).toBe(1);
     expect(html).toContain('EOA (may have code later)');
     expect(html).not.toContain(`[\`${address}\`](https://celoscan.io/address/${address})`);
+  });
+});
+
+describe('FormattedCheckDetails event rendering', () => {
+  it('keeps legacy undecoded logs visible in event checks', () => {
+    const emitter = '0x1111111111111111111111111111111111111111';
+    const account = getAddress('0x2222222222222222222222222222222222222222');
+    const rawLog = JSON.stringify({
+      raw: {
+        topics: encodeEventTopics({
+          abi: MYSTERY_EVENT_ABI,
+          eventName: 'MysteryEvent',
+          args: { account },
+        }),
+        data: '0x1234',
+      },
+    });
+    const details = [
+      `**Info**: MysteryEmitter at \`${emitter}\``,
+      `**Info**:     Undecoded log: \`${rawLog}\``,
+    ].join('\n');
+
+    const html = renderToStaticMarkup(
+      createElement(FormattedCheckDetails, {
+        check: {
+          title: 'Reports all events emitted from the proposal',
+          status: 'passed',
+          details,
+        },
+        metadata: {
+          proposalId: '123',
+          proposer: '0x0000000000000000000000000000000000000001',
+        },
+      }),
+    );
+
+    expect(html).toContain('MysteryEmitter');
+    expect(html).toContain('RawLog');
+    expect(html).toContain('Could not decode');
+    expect(html).toContain('topic0');
+    expect(html).toContain(account.slice(2).toLowerCase());
+    expect(html).toContain('0x1234');
+    expect(html).not.toContain('No events to display');
   });
 });

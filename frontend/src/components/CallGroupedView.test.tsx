@@ -6,7 +6,10 @@ import type {
 } from '@/hooks/use-simulation-results';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { encodeEventTopics, getAddress, parseAbi } from 'viem';
 import { CallGroupedView } from './CallGroupedView';
+
+const MYSTERY_EVENT_ABI = parseAbi(['event MysteryEvent(address indexed account)']);
 
 function makeJob(
   overrides: Partial<CrossChainJobPreview> = {},
@@ -134,5 +137,55 @@ describe('CallGroupedView cross-chain summary headers', () => {
     expect(html).toContain('setFeeTo');
     expect(html).toContain('forward(address,bytes)');
     expect(html).toContain('0x3333333333333333333333333333333333333333');
+  });
+});
+
+describe('CallGroupedView event rendering', () => {
+  it('keeps legacy undecoded log rows visible under the emitting contract', () => {
+    const emitter = '0x1111111111111111111111111111111111111111';
+    const account = getAddress('0x2222222222222222222222222222222222222222');
+    const rawLog = JSON.stringify({
+      raw: {
+        topics: encodeEventTopics({
+          abi: MYSTERY_EVENT_ABI,
+          eventName: 'MysteryEvent',
+          args: { account },
+        }),
+        data: '0x1234',
+      },
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(CallGroupedView, {
+        proposal: {
+          id: '1',
+          targets: [emitter],
+          values: [0n],
+          calldatas: ['0x'],
+          signatures: [''],
+          description: 'Events proposal',
+        },
+        report: {
+          ...makeReport([]),
+          checks: [
+            {
+              checkId: 'checkLogs',
+              title: 'Reports all events emitted from the proposal',
+              status: 'passed',
+              info: [`MysteryEmitter at \`${emitter}\``, `    Undecoded log: \`${rawLog}\``],
+              warnings: [],
+              errors: [],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(html).toContain('1 event');
+    expect(html).toContain('RawLog');
+    expect(html).toContain('Could not decode');
+    expect(html).toContain('topic0');
+    expect(html).toContain(account.slice(2).toLowerCase());
+    expect(html).toContain('0x1234');
   });
 });

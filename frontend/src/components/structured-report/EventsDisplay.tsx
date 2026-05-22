@@ -2,6 +2,7 @@
 
 import { Badge } from '@/components/ui/badge';
 import type { StructuredSimulationReport } from '@/hooks/use-simulation-results';
+import { formatRawLogFromJson } from '@/lib/raw-log';
 import { ExternalLinkIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { buildAddressLink } from './explorer';
@@ -38,7 +39,9 @@ function parseEventsFromDetails(details: string): ParsedEvent[] {
       continue;
     }
 
-    const eventMatch = cleanLine.match(/^\s*`?(\w+)\((.+)\)`?\s*$/);
+    const legacyUndecodedLog = cleanLine.match(/^Undecoded log:\s+`(.+)`$/);
+    const eventLine = legacyUndecodedLog ? formatRawLogFromJson(legacyUndecodedLog[1]) : cleanLine;
+    const eventMatch = eventLine.match(/^\s*`?(\w+)\((.+)\)`?\s*$/);
     if (eventMatch && currentContract) {
       const eventName = eventMatch[1];
       const paramsString = eventMatch[2];
@@ -117,6 +120,14 @@ export function EventsDisplay({
                   <Badge variant="outline" className="font-mono text-xs">
                     {event.name}
                   </Badge>
+                  {event.name === 'RawLog' && (
+                    <Badge
+                      variant="outline"
+                      className="bg-yellow-100 text-yellow-800 border-yellow-300 text-xs"
+                    >
+                      Could not decode
+                    </Badge>
+                  )}
                 </div>
                 {event.params.length > 0 && (
                   <div className="space-y-1">

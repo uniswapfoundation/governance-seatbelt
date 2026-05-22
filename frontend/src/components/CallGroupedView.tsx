@@ -9,6 +9,7 @@ import type {
   StructuredSimulationReport,
 } from '@/hooks/use-simulation-results';
 import { resolveChainName } from '@/lib/chain-name';
+import { formatRawLogFromJson } from '@/lib/raw-log';
 import { CheckIcon, ChevronDownIcon, CopyIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -384,6 +385,12 @@ function parseLogsByEmitter(checks: SimulationCheck[]) {
     const eventLine = line.match(/^\s+`(.+?)`$/);
     if (eventLine && currentAddress) {
       byAddress.get(currentAddress)?.events.push(eventLine[1]);
+      continue;
+    }
+
+    const legacyUndecodedLine = line.match(/^\s+Undecoded log:\s+`(.+?)`$/);
+    if (legacyUndecodedLine && currentAddress) {
+      byAddress.get(currentAddress)?.events.push(formatRawLogFromJson(legacyUndecodedLine[1]));
     }
   }
 
@@ -572,8 +579,23 @@ function EventCard({
   }
 
   const hasParams = parsed.params.length > 0;
+  const couldNotDecode = parsed.name === 'RawLog';
+  const couldNotDecodeBadge = couldNotDecode ? (
+    <Badge
+      variant="outline"
+      className="bg-yellow-100 text-yellow-800 border-yellow-300 text-[10px] px-1.5 py-0"
+    >
+      Could not decode
+    </Badge>
+  ) : null;
+
   if (!hasParams) {
-    return <div className="text-xs font-medium text-foreground">{parsed.name}</div>;
+    return (
+      <div className="flex items-center gap-2 text-xs">
+        <span className="font-medium text-foreground">{parsed.name}</span>
+        {couldNotDecodeBadge}
+      </div>
+    );
   }
 
   return (
@@ -581,6 +603,7 @@ function EventCard({
       <summary className="cursor-pointer select-none flex items-center gap-2 text-xs [&::-webkit-details-marker]:hidden">
         <ChevronDownIcon className="h-3 w-3 text-muted-foreground transition-transform group-open:rotate-180 shrink-0" />
         <span className="font-medium text-foreground">{parsed.name}</span>
+        {couldNotDecodeBadge}
         <span className="text-muted-foreground">({parsed.params.length} params)</span>
       </summary>
       <div className="mt-1.5 ml-5 space-y-1 border-l-2 border-muted/50 pl-3">
