@@ -1,261 +1,86 @@
+import { encodeFunctionData } from 'viem';
 /**
- * @notice Simulation configuration for proposal 97.
+ * @notice Simulation configuration file for proposal 97.
  *
- * Action 1: Celo — Wormhole fee activation and CrossChainAccount handoff.
- * Action 2: BNB Chain — Wormhole fee activation (V2 setFeeTo, V3 setOwner).
- * Action 3: Polygon — FxPortal fee activation (V2 setFeeTo, V3 setOwner).
+ * Recalls all UNI delegated through the FranchiserFactory back to
+ * the Governance Timelock. Targets the eight delegations established
+ * in proposals 24 (Uniswap Foundation) and 51 (seven active delegates).
  */
-import {
-  encodeAbiParameters,
-  encodeFunctionData,
-  getAddress,
-  parseAbi,
-  parseAbiParameters,
-} from 'viem';
-
 import type { SimulationConfigNew } from '../types';
-import { WORMHOLE_SEND_MESSAGE_ABI } from '../utils/bridges/wormhole';
+import FranchiserFactoryAbi from '../utils/abis/FranchiserFactoryAbi.json' assert { type: 'json' };
 
-// ─── Ethereum ───
-const POLYGON_FX_ROOT = getAddress('0xfe5e5D361b2ad62c541bAb87C45a0B9B018389a2');
-const POLYGON_FX_RECEIVER = getAddress('0x8a1B966aC46F42275860f905dbC75EfBfDC12374');
-const WORMHOLE_SENDER = getAddress('0xf5F4496219F31CDCBa6130B5402873624585615a');
+// Target contracts
+const franchiserFactoryAddress = '0xf754A7E347F81cFdc70AF9FbCCe9Df3D826360FA' as const;
+const timelockAddress = '0x1a9C8182C09F50C8318d769245beA52c32BE35BC' as const;
 
-// ─── Celo (destination) ───
-const CELO_WORMHOLE_RECEIVER = getAddress('0x0Eb863541278308c3A64F8E908BC646e27BFD071');
-const CELO_V2_FACTORY = getAddress('0x114A43DF6C5f54EBB8A9d70Cd1951D3dD68004c7');
-const CELO_V3_FACTORY = getAddress('0xAfE208a311B21f13EF87E33A90049fC17A7acDEc');
-const CELO_V4_POOL_MANAGER = getAddress('0x288dc841A52FCA2707c6947B3A777c5E56cd87BC');
-const CELO_TOKEN_JAR = getAddress('0x190c22c5085640D1cB60CeC88a4F736Acb59bb6B');
-const CELO_V3_OPEN_FEE_ADAPTER = getAddress('0xB9952C01830306ea2fAAe1505f6539BD260Bfc48');
-const CELO_CROSS_CHAIN_ACCOUNT = getAddress('0x044aAF330d7fD6AE683EEc5c1C1d1fFf5196B6b7');
-const WORMHOLE_CELO_CHAIN_ID = 14;
+// Delegatee from proposal 24
+const uniswapFoundationAddress = '0xA37131410A76791f4A0210e91EDD554d85aFb4d4' as const;
 
-// ─── BNB Chain (destination) ───
-const BNB_WORMHOLE_RECEIVER = getAddress('0x341c1511141022cf8eE20824Ae0fFA3491F1302b');
-const BNB_V2_FACTORY = getAddress('0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6');
-const BNB_V3_FACTORY = getAddress('0xdB1d10011AD0Ff90774D0C6Bb92e5C5c8b4461F7');
-const BNB_TOKEN_JAR = getAddress('0xc6Ae6373CEcc9e595A6C8b9fe581925a8c84f70A');
-const BNB_V3_OPEN_FEE_ADAPTER = getAddress('0x3F07F08b45912dCd6691C5B9412975D5113B2910');
-const WORMHOLE_BNB_CHAIN_ID = 4;
+// Delegatees from proposal 51 (names per the 2026-05-06 forum post; addresses
+// match the variable names in sims/franchiser-fundmany.sim.ts).
+const anodeAddress = '0xECC2a9240268BC7a26386ecB49E1Befca2706AC9' as const; // formerly StableNode
+const axiaNetworkAddress = '0xE93D59CC0bcECFD4ac204827eF67c5266079E2b5' as const; // formerly 404 DAO
+const pGovAddress = '0x3fb19771947072629c8eee7995a2ef23b72d4c8a' as const;
+const wintermuteAddress = '0xB933AEe47C438f22DE0747D57fc239FE37878Dd1' as const;
+const keyrockAddress = '0x1855f41B8A86e701E33199DE7C25d3e3830698ba' as const; // gitleaks:allow
+const kpkAddress = '0x8787FC2De4De95c53e5E3a4e5459247D9773ea52' as const; // formerly Karpatkey
+const atiselstsAddress = '0xAac35d953Ef23aE2E61a866ab93deA6eC0050bcD' as const; // formerly Atis
 
-// ─── Polygon (destination) ───
-const POLYGON_V2_FACTORY = getAddress('0x9e5A52f57b3038F1B8EeE45F28b3C1967e22799C');
-const POLYGON_V3_FACTORY = getAddress('0x1F98431c8aD98523631AE4a59f267346ea31F984');
-const POLYGON_TOKEN_JAR = getAddress('0xc6Ae6373CEcc9e595A6C8b9fe581925a8c84f70A');
-const POLYGON_V3_OPEN_FEE_ADAPTER = getAddress('0x3F07F08b45912dCd6691C5B9412975D5113B2910');
+const delegatees = [
+  uniswapFoundationAddress,
+  anodeAddress,
+  axiaNetworkAddress,
+  pGovAddress,
+  wintermuteAddress,
+  keyrockAddress,
+  kpkAddress,
+  atiselstsAddress,
+];
 
-// ─── ABI fragments ───
-const V2_FACTORY_ABI = parseAbi(['function setFeeTo(address)', 'function setFeeToSetter(address)']);
-const SET_OWNER_ABI = parseAbi(['function setOwner(address _owner)']);
-const OWNED_ABI = parseAbi(['function transferOwnership(address newOwner)']);
-const SEND_MESSAGE_TO_CHILD_ABI = parseAbi([
-  'function sendMessageToChild(address _receiver, bytes calldata _data)',
-]);
-
-// Action 1: Celo Wormhole — V2 fees + CrossChainAccount handoff + V3 fee adapter
-const celoTargets = [
-  CELO_V2_FACTORY,
-  CELO_V2_FACTORY,
-  CELO_V3_FACTORY,
-  CELO_V4_POOL_MANAGER,
-] as const;
-const celoValues = [0n, 0n, 0n, 0n] as const;
-const celoDatas = [
-  encodeFunctionData({
-    abi: V2_FACTORY_ABI,
-    functionName: 'setFeeTo',
-    args: [CELO_TOKEN_JAR],
-  }),
-  encodeFunctionData({
-    abi: V2_FACTORY_ABI,
-    functionName: 'setFeeToSetter',
-    args: [CELO_CROSS_CHAIN_ACCOUNT],
-  }),
-  encodeFunctionData({
-    abi: SET_OWNER_ABI,
-    functionName: 'setOwner',
-    args: [CELO_V3_OPEN_FEE_ADAPTER],
-  }),
-  encodeFunctionData({
-    abi: OWNED_ABI,
-    functionName: 'transferOwnership',
-    args: [CELO_CROSS_CHAIN_ACCOUNT],
-  }),
-] as const;
-
-const call0 = {
-  target: WORMHOLE_SENDER,
-  calldata: encodeFunctionData({
-    abi: WORMHOLE_SEND_MESSAGE_ABI,
-    functionName: 'sendMessage',
-    args: [
-      [...celoTargets],
-      [...celoValues],
-      [...celoDatas],
-      CELO_WORMHOLE_RECEIVER,
-      WORMHOLE_CELO_CHAIN_ID,
-    ],
-  }),
-  value: 0n,
-  signature: '',
-};
-
-// Action 2: BNB Wormhole — V2 setFeeTo + V3 setOwner
-const bnbTargets = [BNB_V2_FACTORY, BNB_V3_FACTORY] as const;
-const bnbValues = [0n, 0n] as const;
-const bnbDatas = [
-  encodeFunctionData({
-    abi: V2_FACTORY_ABI,
-    functionName: 'setFeeTo',
-    args: [BNB_TOKEN_JAR],
-  }),
-  encodeFunctionData({
-    abi: SET_OWNER_ABI,
-    functionName: 'setOwner',
-    args: [BNB_V3_OPEN_FEE_ADAPTER],
-  }),
-] as const;
+const tos = delegatees.map(() => timelockAddress);
 
 const call1 = {
-  target: WORMHOLE_SENDER,
+  target: franchiserFactoryAddress,
   calldata: encodeFunctionData({
-    abi: WORMHOLE_SEND_MESSAGE_ABI,
-    functionName: 'sendMessage',
-    args: [
-      [...bnbTargets],
-      [...bnbValues],
-      [...bnbDatas],
-      BNB_WORMHOLE_RECEIVER,
-      WORMHOLE_BNB_CHAIN_ID,
-    ],
+    abi: FranchiserFactoryAbi,
+    functionName: 'recallMany',
+    args: [delegatees, tos],
   }),
   value: 0n,
   signature: '',
 };
 
-// Action 3: Polygon FxPortal — V2 setFeeTo + V3 setOwner
-const polygonBatch = encodeAbiParameters(
-  parseAbiParameters('address[] targets, bytes[] datas, uint256[] values'),
-  [
-    [POLYGON_V2_FACTORY, POLYGON_V3_FACTORY],
-    [
-      encodeFunctionData({
-        abi: V2_FACTORY_ABI,
-        functionName: 'setFeeTo',
-        args: [POLYGON_TOKEN_JAR],
-      }),
-      encodeFunctionData({
-        abi: SET_OWNER_ABI,
-        functionName: 'setOwner',
-        args: [POLYGON_V3_OPEN_FEE_ADAPTER],
-      }),
-    ],
-    [0n, 0n],
-  ],
-);
+const calls = [call1];
 
-const call2 = {
-  target: POLYGON_FX_ROOT,
-  calldata: encodeFunctionData({
-    abi: SEND_MESSAGE_TO_CHILD_ABI,
-    functionName: 'sendMessageToChild',
-    args: [POLYGON_FX_RECEIVER, polygonBatch],
-  }),
-  value: 0n,
-  signature: '',
-};
+const description = `# Return 12.5M Delegated Tokens to the Governance Timelock
 
-const calls = [call0, call1, call2];
+## Background & Motivation
 
-const description = `# Protocol Fee Expansion: Vote 3
+These UNI were delegated from the treasury in 2022 and 2023 – 2.5M to the Uniswap Foundation and 10M to a group of active delegates - during periods of low governance participation. The delegations aimed to establish an active delegate base when quorum faced risks.
 
-## Proposal Spec
+The governance landscape has transformed significantly. Token holders actively delegate voting power, and since DUNI's establishment, passed proposals have averaged roughly 75 million votes in turnout, exceeding quorum by approximately 88%. Over 50 delegates now hold more than 1M UNI in voting power.
 
-If this proposal passes, it will execute three actions, each of which has multiple inner calls.
+Undelegating these tokens addresses potential misalignment created by the Franchiser mechanism itself. While selected delegates participated actively in governance, the Franchiser didn't ensure structural alignment between voting power and economic exposure. This misalignment should not persist when the original implementation rationale no longer applies.
 
-On BNB Chain and Polygon, the actions will execute the following transactions: 
+## Specification
 
-\`\`\`
-/// Set the recipient of V2 protocol fees to the TokenJar
-V2_FACTORY.setFeeTo(address(tokenJar));
+This proposal invokes \`recallMany\` on the FranchiserFactory contract (0xf754A7E347F81cFdc70AF9FbCCe9Df3D826360FA) to retrieve all UNI currently delegated through the Franchiser system, returning the recalled tokens to the Governance Timelock (0x1a9C8182C09F50C8318d769245beA52c32BE35BC).
 
-/// Set the owner of the V3 Factory to the V3OpenFeeAdapter
-V3_FACTORY.setOwner(address(v3OpenFeeAdapter));
-\`\`\`
+Eight Franchiser delegations are targeted for undelegation, totaling ~12.5M UNI:
 
-On Celo, the action will execute the following transactions:
-
-\`\`\`
-/// Set the recipient of V2 protocol fees to the TokenJar
-V2_FACTORY.setFeeTo(address(tokenJar));
-
-/// Transfer feeToSetter role from Wormhole to the CrossChainAccount
-V2_FACTORY.setFeeToSetter(address(crossChainAccount));
-
-/// Set the owner of the V3 Factory to the V3OpenFeeAdapter
-V3_FACTORY.setOwner(address(v3OpenFeeAdapter));
-
-/// Transfer ownership of the V4 PoolManager to the CrossChainAccount
-POOL_MANAGER.transferOwnership(address(crossChainAccount));
-\`\`\`
-
-### Relevant Addresses
-
-**Celo**
-
-| **Contract** | **Network** | **Address** |
+| **Recipient** | **Address** | **Votes** |
 | --- | --- | --- |
-| TokenJar | Celo | [\`0x190c22c5085640D1cB60CeC88a4F736Acb59bb6B\`](https://celoscan.io/address/0x190c22c5085640D1cB60CeC88a4F736Acb59bb6B) |
-| V3OpenFeeAdapter | Celo | [\`0xB9952C01830306ea2fAAe1505f6539BD260Bfc48\`](https://celoscan.io/address/0xB9952C01830306ea2fAAe1505f6539BD260Bfc48) |
-| UniswapV3Factory | Celo | [\`0xAfE208a311B21f13EF87E33A90049fC17A7acDEc\`](https://celoscan.io/address/0xAfE208a311B21f13EF87E33A90049fC17A7acDEc) |
-| UniswapV2Factory | Celo | [\`0x114A43DF6C5f54EBB8A9d70Cd1951D3dD68004c7\`](https://celoscan.io/address/0x114A43DF6C5f54EBB8A9d70Cd1951D3dD68004c7) |
-| PoolManager | Celo | [\`0x288dc841A52FCA2707c6947B3A777c5E56cd87BC\`](https://celoscan.io/address/0x288dc841A52FCA2707c6947B3A777c5E56cd87BC) |
-| UniswapWormholeMessageReceiver | Celo | [\`0x0Eb863541278308c3A64F8E908BC646e27BFD071\`](https://celoscan.io/address/0x0Eb863541278308c3A64F8E908BC646e27BFD071) |
-| Celo CrossChainAccount | Celo | [\`0x044aAF330d7fD6AE683EEc5c1C1d1fFf5196B6b7\`](https://celoscan.io/address/0x044aAF330d7fD6AE683EEc5c1C1d1fFf5196B6b7) |
-| Wormhole Sender | Ethereum | [\`0xf5F4496219F31CDCBa6130B5402873624585615a\`](https://etherscan.io/address/0xf5F4496219F31CDCBa6130B5402873624585615a) |
+| Uniswap Foundation | [\`0xA37131410A76791f4A0210e91EDD554d85aFb4d4\`](https://etherscan.io/address/0xA37131410A76791f4A0210e91EDD554d85aFb4d4) | 2,500,001.19 |
+| Anode | [\`0xECC2a9240268BC7a26386ecB49E1Befca2706AC9\`](https://etherscan.io/address/0xECC2a9240268BC7a26386ecB49E1Befca2706AC9) | 2,499,858 |
+| Axia Network | [\`0xE93D59CC0bcECFD4ac204827eF67c5266079E2b5\`](https://etherscan.io/address/0xE93D59CC0bcECFD4ac204827eF67c5266079E2b5) | 2.25M |
+| PGov | [\`0x3fb19771947072629c8eee7995a2ef23b72d4c8a\`](https://etherscan.io/address/0x3fb19771947072629c8eee7995a2ef23b72d4c8a) | 2.25M |
+| Wintermute | [\`0xB933AEe47C438f22DE0747D57fc239FE37878Dd1\`](https://etherscan.io/address/0xB933AEe47C438f22DE0747D57fc239FE37878Dd1) | 1.9M |
+| Keyrock | [\`0x1855f41B8A86e701E33199DE7C25d3e3830698ba\`](https://etherscan.io/address/0x1855f41B8A86e701E33199DE7C25d3e3830698ba) | 494K |
+| KPK | [\`0x8787FC2De4De95c53e5E3a4e5459247D9773ea52\`](https://etherscan.io/address/0x8787FC2De4De95c53e5E3a4e5459247D9773ea52) | 453K |
+| Atiselsts.eth | [\`0xAac35d953Ef23aE2E61a866ab93deA6eC0050bcD\`](https://etherscan.io/address/0xAac35d953Ef23aE2E61a866ab93deA6eC0050bcD) | 154K |
 
-**BNB Chain**
+The UF Franchiser has accumulated ~1.19 UNI of unrelated inbound transfers from third parties since it was funded. \`recall\` always sweeps the full balance (the Franchiser contract has no partial-recall option), so those stray amounts will return to the Treasury along with the original 2.5M.
 
-| **Contract** | **Network** | **Address** |
-| --- | --- | --- |
-| TokenJar | BNB Chain | [\`0xc6Ae6373CEcc9e595A6C8b9fe581925a8c84f70A\`](https://bscscan.com/address/0xc6Ae6373CEcc9e595A6C8b9fe581925a8c84f70A) |
-| V3OpenFeeAdapter | BNB Chain | [\`0x3F07F08b45912dCd6691C5B9412975D5113B2910\`](https://bscscan.com/address/0x3F07F08b45912dCd6691C5B9412975D5113B2910) |
-| UniswapV3Factory | BNB Chain | [\`0xdB1d10011AD0Ff90774D0C6Bb92e5C5c8b4461F7\`](https://bscscan.com/address/0xdB1d10011AD0Ff90774D0C6Bb92e5C5c8b4461F7) |
-| UniswapV2Factory | BNB Chain | [\`0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6\`](https://bscscan.com/address/0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6) |
-| UniswapWormholeMessageReceiver | BNB Chain | [\`0x341c1511141022cf8eE20824Ae0fFA3491F1302b\`](https://bscscan.com/address/0x341c1511141022cf8eE20824Ae0fFA3491F1302b) |
-| Wormhole Sender | Ethereum | [\`0xf5F4496219F31CDCBa6130B5402873624585615a\`](https://etherscan.io/address/0xf5F4496219F31CDCBa6130B5402873624585615a) |
-
-**Polygon**
-
-| **Contract** | **Network** | **Address** |
-| --- | --- | --- |
-| TokenJar | Polygon | [\`0xc6Ae6373CEcc9e595A6C8b9fe581925a8c84f70A\`](https://polygonscan.com/address/0xc6Ae6373CEcc9e595A6C8b9fe581925a8c84f70A) |
-| V3OpenFeeAdapter | Polygon | [\`0x3F07F08b45912dCd6691C5B9412975D5113B2910\`](https://polygonscan.com/address/0x3F07F08b45912dCd6691C5B9412975D5113B2910) |
-| UniswapV3Factory | Polygon | [\`0x1F98431c8aD98523631AE4a59f267346ea31F984\`](https://polygonscan.com/address/0x1F98431c8aD98523631AE4a59f267346ea31F984) |
-| UniswapV2Factory | Polygon | [\`0x9e5A52f57b3038F1B8EeE45F28b3C1967e22799C\`](https://polygonscan.com/address/0x9e5A52f57b3038F1B8EeE45F28b3C1967e22799C) |
-| Ethereum Proxy | Polygon | [\`0x8a1B966aC46F42275860f905dbC75EfBfDC12374\`](https://polygonscan.com/address/0x8a1B966aC46F42275860f905dbC75EfBfDC12374) |
-| Polygon Fx Root | Ethereum | [\`0xfe5e5D361b2ad62c541bAb87C45a0B9B018389a2\`](https://etherscan.io/address/0xfe5e5D361b2ad62c541bAb87C45a0B9B018389a2) |
-
-## Proposal
-
-This proposal continues the protocol fee rollout, following proposals [#93](https://vote.uniswapfoundation.org/proposals/93), [#94](https://vote.uniswapfoundation.org/proposals/94), and [#95](https://vote.uniswapfoundation.org/proposals/95). It uses the expedited governance process [approved](https://gov.uniswap.org/t/unification-proposal/25881#p-57882-protocol-fee-rollout-4) in UNIfication, where fee parameter update proposals can bypass the RFC stage and go directly to a five-day Snapshot followed by an onchain vote.
-
-Since protocol fees went live on Ethereum mainnet in late December, the rollout has extended to 73 additional chains (Arbitrum, Base, OP Mainnet, Soneium, X Layer, Worldchain, and Zora). The burn system is working as designed, with fees accumulating in TokenJars across chains. From there, searchers claim them in exchange for burning UNI by bridging it back to mainnet and sending it to the burn address.
-
-This proposal:
-
-* Extends the infrastructure for collecting and burning protocol fees to BNB Chain and Polygon
-* Enables v2 and v3 protocol fees on these chains
-* Completes Celo's fee activation through a corrected cross-chain governance path, which was approved in a previous [proposal](https://vote.uniswapfoundation.org/proposals/94) but did not execute due to a configuration error
-
-## Implementation Details
-
-Fees on each chain will be routed to the TokenJar on that respective chain. UNI burned on these chains is bridged back to Ethereum mainnet and sent to the burn address.
-
-Celo uses the [same architecture](https://github.com/Uniswap/protocol-fees/blob/main/src/releasers/OptimismBridgedResourceFirepit.sol) as other OP-stack chains. On BNB and Polygon, we make use of Wormhole’s Native Token Transfer (NTT) mechanism for multichain token management. Details on our implementation can be found [here](https://github.com/Uniswap/protocol-fees/blob/main/script/proposal-4/Index.md).
-
-Protocol fee levels are the same on all other chains where fees are live, see breakdown [here](https://developers.uniswap.org/docs/protocols/protocol-fee/concepts/fees#fee-split-table).
 `;
 
 export const config: SimulationConfigNew = {
