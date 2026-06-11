@@ -3,12 +3,21 @@ import {
   type Hex,
   decodeAbiParameters,
   decodeFunctionData,
+  encodeAbiParameters,
   encodeFunctionData,
   getAddress,
   parseAbi,
 } from 'viem';
 import { bsc, celo, mainnet, monad, polygon, tempo } from 'viem/chains';
 import type { TenderlySimulation } from '../../types.d';
+import {
+  LAYER_ZERO_EXECUTE_ABI,
+  LAYER_ZERO_LANE_SUPPORT_MATRIX,
+  LAYER_ZERO_SET_TRUSTED_REMOTE_ADDRESS_ABI,
+  UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR,
+  UNISWAP_OMNICHAIN_GOVERNANCE_EXECUTOR,
+  UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
+} from '../../utils/bridges/layerzero';
 import {
   POLYGON_FX_CHILD,
   POLYGON_FX_PROCESS_MESSAGE_ABI,
@@ -300,6 +309,46 @@ function makeWormholeCalldata(
   });
 }
 
+function makeLayerZeroCalldata(
+  laneKey: keyof typeof LAYER_ZERO_LANE_SUPPORT_MATRIX,
+  calls: Array<{
+    target: `0x${string}`;
+    value?: bigint;
+    data: `0x${string}`;
+  }>,
+): `0x${string}` {
+  const lane = LAYER_ZERO_LANE_SUPPORT_MATRIX[laneKey];
+  const payload = encodeAbiParameters(
+    [{ type: 'address[]' }, { type: 'uint256[]' }, { type: 'bytes[]' }],
+    [
+      calls.map((call) => call.target),
+      calls.map((call) => call.value ?? 0n),
+      calls.map((call) => call.data),
+    ],
+  );
+
+  return encodeFunctionData({
+    abi: LAYER_ZERO_EXECUTE_ABI,
+    functionName: 'execute',
+    args: [lane.layerZeroRemoteChainId, payload, '0x'],
+  });
+}
+
+function makeLayerZeroTrustedRemoteCalldata(
+  laneKey: keyof typeof LAYER_ZERO_LANE_SUPPORT_MATRIX,
+): `0x${string}` {
+  const lane = LAYER_ZERO_LANE_SUPPORT_MATRIX[laneKey];
+  if (!lane.requiredTrustedRemoteAddress) {
+    throw new Error(`LayerZero lane ${laneKey} does not require trusted remote setup`);
+  }
+
+  return encodeFunctionData({
+    abi: LAYER_ZERO_SET_TRUSTED_REMOTE_ADDRESS_ABI,
+    functionName: 'setTrustedRemoteAddress',
+    args: [lane.layerZeroRemoteChainId, lane.requiredTrustedRemoteAddress],
+  });
+}
+
 function makeSourceResult(
   calldatas: readonly `0x${string}`[],
   options?: { simulationTimestamp?: bigint; targets?: readonly `0x${string}`[] },
@@ -381,6 +430,78 @@ describe('cross-chain destination execution engine', () => {
     expect(decoded.args).toEqual([1n, getAddress(TIMELOCK_ADDRESS), childMessage]);
     expect(result.destinationJobResults[0]?.bridgeType).toBe('PolygonFxL1L2');
     expect(result.destinationJobResults[0]?.status).toBe('success');
+  });
+
+  test('executes LayerZero migration payloads on MegaETH and Avalanche after MegaETH setup', async () => {
+    const avalancheTarget = getAddress('0x0000000000000000000000000000000000000a60');
+    const firstMegaethTarget = getAddress('0x0000000000000000000000000000000000000a61');
+    const secondMegaethTarget = getAddress('0x0000000000000000000000000000000000000a62');
+    const megaethSetupCalldata = makeLayerZeroTrustedRemoteCalldata('megaeth');
+    const avalancheCalldata = makeLayerZeroCalldata('avalanche', [
+      { target: avalancheTarget, data: '0x11111111' },
+    ]);
+    const megaethCalldata = makeLayerZeroCalldata('megaeth', [
+      { target: firstMegaethTarget, value: 3n, data: '0x22222222' },
+      { target: secondMegaethTarget, value: 0n, data: '0x33333333' },
+    ]);
+
+    enqueueSimulation(
+      makeSimulation({
+        id: 'layerzero-megaeth-step-1',
+        chainId: LAYER_ZERO_LANE_SUPPORT_MATRIX.megaeth.destinationChainId,
+      }),
+    );
+    enqueueSimulation(
+      makeSimulation({
+        id: 'layerzero-megaeth-step-2',
+        chainId: LAYER_ZERO_LANE_SUPPORT_MATRIX.megaeth.destinationChainId,
+      }),
+    );
+    enqueueSimulation(
+      makeSimulation({
+        id: 'layerzero-avalanche-step',
+        chainId: LAYER_ZERO_LANE_SUPPORT_MATRIX.avalanche.destinationChainId,
+      }),
+    );
+
+    const result = await handleCrossChainSimulations(
+      makeSourceResult([megaethSetupCalldata, megaethCalldata, avalancheCalldata], {
+        targets: [
+          UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
+          UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
+          UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
+        ],
+      }),
+    );
+
+    expect(mockedSendSimulation).toHaveBeenCalledTimes(3);
+    expect(transportCalls[0]).toMatchObject({
+      network_id: `${LAYER_ZERO_LANE_SUPPORT_MATRIX.megaeth.destinationChainId}`,
+      from: UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR,
+      to: firstMegaethTarget,
+      input: '0x22222222',
+      value: '3',
+    });
+    expect(transportCalls[1]).toMatchObject({
+      network_id: `${LAYER_ZERO_LANE_SUPPORT_MATRIX.megaeth.destinationChainId}`,
+      from: UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR,
+      to: secondMegaethTarget,
+      input: '0x33333333',
+      value: '0',
+    });
+    expect(transportCalls[2]).toMatchObject({
+      network_id: `${LAYER_ZERO_LANE_SUPPORT_MATRIX.avalanche.destinationChainId}`,
+      from: UNISWAP_OMNICHAIN_GOVERNANCE_EXECUTOR,
+      to: avalancheTarget,
+      input: '0x11111111',
+      value: '0',
+    });
+    expect(result.destinationJobResults.map((job) => job.bridgeType)).toEqual([
+      'LayerZeroL1L2',
+      'LayerZeroL1L2',
+    ]);
+    expect(result.destinationJobResults.map((job) => job.stepResults.length)).toEqual([2, 1]);
+    expect(result.destinationJobResults.map((job) => job.status)).toEqual(['success', 'success']);
   });
 
   test('executes one simulated destination job per supported Wormhole lane', async () => {

@@ -16,6 +16,7 @@ describe('chain capabilities registry', () => {
     expect(getChainName(43114)).toContain('Avalanche');
     expect(getChainName(143)).toContain('Monad');
     expect(getChainName(4217)).toContain('Tempo');
+    expect(getChainName(4326)).toBe('MegaETH');
   });
 
   test('falls back to generic chain label for unknown chain ids', () => {
@@ -38,6 +39,8 @@ describe('chain capabilities registry', () => {
     expect(supportsTenderlyDestinationSimulation(143)).toBe(true);
     expect(supportsL2Checks(4217)).toBe(true);
     expect(supportsTenderlyDestinationSimulation(4217)).toBe(true);
+    expect(supportsL2Checks(4326)).toBe(true);
+    expect(supportsTenderlyDestinationSimulation(4326)).toBe(true);
   });
 
   test('exposes OP Stack destination ordering used for summaries', () => {

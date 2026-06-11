@@ -18,6 +18,9 @@ import {
   zora,
 } from 'viem/chains';
 
+const MEGAETH_CHAIN_ID = 4326;
+const MEGAETH_CHAIN_NAME = 'MegaETH';
+
 const CANONICAL_CHAIN_NAMES: Record<number, string> = {
   [mainnet.id]: mainnet.name,
   [optimism.id]: optimism.name,
@@ -33,6 +36,7 @@ const CANONICAL_CHAIN_NAMES: Record<number, string> = {
   [avalanche.id]: avalanche.name,
   [monad.id]: monad.name,
   [tempo.id]: tempo.name,
+  [MEGAETH_CHAIN_ID]: MEGAETH_CHAIN_NAME,
   [worldchain.id]: worldchain.name,
   [xLayer.id]: xLayer.name,
   [zora.id]: zora.name,

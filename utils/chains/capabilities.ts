@@ -18,6 +18,7 @@ import {
   zora,
 } from 'viem/chains';
 import { getCanonicalChainName } from './chain-name';
+import { megaeth } from './megaeth';
 
 type ChainCapability = {
   supportsL2Checks: boolean;
@@ -92,6 +93,11 @@ const CHAIN_CAPABILITIES: Record<number, ChainCapability> = {
     isOpStackDestination: false,
   },
   [tempo.id]: {
+    supportsL2Checks: true,
+    supportsTenderlyDestinationSimulation: true,
+    isOpStackDestination: false,
+  },
+  [megaeth.id]: {
     supportsL2Checks: true,
     supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: false,

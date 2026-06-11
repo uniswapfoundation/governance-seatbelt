@@ -23,6 +23,7 @@ import {
 import { arbitrum, base, mainnet, optimism } from 'viem/chains';
 import { ChainLogo } from './structured-report/ChainLogo';
 import {
+  formatBridgeType,
   formatCrossChainCall,
   getCrossChainStepTarget,
   getCrossChainStepTargetLabel,
@@ -984,7 +985,7 @@ function CrossChainCallsSection({
         const chainId = Number(chainIdStr);
         const chainName = resolveChainName(chainId, chainJobs[0]?.chainName);
         const explorerBaseUrl = chainJobs[0]?.blockExplorerBaseUrl || 'https://etherscan.io';
-        const bridgeType = chainJobs[0]?.bridgeType;
+        const bridgeType = formatBridgeType(chainJobs[0]?.bridgeType);
         const failedCount = chainJobs.filter((job) => job.status !== 'success').length;
 
         return (

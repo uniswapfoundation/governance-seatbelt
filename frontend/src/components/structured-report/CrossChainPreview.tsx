@@ -7,6 +7,7 @@ import { ExternalLinkIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { ChainLogo } from './ChainLogo';
 import {
+  formatBridgeType,
   formatCrossChainCall,
   getCrossChainStepTarget,
   getCrossChainStepTargetLabel,
@@ -62,7 +63,7 @@ export function CrossChainPreview({ jobs }: { jobs: CrossChainJobPreview[] }) {
       {groups.map(([chainId, chainJobs]) => {
         const chainName = resolveChainName(chainId, chainJobs[0]?.chainName);
         const explorerBaseUrl = chainJobs[0]?.blockExplorerBaseUrl || 'https://etherscan.io';
-        const bridgeType = chainJobs[0]?.bridgeType;
+        const bridgeType = formatBridgeType(chainJobs[0]?.bridgeType);
 
         return (
           <div key={chainId}>

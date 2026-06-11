@@ -17,6 +17,7 @@ import {
   xLayer,
   zora,
 } from 'viem/chains';
+import { megaeth } from './megaeth';
 
 export const CANONICAL_CHAIN_NAMES: Record<number, string> = {
   [mainnet.id]: mainnet.name,
@@ -33,6 +34,7 @@ export const CANONICAL_CHAIN_NAMES: Record<number, string> = {
   [avalanche.id]: avalanche.name,
   [monad.id]: monad.name,
   [tempo.id]: tempo.name,
+  [megaeth.id]: megaeth.name,
   [worldchain.id]: worldchain.name,
   [xLayer.id]: xLayer.name,
   [zora.id]: zora.name,

@@ -514,7 +514,7 @@ async function main() {
     }
 
     const config: SimulationConfig = await import(configPath).then((d) => d.config);
-    governorType = await inferGovernorType(config.governorAddress);
+    governorType = config.governorType;
 
     let derivedExecutionOptions: SimulationExecutionOptions | undefined;
     let provenance: DerivedSimulationDependency | undefined;

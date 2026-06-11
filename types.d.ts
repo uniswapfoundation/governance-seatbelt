@@ -264,7 +264,12 @@ export interface AllCheckResults {
   [checkId: string]: { name: string; result: CheckResult };
 }
 
-export type BridgeType = 'ArbitrumL1L2' | 'OptimismL1L2' | 'PolygonFxL1L2' | 'WormholeL1L2';
+export type BridgeType =
+  | 'ArbitrumL1L2'
+  | 'OptimismL1L2'
+  | 'PolygonFxL1L2'
+  | 'WormholeL1L2'
+  | 'LayerZeroL1L2';
 
 /**
  * @notice One destination call executed inside a cross-chain execution job.

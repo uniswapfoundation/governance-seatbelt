@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { CrossChainJobStepPreview } from '@/hooks/use-simulation-results';
 import {
+  formatBridgeType,
   formatCrossChainCall,
   getCrossChainStepTarget,
   getCrossChainTransportLabel,
@@ -44,5 +45,11 @@ describe('cross-chain formatting', () => {
     expect(formatCrossChainCall(step)).toBe('forward(address,bytes)');
     expect(getCrossChainStepTarget(step)).toBe('0x100000000000000000000000000000000000B111');
     expect(getCrossChainTransportLabel(step)).toBe('forward(address,bytes)');
+  });
+
+  it('uses readable bridge labels for report badges', () => {
+    expect(formatBridgeType('LayerZeroL1L2')).toBe('LayerZero');
+    expect(formatBridgeType('WormholeL1L2')).toBe('Wormhole');
+    expect(formatBridgeType('UnknownBridge')).toBe('UnknownBridge');
   });
 });

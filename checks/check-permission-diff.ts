@@ -10,6 +10,7 @@ import {
   zeroHash,
 } from 'viem';
 import type { PermissionsDiffItem, ProposalCheck, TenderlyContract } from '../types';
+import { getContractName } from '../utils/clients/tenderly';
 import { toExplorerAddressMarkdownLink } from '../utils/explorer-links';
 
 function eventTopic(signature: string): `0x${string}` {
@@ -378,6 +379,20 @@ function getContractNameFromSimulation(contract: TenderlyContract | undefined): 
   return `${contractName} at \`${contractAddress}\``;
 }
 
+async function getContractNameWithExplorerFallback(
+  contract: TenderlyContract | undefined,
+  address: string,
+  chainId: number,
+  canUseExplorerFallback: boolean,
+): Promise<string> {
+  if (!canUseExplorerFallback) {
+    return getContractNameFromSimulation(contract);
+  }
+
+  const contractAddress = getAddress(address);
+  return getContractName(contract ?? { address: contractAddress }, chainId);
+}
+
 function formatAddressOrUnknown(address: string | undefined, blockExplorerBaseUrl: string): string {
   return address ? toAddressLink(address, blockExplorerBaseUrl) : '`unknown`';
 }
@@ -444,13 +459,18 @@ export const checkPermissionDiff: ProposalCheck = {
     const info: string[] = [];
     const permissionsDiff: PermissionsDiffItem[] = [];
 
-    const contractNameByAddress = new Map<string, string>();
+    const contractNameByAddress = new Map<string, Promise<string>>();
     const getContractLabel = (address: string) => {
       const key = address.toLowerCase();
       const existing = contractNameByAddress.get(key);
       if (existing) return existing;
       const contract = sim.contracts.find((c) => c.address?.toLowerCase() === key);
-      const label = getContractNameFromSimulation(contract);
+      const label = getContractNameWithExplorerFallback(
+        contract,
+        address,
+        deps.chainConfig.chainId,
+        Boolean(deps.chainConfig.verification),
+      );
       contractNameByAddress.set(key, label);
       return label;
     };
@@ -481,7 +501,7 @@ export const checkPermissionDiff: ProposalCheck = {
           permissionsDiff.push({
             kind: 'ownership_transferred',
             contractAddress,
-            contractName: getContractLabel(contractAddress),
+            contractName: await getContractLabel(contractAddress),
             previous: previousOwner,
             next: newOwner,
             via: 'event',
@@ -504,7 +524,7 @@ export const checkPermissionDiff: ProposalCheck = {
           permissionsDiff.push({
             kind: 'role_granted',
             contractAddress,
-            contractName: getContractLabel(contractAddress),
+            contractName: await getContractLabel(contractAddress),
             role,
             account,
             sender,
@@ -527,7 +547,7 @@ export const checkPermissionDiff: ProposalCheck = {
           permissionsDiff.push({
             kind: 'role_revoked',
             contractAddress,
-            contractName: getContractLabel(contractAddress),
+            contractName: await getContractLabel(contractAddress),
             role,
             account,
             sender,
@@ -548,7 +568,7 @@ export const checkPermissionDiff: ProposalCheck = {
           permissionsDiff.push({
             kind: 'timelock_admin_changed',
             contractAddress,
-            contractName: getContractLabel(contractAddress),
+            contractName: await getContractLabel(contractAddress),
             previous: undefined,
             next,
             via: 'event',
@@ -569,7 +589,7 @@ export const checkPermissionDiff: ProposalCheck = {
           permissionsDiff.push({
             kind: 'timelock_pending_admin_changed',
             contractAddress,
-            contractName: getContractLabel(contractAddress),
+            contractName: await getContractLabel(contractAddress),
             previous: undefined,
             next,
             via: 'event',
@@ -600,7 +620,7 @@ export const checkPermissionDiff: ProposalCheck = {
         permissionsDiff.push({
           kind: 'ownership_transferred',
           contractAddress,
-          contractName: getContractLabel(contractAddress),
+          contractName: await getContractLabel(contractAddress),
           previous: prev ?? zeroAddress,
           next,
           via: 'state_diff',
@@ -611,7 +631,7 @@ export const checkPermissionDiff: ProposalCheck = {
         permissionsDiff.push({
           kind: 'timelock_admin_changed',
           contractAddress,
-          contractName: getContractLabel(contractAddress),
+          contractName: await getContractLabel(contractAddress),
           previous: prev ?? undefined,
           next,
           via: 'state_diff',
@@ -622,7 +642,7 @@ export const checkPermissionDiff: ProposalCheck = {
         permissionsDiff.push({
           kind: 'timelock_pending_admin_changed',
           contractAddress,
-          contractName: getContractLabel(contractAddress),
+          contractName: await getContractLabel(contractAddress),
           previous: prev ?? undefined,
           next,
           via: 'state_diff',
@@ -661,7 +681,7 @@ export const checkPermissionDiff: ProposalCheck = {
       permissionsDiff.push({
         kind: 'ownership_transferred',
         contractAddress: intent.contractAddress,
-        contractName: getContractLabel(intent.contractAddress),
+        contractName: await getContractLabel(intent.contractAddress),
         previous: matchedTransition.previous,
         next: intent.newOwner,
         via: 'state_diff',

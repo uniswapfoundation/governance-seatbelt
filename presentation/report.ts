@@ -193,7 +193,7 @@ async function decodeForwardedContractCall(
 
     return {
       targetAddress,
-      targetLabel: getSimulationContractLabel(simulation, targetAddress),
+      targetLabel: await getContractLabel(simulation, targetAddress, chainId),
       call: call ?? undefined,
     };
   } catch {
@@ -229,7 +229,7 @@ async function expandPolygonFxBatchPreviewStep(
         return {
           ...step,
           forwardedTargetAddress: targetAddress,
-          forwardedTargetLabel: getSimulationContractLabel(simulation, targetAddress),
+          forwardedTargetLabel: await getContractLabel(simulation, targetAddress, chainId),
           forwardedCall: forwardedCall ?? undefined,
         };
       }),
@@ -262,6 +262,25 @@ function getSimulationContractLabel(
   return undefined;
 }
 
+function stripContractAddressSuffix(contractName: string): string | undefined {
+  const nameMatch = contractName.match(/^(.+?)\s+at\s+`0x[0-9a-fA-F]{40}`$/);
+  const name = (nameMatch?.[1] ?? contractName).trim();
+  return name && name !== 'Unknown Contract' ? name : undefined;
+}
+
+async function getContractLabel(
+  simulation: TenderlySimulation | undefined,
+  address: string | undefined,
+  chainId: number,
+): Promise<string | undefined> {
+  const simulationLabel = getSimulationContractLabel(simulation, address);
+  if (simulationLabel) return simulationLabel;
+  if (!address) return undefined;
+
+  const contractName = await getContractName({ address: getAddress(address) }, chainId);
+  return stripContractAddressSuffix(contractName);
+}
+
 async function buildCrossChainPreview(
   destinationJobResults: NonNullable<SimulationResult['destinationJobResults']>,
   destinationChecks?: Record<number, AllCheckResults>,
@@ -275,6 +294,7 @@ async function buildCrossChainPreview(
           const step = dest.stepResults[stepIndex];
           const decoded = await decodeContractCall(call.l2TargetAddress, call.l2InputData, chainId);
           const stepSimulation = step?.sim ?? dest.accumulatedSim;
+          const targetLabel = await getContractLabel(stepSimulation, call.l2TargetAddress, chainId);
           const error = step ? step.error : dest.error;
           const forwarded = await decodeForwardedContractCall(
             call.l2InputData,
@@ -289,7 +309,7 @@ async function buildCrossChainPreview(
             l2TargetAddress: call.l2TargetAddress,
             l2Value: call.l2Value,
             l2InputData: call.l2InputData,
-            targetLabel: getSimulationContractLabel(stepSimulation, call.l2TargetAddress),
+            targetLabel,
             call: decoded
               ? { selector: decoded.selector, signature: decoded.signature }
               : undefined,
@@ -1670,13 +1690,17 @@ async function formatCrossChainResults(
               const logPromises = stepLogs.map(async (log) => {
                 if (!log.name) return null;
 
+                const logAddress = getAddress(log.raw.address);
                 // Fix case-sensitivity bug: normalize addresses before comparison
                 const contract = sim.accumulatedSim?.contracts.find(
-                  (c) => getAddress(c.address) === getAddress(log.raw.address),
+                  (c) => getAddress(c.address) === logAddress,
                 );
 
                 // Use async getContractName with chain ID for better semantic names (e.g., "ARB Token")
-                const contractName = await getContractName(contract, Number(chainId));
+                const contractName = await getContractName(
+                  contract ?? { address: logAddress },
+                  Number(chainId),
+                );
 
                 const parsedInputs = log.inputs
                   .map((i) => `${i.soltype!.name}: ${i.value}`)

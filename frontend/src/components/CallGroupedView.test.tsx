@@ -126,6 +126,8 @@ describe('CallGroupedView cross-chain summary headers', () => {
     expect(html).toContain('cleanup');
     expect(html).toContain('3 cross-chain destination calls');
     expect(html).toContain('2 destination calls');
+    expect(html).toContain('via Arbitrum');
+    expect(html).not.toContain('via ArbitrumL1L2');
     expect(html).toContain('Arbitrum target 1');
     expect(html).toContain('Arbitrum target 2');
     expect(html).toContain('0x2222222222222222222222222222222222222222');

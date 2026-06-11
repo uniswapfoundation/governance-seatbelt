@@ -4,6 +4,19 @@ import type {
 } from '@/hooks/use-simulation-results';
 import { resolveChainName } from '@/lib/chain-name';
 
+const BRIDGE_TYPE_LABELS: Record<string, string> = {
+  ArbitrumL1L2: 'Arbitrum',
+  OptimismL1L2: 'OP Stack',
+  PolygonFxL1L2: 'Polygon FxPortal',
+  WormholeL1L2: 'Wormhole',
+  LayerZeroL1L2: 'LayerZero',
+};
+
+export function formatBridgeType(bridgeType: string | undefined): string | undefined {
+  if (!bridgeType) return undefined;
+  return BRIDGE_TYPE_LABELS[bridgeType] ?? bridgeType;
+}
+
 export function formatCrossChainCall(step: CrossChainJobStepPreview): string {
   if (step.forwardedCall?.signature) return step.forwardedCall.signature;
   if (step.forwardedCall?.selector) return step.forwardedCall.selector;
@@ -69,7 +82,7 @@ export function summarizeCrossChainJobs(jobs: CrossChainJobPreview[]): {
     .map(([chainId, chainJobs]) => {
       const chainName = resolveChainName(chainId, chainJobs[0]?.chainName);
       const explorerBaseUrl = chainJobs[0]?.blockExplorerBaseUrl || 'https://etherscan.io';
-      const bridgeType = chainJobs[0]?.bridgeType;
+      const bridgeType = formatBridgeType(chainJobs[0]?.bridgeType);
       const successCount = chainJobs.filter((job) => job.status === 'success').length;
       const failureCount = chainJobs.length - successCount;
 

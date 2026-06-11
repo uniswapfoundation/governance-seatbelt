@@ -18,6 +18,8 @@ import {
   zora,
 } from 'viem/chains';
 
+const MEGAETH_CHAIN_ID = 4326;
+
 // Chain logos stored in /public/chain-logos/
 // Existing official assets:
 // - Ethereum: https://github.com/0xa3k5/web3icons
@@ -33,6 +35,7 @@ import {
 // - Avalanche: https://www.avax.network
 // - Monad: https://www.monad.xyz and https://docs.monad.xyz/developer-essentials/network-information
 // - Tempo: https://tempo.xyz
+// - MegaETH: https://www.megaeth.com
 // - Celo: https://celo.org/brand-kit
 // - X Layer: https://static.oklink.com
 // - World: https://world.org/brand#world-logo
@@ -58,6 +61,7 @@ export function ChainLogo({ chainId, size = 20 }: { chainId: number; size?: numb
     [avalanche.id]: '/chain-logos/avalanche.svg',
     [monad.id]: '/chain-logos/monad.svg',
     [tempo.id]: '/chain-logos/tempo.svg',
+    [MEGAETH_CHAIN_ID]: '/chain-logos/megaeth.svg',
   };
 
   const logoPath = logoFiles[chainId];

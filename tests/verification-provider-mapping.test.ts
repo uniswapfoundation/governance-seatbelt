@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { tempo, worldchain, xLayer, zora } from 'viem/chains';
+import { megaeth } from '../utils/chains/megaeth';
 import {
   seedRpcEnv,
   setMockFetch,
@@ -9,7 +10,7 @@ import {
 } from './helpers/verification-test-helpers';
 
 describe('verification backend provider mapping', () => {
-  test('maps Zora to Blockscout, Worldchain to Etherscan v2, XLayer to Sourcify-only, and Tempo to Tempo verifier', async () => {
+  test('maps chain verification backends explicitly', async () => {
     seedRpcEnv();
 
     const { VerificationBackend, getChainConfig } = await import('../utils/clients/client');
@@ -20,6 +21,7 @@ describe('verification backend provider mapping', () => {
     );
     expect(getChainConfig(xLayer.id).verification?.backend).toBe(VerificationBackend.SourcifyOnly);
     expect(getChainConfig(tempo.id).verification?.backend).toBe(VerificationBackend.Tempo);
+    expect(getChainConfig(megaeth.id).verification?.backend).toBe(VerificationBackend.EtherscanV2);
   });
 
   test('does not call unsupported explorer APIs for Sourcify-only chains', async () => {

@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { encodeFunctionData, getAddress, keccak256, parseAbi, toBytes, zeroHash } from 'viem';
 import type { ProposalData, ProposalEvent, TenderlySimulation } from '../../types';
-import { BlockExplorerSource } from '../../utils/clients/client';
+import { BlockExplorerFactory } from '../../utils/clients/block-explorers/factory';
+import { BlockExplorerSource, VerificationBackend } from '../../utils/clients/client';
 import { checkPermissionDiff } from '../check-permission-diff';
 import { createMockSimulation } from './test-utils';
 
@@ -18,7 +19,11 @@ function topicAddress(address: string): string {
   return padTopic(address);
 }
 
-function createDeps(chainId: number, blockExplorerBaseUrl: string): ProposalData {
+function createDeps(
+  chainId: number,
+  blockExplorerBaseUrl: string,
+  verification?: ProposalData['chainConfig']['verification'],
+): ProposalData {
   return {
     governor: {},
     timelock: {},
@@ -31,6 +36,7 @@ function createDeps(chainId: number, blockExplorerBaseUrl: string): ProposalData
         apiUrl: `${blockExplorerBaseUrl}/api`,
         source: BlockExplorerSource.Etherscan,
       },
+      verification,
     },
     targets: [],
     touchedContracts: [],
@@ -321,6 +327,53 @@ describe('checkPermissionDiff', () => {
       via: 'state_diff',
     });
     expect(result.warnings.join('\n')).toContain('Ownership transfer on Unknown Contract');
+  });
+
+  test('uses explorer contract names for permission diffs when Tenderly omits metadata', async () => {
+    const ownershipTopic0 = eventTopic('OwnershipTransferred(address,address)');
+    const contract = '0x4444444444444444444444444444444444444444';
+    const prevOwner = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const nextOwner = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+
+    const sim = createSimulation({
+      logs: [
+        {
+          name: null,
+          anonymous: false,
+          inputs: [],
+          raw: {
+            address: contract,
+            topics: [ownershipTopic0, topicAddress(prevOwner), topicAddress(nextOwner)],
+            data: '0x',
+          },
+        },
+      ],
+    });
+
+    const originalFetchContractName = BlockExplorerFactory.fetchContractName;
+    BlockExplorerFactory.fetchContractName = async (address, chainId) => {
+      if (chainId === 4326 && getAddress(address) === getAddress(contract)) {
+        return 'UniswapV2Factory';
+      }
+      return null;
+    };
+
+    try {
+      const result = await checkPermissionDiff.checkProposal(
+        createProposalEvent(),
+        sim,
+        createDeps(4326, 'https://mega.etherscan.io', {
+          backend: VerificationBackend.EtherscanV2,
+        }),
+      );
+
+      expect(result.permissionsDiff?.[0].contractName).toBe(
+        `UniswapV2Factory at \`${getAddress(contract)}\``,
+      );
+      expect(result.warnings.join('\n')).toContain('Ownership transfer on UniswapV2Factory');
+    } finally {
+      BlockExplorerFactory.fetchContractName = originalFetchContractName;
+    }
   });
 
   test('does not emit ownership fallback when state diff does not confirm decoded call owner', async () => {

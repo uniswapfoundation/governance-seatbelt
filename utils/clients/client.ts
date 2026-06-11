@@ -19,6 +19,7 @@ import {
   xLayer,
   zora,
 } from 'viem/chains';
+import { megaeth } from '../chains/megaeth';
 import { DEFAULT_BLOCK_EXPLORER_BASE_URL, normalizeBlockExplorerBaseUrl } from '../explorer-links';
 
 export enum BlockExplorerSource {
@@ -83,6 +84,7 @@ const POLYGON_RPC_URL = process.env.POLYGON_RPC_URL || 'https://polygon-bor-rpc.
 const AVALANCHE_RPC_URL = process.env.AVALANCHE_RPC_URL || avalanche.rpcUrls.default.http[0];
 const MONAD_RPC_URL = process.env.MONAD_RPC_URL || monad.rpcUrls.default.http[0];
 const TEMPO_RPC_URL = process.env.TEMPO_RPC_URL || tempo.rpcUrls.default.http[0];
+const MEGAETH_RPC_URL = process.env.MEGAETH_RPC_URL || megaeth.rpcUrls.default.http[0];
 const WORLDCHAIN_RPC_URL = process.env.WORLDCHAIN_RPC_URL || worldchain.rpcUrls.default.http[0];
 const ZORA_RPC_URL = process.env.ZORA_RPC_URL || zora.rpcUrls.default.http[0];
 const XLAYER_RPC_URL = process.env.XLAYER_RPC_URL || xLayer.rpcUrls.default.http[0];
@@ -104,6 +106,7 @@ type ChainById = {
   [avalanche.id]: typeof avalanche;
   [monad.id]: typeof monad;
   [tempo.id]: typeof tempo;
+  [megaeth.id]: typeof megaeth;
   [worldchain.id]: typeof worldchain;
   [zora.id]: typeof zora;
   [xLayer.id]: typeof xLayer;
@@ -124,6 +127,7 @@ const CHAIN_BY_ID: ChainById = {
   [avalanche.id]: avalanche,
   [monad.id]: monad,
   [tempo.id]: tempo,
+  [megaeth.id]: megaeth,
   [worldchain.id]: worldchain,
   [zora.id]: zora,
   [xLayer.id]: xLayer,
@@ -299,6 +303,18 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
     },
     rpcUrl: TEMPO_RPC_URL,
   },
+  [megaeth.id]: {
+    chainId: megaeth.id,
+    blockExplorer: {
+      baseUrl: megaeth.blockExplorers.default.url,
+    },
+    verification: {
+      backend: VerificationBackend.EtherscanV2,
+      apiUrl: ETHERSCAN_V2_API_URL,
+      apiKey: process.env.ETHERSCAN_API_KEY,
+    },
+    rpcUrl: MEGAETH_RPC_URL,
+  },
   [worldchain.id]: {
     chainId: worldchain.id,
     blockExplorer: {
@@ -441,6 +457,10 @@ const clients = {
   [tempo.id]: createPublicClient({
     chain: tempo,
     transport: http(CHAIN_CONFIGS[tempo.id].rpcUrl),
+  }),
+  [megaeth.id]: createPublicClient({
+    chain: megaeth,
+    transport: http(CHAIN_CONFIGS[megaeth.id].rpcUrl),
   }),
   [worldchain.id]: createPublicClient({
     chain: worldchain,

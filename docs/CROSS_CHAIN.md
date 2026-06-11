@@ -6,12 +6,13 @@ This document describes the bridge architecture, supported Uniswap cross-chain l
 
 Seatbelt simulates a governance proposal on the source chain, extracts bridge-specific execution jobs, runs destination simulations, and produces one combined report.
 
-Today the tool supports four bridge families:
+Today the tool supports five bridge families:
 
 - `ArbitrumL1L2`
 - `OptimismL1L2`
 - `PolygonFxL1L2`
 - `WormholeL1L2`
+- `LayerZeroL1L2`
 
 Cross-chain proposal support is intentionally lane-based. Seatbelt only guarantees behavior for the lanes that are explicitly configured and validated in code.
 
@@ -30,7 +31,12 @@ The execution engine in [tenderly-execution-engine.ts](../utils/cross-chain/tend
 ### Supported Bridge Types
 
 ```typescript
-type BridgeType = 'ArbitrumL1L2' | 'OptimismL1L2' | 'PolygonFxL1L2' | 'WormholeL1L2';
+type BridgeType =
+  | 'ArbitrumL1L2'
+  | 'OptimismL1L2'
+  | 'PolygonFxL1L2'
+  | 'WormholeL1L2'
+  | 'LayerZeroL1L2';
 ```
 
 ### ArbitrumL1L2
@@ -58,6 +64,16 @@ type BridgeType = 'ArbitrumL1L2' | 'OptimismL1L2' | 'PolygonFxL1L2' | 'WormholeL
 - Main job: decode the Wormhole message, map it onto a supported lane, and prepare any receiver-mode runtime state required for simulation
 
 Wormhole support is defined centrally by the support matrix in [wormhole-support.ts](../utils/bridges/wormhole-support.ts).
+
+### LayerZeroL1L2
+
+- Source bridge call: Uniswap `OmnichainProposalSender.execute(uint16,bytes,bytes)`
+- Address model: destination execution uses the configured remote `OmnichainGovernanceExecutor`
+- Main job: decode the LayerZero executor payload and simulate the destination calls directly
+
+LayerZero support exists for migration proposals that still use the old LayerZero path to update remote governance configuration. Future proposals that call Wormhole directly should use `WormholeL1L2`.
+
+The supplied Uniswap `OmnichainProposalSender` has a confirmed trusted remote for Avalanche LayerZero V1 endpoint id `106`. MegaETH uses LayerZero V1 endpoint id `398`, but that id is not configured on the supplied Ethereum sender until the migration proposal calls `setTrustedRemoteAddress(398, 0x8819b86ddF592c3aaAa6f9ec7cE1A0f99FC4322c)`. Seatbelt only treats a MegaETH LayerZero `execute` call as supported when that trusted-remote setup call appears earlier in the same proposal.
 
 ## Wormhole Support Model
 

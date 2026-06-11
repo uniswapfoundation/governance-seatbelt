@@ -14,6 +14,7 @@ describe('frontend resolveChainName', () => {
   test('uses known chain names when name is missing', () => {
     expect(resolveChainName(8453)).toBe('Base');
     expect(resolveChainName(4217)).toContain('Tempo');
+    expect(resolveChainName(4326)).toBe('MegaETH');
   });
 
   test('falls back to generic chain label for unknown chain ids', () => {
