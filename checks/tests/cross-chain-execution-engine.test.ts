@@ -9,6 +9,7 @@ import {
   parseAbi,
 } from 'viem';
 import { bsc, celo, mainnet, monad, polygon, tempo } from 'viem/chains';
+import { config as layerZeroReceiverAuthTestConfig } from '../../sims/layerzero-receiver-auth-test.sim';
 import type { TenderlySimulation } from '../../types.d';
 import {
   LAYER_ZERO_EXECUTE_ABI,
@@ -54,12 +55,33 @@ if (!CELO_WORMHOLE_CORE || !MONAD_WORMHOLE_CORE) {
   throw new Error('Expected Celo and Monad Wormhole core addresses to be configured');
 }
 
-type ReceiverReadRequest = { address: `0x${string}`; functionName: string; blockNumber?: bigint };
+type ReceiverReadRequest = {
+  address: `0x${string}`;
+  functionName: string;
+  args?: readonly unknown[];
+  blockNumber?: bigint;
+};
+
+function makeLayerZeroTrustedRemotePath(
+  remoteAddress: `0x${string}`,
+  localAddress: `0x${string}`,
+): Hex {
+  return `${getAddress(remoteAddress)}${getAddress(localAddress).slice(2)}` as Hex;
+}
 
 async function resolveMockedReceiverReadContract(
   request: ReceiverReadRequest,
 ): Promise<Hex | bigint> {
   const receiverAddress = getAddress(request.address);
+
+  if (
+    request.functionName === 'trustedRemoteLookup' &&
+    (receiverAddress === UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR ||
+      receiverAddress === UNISWAP_OMNICHAIN_GOVERNANCE_EXECUTOR)
+  ) {
+    expect(request.args).toEqual([101]);
+    return makeLayerZeroTrustedRemotePath(UNISWAP_OMNICHAIN_PROPOSAL_SENDER, receiverAddress);
+  }
 
   if (
     receiverAddress === getAddress(TEMPO_RECEIVER) ||
@@ -196,6 +218,7 @@ mock.module('../../utils/clients/tenderly-api', () => ({
 
 const WORMHOLE_PROPOSAL_TARGET = '0xf5F4496219F31CDCBa6130B5402873624585615a' as const;
 const WORMHOLE_ADDRESS = '0x00000000000000000000000000000000000000AA' as const;
+const BAD_LAYER_ZERO_REMOTE = getAddress('0x000000000000000000000000000000000000dEaD');
 const DIRECT_DESTINATION_CHAIN_ID = polygon.id;
 const CELO_CHAIN_ID = celo.id;
 const TIMELOCK_ADDRESS = '0x1a9C8182C09F50C8318d769245beA52c32BE35BC';
@@ -338,14 +361,11 @@ function makeLayerZeroTrustedRemoteCalldata(
   laneKey: keyof typeof LAYER_ZERO_LANE_SUPPORT_MATRIX,
 ): `0x${string}` {
   const lane = LAYER_ZERO_LANE_SUPPORT_MATRIX[laneKey];
-  if (!lane.requiredTrustedRemoteAddress) {
-    throw new Error(`LayerZero lane ${laneKey} does not require trusted remote setup`);
-  }
 
   return encodeFunctionData({
     abi: LAYER_ZERO_SET_TRUSTED_REMOTE_ADDRESS_ABI,
     functionName: 'setTrustedRemoteAddress',
-    args: [lane.layerZeroRemoteChainId, lane.requiredTrustedRemoteAddress],
+    args: [lane.layerZeroRemoteChainId, lane.l2FromAddress],
   });
 }
 
@@ -474,6 +494,19 @@ describe('cross-chain destination execution engine', () => {
       }),
     );
 
+    const trustedRemoteReads = mockedReceiverReadContract.mock.calls
+      .map(([request]) => request)
+      .filter((request) => request.functionName === 'trustedRemoteLookup');
+    expect(trustedRemoteReads).toEqual([
+      expect.objectContaining({
+        address: UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR,
+        args: [101],
+      }),
+      expect.objectContaining({
+        address: UNISWAP_OMNICHAIN_GOVERNANCE_EXECUTOR,
+        args: [101],
+      }),
+    ]);
     expect(mockedSendSimulation).toHaveBeenCalledTimes(3);
     expect(transportCalls[0]).toMatchObject({
       network_id: `${LAYER_ZERO_LANE_SUPPORT_MATRIX.megaeth.destinationChainId}`,
@@ -502,6 +535,104 @@ describe('cross-chain destination execution engine', () => {
     ]);
     expect(result.destinationJobResults.map((job) => job.stepResults.length)).toEqual([2, 1]);
     expect(result.destinationJobResults.map((job) => job.status)).toEqual(['success', 'success']);
+  });
+
+  test('executes the receiver-auth LayerZero sim fixture when receiver trusts expected remote', async () => {
+    const target = getAddress('0x00000000000000000000000000000000000000A1');
+
+    enqueueSimulation(
+      makeSimulation({
+        id: 'layerzero-receiver-auth-step',
+        chainId: LAYER_ZERO_LANE_SUPPORT_MATRIX.megaeth.destinationChainId,
+      }),
+    );
+
+    const result = await handleCrossChainSimulations(
+      makeSourceResult(layerZeroReceiverAuthTestConfig.calldatas, {
+        targets: layerZeroReceiverAuthTestConfig.targets,
+      }),
+    );
+
+    expect(mockedSendSimulation).toHaveBeenCalledTimes(1);
+    expect(transportCalls[0]).toMatchObject({
+      network_id: `${LAYER_ZERO_LANE_SUPPORT_MATRIX.megaeth.destinationChainId}`,
+      from: UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR,
+      to: target,
+      input: '0x12345678',
+      value: '0',
+    });
+    expect(result.destinationJobResults).toHaveLength(1);
+    expect(result.destinationJobResults[0]?.bridgeType).toBe('LayerZeroL1L2');
+    expect(result.destinationJobResults[0]?.status).toBe('success');
+    expect(result.crossChainFailure).toBe(false);
+  });
+
+  test('fails LayerZero destination job before simulation when receiver trusts wrong remote', async () => {
+    mockedReceiverReadContract.mockImplementation(async (request) => {
+      if (request.functionName === 'trustedRemoteLookup') {
+        expect(request.args).toEqual([101]);
+        return makeLayerZeroTrustedRemotePath(BAD_LAYER_ZERO_REMOTE, getAddress(request.address));
+      }
+
+      return resolveMockedReceiverReadContract(request);
+    });
+
+    const result = await handleCrossChainSimulations(
+      makeSourceResult(layerZeroReceiverAuthTestConfig.calldatas, {
+        targets: layerZeroReceiverAuthTestConfig.targets,
+      }),
+    );
+
+    expect(mockedSendSimulation).not.toHaveBeenCalled();
+    expect(result.destinationJobResults).toHaveLength(1);
+    expect(result.destinationJobResults[0]?.bridgeType).toBe('LayerZeroL1L2');
+    expect(result.destinationJobResults[0]?.status).toBe('failure');
+    expect(result.destinationJobResults[0]?.stepResults).toHaveLength(0);
+    expect(result.destinationJobResults[0]?.error).toContain('trusted remote mismatch');
+    expect(result.crossChainFailure).toBe(true);
+  });
+
+  test('fails LayerZero destination job when prior state already touched receiver storage', async () => {
+    const secondTarget = getAddress('0x00000000000000000000000000000000000000A2');
+    const firstCalldata = makeLayerZeroCalldata('megaeth', [
+      {
+        target: UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR,
+        data: '0x11111111',
+      },
+    ]);
+    const secondCalldata = makeLayerZeroCalldata('megaeth', [
+      { target: secondTarget, data: '0x22222222' },
+    ]);
+
+    enqueueSimulation(
+      makeSimulation({
+        id: 'layerzero-receiver-storage-step',
+        chainId: LAYER_ZERO_LANE_SUPPORT_MATRIX.megaeth.destinationChainId,
+        stateDiff: [
+          {
+            address: UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR,
+            key: '0x01',
+            dirty: '0xaa',
+          },
+        ],
+      }),
+    );
+
+    const result = await handleCrossChainSimulations(
+      makeSourceResult([firstCalldata, secondCalldata], {
+        targets: [UNISWAP_OMNICHAIN_PROPOSAL_SENDER, UNISWAP_OMNICHAIN_PROPOSAL_SENDER],
+      }),
+    );
+
+    expect(mockedSendSimulation).toHaveBeenCalledTimes(1);
+    expect(result.destinationJobResults).toHaveLength(2);
+    expect(result.destinationJobResults[0]?.status).toBe('success');
+    expect(result.destinationJobResults[1]?.status).toBe('failure');
+    expect(result.destinationJobResults[1]?.stepResults).toHaveLength(0);
+    expect(result.destinationJobResults[1]?.error).toContain(
+      'destination state overrides already modify 1 receiver storage slot',
+    );
+    expect(result.crossChainFailure).toBe(true);
   });
 
   test('executes one simulated destination job per supported Wormhole lane', async () => {

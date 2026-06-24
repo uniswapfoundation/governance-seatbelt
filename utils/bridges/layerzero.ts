@@ -10,7 +10,7 @@ import {
 } from 'viem';
 import { avalanche } from 'viem/chains';
 import type { CrossChainExecutionCall, CrossChainExecutionJob } from '../../types.d';
-import { MEGAETH_CHAIN_ID, MEGAETH_CHAIN_NAME } from '../chains/megaeth';
+import { MEGAETH_CHAIN_ID } from '../chains/megaeth';
 
 export const LAYER_ZERO_EXECUTE_ABI = parseAbi([
   'function execute(uint16 remoteChainId, bytes payload, bytes adapterParams)',
@@ -20,12 +20,14 @@ export const LAYER_ZERO_SET_TRUSTED_REMOTE_ADDRESS_ABI = parseAbi([
   'function setTrustedRemoteAddress(uint16 remoteChainId, bytes remoteAddress)',
 ]);
 
+export const LAYER_ZERO_TRUSTED_REMOTE_LOOKUP_ABI = parseAbi([
+  'function trustedRemoteLookup(uint16 remoteChainId) view returns (bytes)',
+]);
+
 const LAYER_ZERO_EXECUTE_SELECTOR = toFunctionSelector(
   'function execute(uint16 remoteChainId, bytes payload, bytes adapterParams)',
 );
-const LAYER_ZERO_SET_TRUSTED_REMOTE_ADDRESS_SELECTOR = toFunctionSelector(
-  'function setTrustedRemoteAddress(uint16 remoteChainId, bytes remoteAddress)',
-);
+export const LAYER_ZERO_ETHEREUM_REMOTE_CHAIN_ID = 101;
 
 export const UNISWAP_OMNICHAIN_PROPOSAL_SENDER = getAddress(
   '0xeb0BCF27D1Fb4b25e708fBB815c421Aeb51eA9fc',
@@ -37,47 +39,34 @@ export const UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR = getAddress(
   '0x8819b86ddF592c3aaAa6f9ec7cE1A0f99FC4322c',
 );
 
-export type LayerZeroLaneKey = 'avalanche' | 'megaeth';
+type LayerZeroLaneKey = 'avalanche' | 'megaeth';
 
-export type LayerZeroLaneSupport = {
-  key: LayerZeroLaneKey;
-  chainName: string;
+type LayerZeroLaneSupport = {
   destinationChainId: number;
   layerZeroRemoteChainId: number;
   l2FromAddress: `0x${string}`;
-  senderTargets: readonly `0x${string}`[];
-  requiredTrustedRemoteAddress?: `0x${string}`;
+  senderTarget: `0x${string}`;
 };
 
 export const LAYER_ZERO_LANE_SUPPORT_MATRIX: Record<LayerZeroLaneKey, LayerZeroLaneSupport> = {
   avalanche: {
-    key: 'avalanche',
-    chainName: 'Avalanche',
     destinationChainId: avalanche.id,
     layerZeroRemoteChainId: 106,
     l2FromAddress: UNISWAP_OMNICHAIN_GOVERNANCE_EXECUTOR,
-    senderTargets: [UNISWAP_OMNICHAIN_PROPOSAL_SENDER],
+    senderTarget: UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
   },
   megaeth: {
-    key: 'megaeth',
-    chainName: MEGAETH_CHAIN_NAME,
     destinationChainId: MEGAETH_CHAIN_ID,
     layerZeroRemoteChainId: 398,
     l2FromAddress: UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR,
-    senderTargets: [UNISWAP_OMNICHAIN_PROPOSAL_SENDER],
-    requiredTrustedRemoteAddress: UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR,
+    senderTarget: UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
   },
 };
 
-export const SUPPORTED_LAYER_ZERO_LANE_KEYS = [
-  'avalanche',
-  'megaeth',
-] as const satisfies readonly LayerZeroLaneKey[];
+const SUPPORTED_LAYER_ZERO_LANES = Object.values(LAYER_ZERO_LANE_SUPPORT_MATRIX);
 
 const KNOWN_LAYER_ZERO_SENDER_TARGETS = new Set(
-  SUPPORTED_LAYER_ZERO_LANE_KEYS.flatMap(
-    (laneKey) => LAYER_ZERO_LANE_SUPPORT_MATRIX[laneKey].senderTargets,
-  ).map((target) => target.toLowerCase()),
+  SUPPORTED_LAYER_ZERO_LANES.map((lane) => lane.senderTarget.toLowerCase()),
 );
 
 type DecodedLayerZeroPayload = {
@@ -92,9 +81,7 @@ type LayerZeroPayloadDecodeResult =
   | { kind: 'malformed' };
 
 function getLayerZeroLaneByRemoteChainId(remoteChainId: number): LayerZeroLaneSupport | undefined {
-  return SUPPORTED_LAYER_ZERO_LANE_KEYS.map(
-    (laneKey) => LAYER_ZERO_LANE_SUPPORT_MATRIX[laneKey],
-  ).find((lane) => lane.layerZeroRemoteChainId === remoteChainId);
+  return SUPPORTED_LAYER_ZERO_LANES.find((lane) => lane.layerZeroRemoteChainId === remoteChainId);
 }
 
 function normalizeProposalTarget(target: string): string | null {
@@ -116,71 +103,6 @@ function isKnownLayerZeroProposalCall(target: string, data: string): boolean {
   }
 
   return slice(data, 0, 4) === LAYER_ZERO_EXECUTE_SELECTOR;
-}
-
-function decodePackedAddress(value: Hex): `0x${string}` | null {
-  if (value.length !== 42) return null;
-
-  try {
-    return getAddress(value);
-  } catch {
-    return null;
-  }
-}
-
-function isTrustedRemoteSetupCall(
-  target: string,
-  data: string,
-  lane: LayerZeroLaneSupport,
-): boolean {
-  if (!lane.requiredTrustedRemoteAddress || !isHex(data) || data.length < 10) {
-    return false;
-  }
-
-  const normalizedTarget = normalizeProposalTarget(target);
-  if (
-    !normalizedTarget ||
-    !lane.senderTargets.some((senderTarget) => senderTarget.toLowerCase() === normalizedTarget)
-  ) {
-    return false;
-  }
-
-  if (slice(data, 0, 4) !== LAYER_ZERO_SET_TRUSTED_REMOTE_ADDRESS_SELECTOR) {
-    return false;
-  }
-
-  try {
-    const decoded = decodeFunctionData({
-      abi: LAYER_ZERO_SET_TRUSTED_REMOTE_ADDRESS_ABI,
-      data,
-    });
-    if (decoded.functionName !== 'setTrustedRemoteAddress') return false;
-
-    const [remoteChainId, remoteAddress] = decoded.args;
-    const decodedRemoteAddress = decodePackedAddress(remoteAddress);
-
-    return (
-      lane.layerZeroRemoteChainId === Number(remoteChainId) &&
-      decodedRemoteAddress?.toLowerCase() === lane.requiredTrustedRemoteAddress.toLowerCase()
-    );
-  } catch {
-    return false;
-  }
-}
-
-function proposalConfiguresTrustedRemoteBeforeIndex(
-  targets: readonly string[],
-  calldatas: readonly string[],
-  index: number,
-  lane: LayerZeroLaneSupport,
-): boolean {
-  for (let i = 0; i < index; i += 1) {
-    const target = targets[i];
-    const data = calldatas[i];
-    if (target && data && isTrustedRemoteSetupCall(target, data, lane)) return true;
-  }
-
-  return false;
 }
 
 function decodeLayerZeroExecutorPayload(payload: Hex): LayerZeroPayloadDecodeResult {
@@ -283,15 +205,6 @@ export function extractLayerZeroL1L2JobsFromProposal(
         `Unsupported LayerZero remote chain id ${resolvedRemoteChainId} in proposal calldata index ${i}`,
       );
     }
-    if (
-      lane.requiredTrustedRemoteAddress &&
-      !proposalConfiguresTrustedRemoteBeforeIndex(targets, calldatas, i, lane)
-    ) {
-      throw new Error(
-        `LayerZero remote chain id ${resolvedRemoteChainId} requires setTrustedRemoteAddress before execute in proposal calldata index ${i}`,
-      );
-    }
-
     const decodedPayload = decodeLayerZeroExecutorPayload(payload);
     if (decodedPayload.kind !== 'supported') {
       throw new Error(
@@ -309,6 +222,10 @@ export function extractLayerZeroL1L2JobsFromProposal(
       bridgeType: 'LayerZeroL1L2',
       destinationChainId: lane.destinationChainId,
       l2FromAddress: lane.l2FromAddress,
+      layerZeroTrustedRemote: {
+        sourceRemoteChainId: LAYER_ZERO_ETHEREUM_REMOTE_CHAIN_ID,
+        expectedRemoteAddress: lane.senderTarget,
+      },
       sourceOrder: i,
       calls,
     });
