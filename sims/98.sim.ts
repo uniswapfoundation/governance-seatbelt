@@ -77,7 +77,7 @@ const LZ_AVAX_CHAIN_ID = 106;
 const LZ_MEGA_CHAIN_ID = 398;
 
 // -------------------------------------------------------------------------------------------------
-// NN: (Ethereum) Set Layer Zero Trusted Remote For Mega
+// 00: (Ethereum) Set Layer Zero Trusted Remote For Mega
 //
 const ethSetTrustedRemoteToMega0x88 = {
     target: ETHEREUM.OMNICHAIN_PROPOSAL_SENDER,
@@ -94,7 +94,7 @@ const ethSetTrustedRemoteToMega0x88 = {
 };
 
 // -------------------------------------------------------------------------------------------------
-// NN: (Mega) Transfer Ownership on MegaETH from Layer Zero to Wormhole
+// 01: (Mega) Transfer Ownership on MegaETH from Layer Zero to Wormhole
 //
 const megaLzTransferOwnershipCalls = [
     {
@@ -163,7 +163,7 @@ const megaTransferOwnershipFromLzToWormhole = {
 };
 
 // -------------------------------------------------------------------------------------------------
-// NN: Transfer Ownership on Avax from Layer Zero to Wormhole
+// 02: Transfer Ownership on Avax from Layer Zero to Wormhole
 //
 const avaxLzTransferOwnershipCalls = [
         {
@@ -247,7 +247,7 @@ const avaxTransferOwnershipFromLztoWormhole = {
 };
 
 // -------------------------------------------------------------------------------------------------
-// NN: Transfer V2 Fee Setter on Soneium from OptimismPortal2 to CrossChainAccount
+// 03: Transfer V2 Fee Setter on Soneium from OptimismPortal2 to CrossChainAccount
 //
 const soneiumV2SetFeeToSetter = {
     target: SONEIUM.OPTIMISM_PORTAL2,
@@ -271,7 +271,7 @@ const soneiumV2SetFeeToSetter = {
 };
 
 // -------------------------------------------------------------------------------------------------
-// NN: Transfer V4 Ownership on Soneium from OptimismPortal2 to CrossChainAccount
+// 04: Transfer V4 Ownership on Soneium from OptimismPortal2 to CrossChainAccount
 //
 const soneiumPoolManagerTransferOwnership = {
     target: SONEIUM.OPTIMISM_PORTAL2,
@@ -295,7 +295,7 @@ const soneiumPoolManagerTransferOwnership = {
 };
 
 // -------------------------------------------------------------------------------------------------
-// 06: Transfer V2 Fee Setter on XLayer from OptimismPortal2 to CrossChainAccount
+// 05: Transfer V2 Fee Setter on XLayer from OptimismPortal2 to CrossChainAccount
 //
 const xLayerV2SetFeeToSetter = {
     target: X_LAYER.OPTIMISM_PORTAL2,
@@ -319,7 +319,7 @@ const xLayerV2SetFeeToSetter = {
 };
 
 // -------------------------------------------------------------------------------------------------
-// NN: Transfer V4 Ownership on XLayer from OptimismPortal2 to CrossChainAccount
+// 06: Transfer V4 Ownership on XLayer from OptimismPortal2 to CrossChainAccount
 //
 const xLayerPoolManagerTransferOwnership = {
     target: X_LAYER.OPTIMISM_PORTAL2,
@@ -343,7 +343,7 @@ const xLayerPoolManagerTransferOwnership = {
 };
 
 // -------------------------------------------------------------------------------------------------
-// NN: (Ethereum) Set Layer Zero Trusted Remote For Mega (OPTIONAL)
+// 07: (Ethereum) Set Layer Zero Trusted Remote For Mega (OPTIONAL)
 //
 const ethSetTrustedRemoteToMega0x55 = {
     target: ETHEREUM.OMNICHAIN_PROPOSAL_SENDER,
@@ -360,7 +360,7 @@ const ethSetTrustedRemoteToMega0x55 = {
 };
 
 // -------------------------------------------------------------------------------------------------
-// NN: (Mega) Change ProxyAdmin for NonfungiblePositionDescriptor (OPTIONAL)
+// 08: (Mega) Change ProxyAdmin for NonfungiblePositionDescriptor (OPTIONAL)
 //
 const megaChangeProxyAdmin = {
     target: ETHEREUM.OMNICHAIN_PROPOSAL_SENDER,
