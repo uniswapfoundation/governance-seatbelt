@@ -201,27 +201,112 @@ export async function getLatestBlock(chainId: number): Promise<number> {
   }
 }
 
+// Tenderly's `encode-states` endpoint rejects request bodies above ~11KB with a 413. We keep each
+// chunk comfortably below that cliff. Each storage key encodes to its own independent slot(s), so
+// splitting the overrides across multiple requests and merging the responses is equivalent to a
+// single request. Overridable via env in case the limit differs behind a proxy.
+const DEFAULT_MAX_ENCODE_BODY_BYTES = 8_000;
+const MAX_ENCODE_BODY_BYTES = (() => {
+  const raw = process.env.TENDERLY_ENCODE_MAX_BODY_BYTES;
+  if (!raw) return DEFAULT_MAX_ENCODE_BODY_BYTES;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    console.warn(
+      `Invalid TENDERLY_ENCODE_MAX_BODY_BYTES="${raw}", using default ${DEFAULT_MAX_ENCODE_BODY_BYTES}`,
+    );
+    return DEFAULT_MAX_ENCODE_BODY_BYTES;
+  }
+  return parsed;
+})();
+
+type EncodeEntry = { address: string; key: string; value: string };
+
+/**
+ * Split a state-overrides payload into chunks whose serialized body stays under
+ * MAX_ENCODE_BODY_BYTES. Every chunk holds at least one entry, even if that entry alone exceeds the
+ * budget (a single oversized value is still far below the endpoint's hard limit).
+ */
+function chunkStateOverrides(payload: StateOverridesPayload): StateOverridesPayload[] {
+  const entries: EncodeEntry[] = [];
+  for (const [address, { value }] of Object.entries(payload.stateOverrides)) {
+    for (const [key, val] of Object.entries(value)) {
+      entries.push({ address, key, value: val });
+    }
+  }
+
+  const chunks: EncodeEntry[][] = [];
+  let current: EncodeEntry[] = [];
+  let currentBytes = 0;
+  // Approximate per-entry serialized cost: "key":"value", plus quotes/colon/comma.
+  const entrySize = (e: EncodeEntry) => e.key.length + e.value.length + 8;
+
+  for (const entry of entries) {
+    const size = entrySize(entry);
+    if (current.length > 0 && currentBytes + size > MAX_ENCODE_BODY_BYTES) {
+      chunks.push(current);
+      current = [];
+      currentBytes = 0;
+    }
+    current.push(entry);
+    currentBytes += size;
+  }
+  if (current.length > 0) chunks.push(current);
+
+  return chunks.map((chunkEntries) => {
+    const stateOverrides: StateOverridesPayload['stateOverrides'] = {};
+    for (const { address, key, value } of chunkEntries) {
+      if (!stateOverrides[address]) stateOverrides[address] = { value: {} };
+      stateOverrides[address].value[key] = value;
+    }
+    return { networkID: payload.networkID, stateOverrides };
+  });
+}
+
+function mergeEncodingResponses(responses: StorageEncodingResponse[]): StorageEncodingResponse {
+  const merged: StorageEncodingResponse = { stateOverrides: {} };
+  for (const response of responses) {
+    for (const [address, { value }] of Object.entries(response.stateOverrides)) {
+      const existing = merged.stateOverrides[address];
+      merged.stateOverrides[address] = {
+        ...existing,
+        value: { ...(existing?.value ?? {}), ...value },
+      };
+    }
+  }
+  return merged;
+}
+
+async function sendEncodeChunk(payload: StateOverridesPayload): Promise<StorageEncodingResponse> {
+  const fetchOptions = <Partial<FETCH_OPT>>{
+    method: 'POST',
+    data: payload,
+    ...getTenderlyFetchOptions(),
+  };
+  const rawResponse = await fetchUrlWithTimeout(
+    `Tenderly sendEncodeRequest(${payload.networkID})`,
+    getTenderlyEncodeUrl(),
+    fetchOptions,
+  );
+  return parseWithSchema(
+    tenderlyStorageEncodingSchema,
+    rawResponse,
+    'Tenderly storage encoding response',
+  );
+}
+
 export async function sendEncodeRequest(
   payload: StateOverridesPayload,
 ): Promise<StorageEncodingResponse> {
   try {
-    const fetchOptions = <Partial<FETCH_OPT>>{
-      method: 'POST',
-      data: payload,
-      ...getTenderlyFetchOptions(),
-    };
-    const rawResponse = await fetchUrlWithTimeout(
-      `Tenderly sendEncodeRequest(${payload.networkID})`,
-      getTenderlyEncodeUrl(),
-      fetchOptions,
-    );
-    const response = parseWithSchema(
-      tenderlyStorageEncodingSchema,
-      rawResponse,
-      'Tenderly storage encoding response',
-    );
-
-    return response;
+    const chunks = chunkStateOverrides(payload);
+    if (chunks.length <= 1) {
+      return await sendEncodeChunk(payload);
+    }
+    const responses: StorageEncodingResponse[] = [];
+    for (const chunk of chunks) {
+      responses.push(await sendEncodeChunk(chunk));
+    }
+    return mergeEncodingResponses(responses);
   } catch (err) {
     console.log('logging sendEncodeRequest error');
     console.log(JSON.stringify(err, null, 2));
