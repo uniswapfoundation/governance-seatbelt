@@ -9,9 +9,9 @@ import {
 } from 'viem';
 import { config as migrationDraftConfig } from '../sims/layerzero-wormhole-migration-test.sim';
 import {
+  LAYER_ZERO_ETHEREUM_REMOTE_CHAIN_ID,
   LAYER_ZERO_EXECUTE_ABI,
   LAYER_ZERO_LANE_SUPPORT_MATRIX,
-  LAYER_ZERO_SET_TRUSTED_REMOTE_ADDRESS_ABI,
   UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR,
   UNISWAP_OMNICHAIN_GOVERNANCE_EXECUTOR,
   UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
@@ -26,14 +26,6 @@ function buildLayerZeroExecuteCalldata(remoteChainId: number, payload: Hex): Hex
     abi: LAYER_ZERO_EXECUTE_ABI,
     functionName: 'execute',
     args: [remoteChainId, payload, '0x'],
-  });
-}
-
-function buildLayerZeroTrustedRemoteCalldata(remoteChainId: number, remoteAddress: Hex): Hex {
-  return encodeFunctionData({
-    abi: LAYER_ZERO_SET_TRUSTED_REMOTE_ADDRESS_ABI,
-    functionName: 'setTrustedRemoteAddress',
-    args: [remoteChainId, remoteAddress],
   });
 }
 
@@ -84,7 +76,7 @@ describe('LayerZero proposal parser', () => {
     ]);
   });
 
-  test('extracts MegaETH destination calls after trusted remote setup', () => {
+  test('extracts MegaETH destination calls without requiring same-proposal trusted remote setup', () => {
     const firstTarget = getAddress('0x00000000000000000000000000000000000000c1');
     const secondTarget = getAddress('0x00000000000000000000000000000000000000c2');
     const firstCalldata = encodeFunctionData({
@@ -104,20 +96,16 @@ describe('LayerZero proposal parser', () => {
         { target: secondTarget, calldata: secondCalldata },
       ]),
     );
-    const setupCalldata = buildLayerZeroTrustedRemoteCalldata(
-      LAYER_ZERO_LANE_SUPPORT_MATRIX.megaeth.layerZeroRemoteChainId,
-      UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR,
-    );
 
     const jobs = extractLayerZeroL1L2JobsFromProposal(
-      [UNISWAP_OMNICHAIN_PROPOSAL_SENDER, UNISWAP_OMNICHAIN_PROPOSAL_SENDER],
-      [setupCalldata, executeCalldata],
+      [UNISWAP_OMNICHAIN_PROPOSAL_SENDER],
+      [executeCalldata],
     );
 
     expect(jobs).toHaveLength(1);
     expect(jobs[0]?.destinationChainId).toBe(MEGAETH_CHAIN_ID);
     expect(jobs[0]?.l2FromAddress).toBe(UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR);
-    expect(jobs[0]?.sourceOrder).toBe(1);
+    expect(jobs[0]?.sourceOrder).toBe(0);
     expect(jobs[0]?.calls).toEqual([
       {
         l2TargetAddress: firstTarget,
@@ -150,7 +138,7 @@ describe('LayerZero proposal parser', () => {
     ]);
   });
 
-  test('requires MegaETH trusted remote setup before execute', () => {
+  test('attaches LayerZero receiver trusted remote metadata to destination jobs', () => {
     const payload = buildExecutorPayload([
       {
         target: getAddress('0x00000000000000000000000000000000000000c1'),
@@ -162,9 +150,16 @@ describe('LayerZero proposal parser', () => {
       payload,
     );
 
-    expect(() =>
-      extractLayerZeroL1L2JobsFromProposal([UNISWAP_OMNICHAIN_PROPOSAL_SENDER], [executeCalldata]),
-    ).toThrow('requires setTrustedRemoteAddress before execute');
+    const jobs = extractLayerZeroL1L2JobsFromProposal(
+      [UNISWAP_OMNICHAIN_PROPOSAL_SENDER],
+      [executeCalldata],
+    );
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]?.layerZeroTrustedRemote).toEqual({
+      sourceRemoteChainId: LAYER_ZERO_ETHEREUM_REMOTE_CHAIN_ID,
+      expectedRemoteAddress: UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
+    });
   });
 
   test('supports GovernorBravo-style payloads with signatures plus argument bytes', () => {

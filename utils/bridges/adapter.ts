@@ -4,6 +4,7 @@ import type { WormholeReceiverRuntimeStateByKey } from '../cross-chain/wormhole-
 import type { SimulationStateObjects } from '../derived-state';
 import { extractArbitrumL1L2JobsFromProposal } from './arbitrum';
 import { extractLayerZeroL1L2JobsFromProposal } from './layerzero';
+import { prepareLayerZeroExecution } from './layerzero-execution';
 import { extractOptimismL1L2JobsFromProposal } from './optimism';
 import { extractPolygonFxL1L2JobsFromProposal } from './polygon-fx';
 import { extractWormholeExecutionJobsFromProposal } from './wormhole';
@@ -79,6 +80,7 @@ const CROSS_CHAIN_BRIDGE_ADAPTERS: readonly CrossChainBridgeAdapter[] = [
     bridgeType: 'LayerZeroL1L2',
     extractJobs: ({ targets, calldatas }) =>
       extractLayerZeroL1L2JobsFromProposal(targets, calldatas),
+    prepareExecution: prepareLayerZeroExecution,
   },
 ] as const;
 

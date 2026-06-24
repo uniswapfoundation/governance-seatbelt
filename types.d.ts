@@ -289,6 +289,10 @@ export interface CrossChainExecutionJob {
   destinationChainId: number;
   l2FromAddress: Address;
   wormholeChainId?: number;
+  layerZeroTrustedRemote?: {
+    sourceRemoteChainId: number;
+    expectedRemoteAddress: Address;
+  };
   sourceOrder: number;
   calls: CrossChainExecutionCall[];
 }

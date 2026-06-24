@@ -69,11 +69,11 @@ Wormhole support is defined centrally by the support matrix in [wormhole-support
 
 - Source bridge call: Uniswap `OmnichainProposalSender.execute(uint16,bytes,bytes)`
 - Address model: destination execution uses the configured remote `OmnichainGovernanceExecutor`
-- Main job: decode the LayerZero executor payload and simulate the destination calls directly
+- Main job: decode the LayerZero executor payload, verify the destination receiver trusted-remote config, and simulate the destination calls
 
 LayerZero support exists for migration proposals that still use the old LayerZero path to update remote governance configuration. Future proposals that call Wormhole directly should use `WormholeL1L2`.
 
-The supplied Uniswap `OmnichainProposalSender` has a confirmed trusted remote for Avalanche LayerZero V1 endpoint id `106`. MegaETH uses LayerZero V1 endpoint id `398`, but that id is not configured on the supplied Ethereum sender until the migration proposal calls `setTrustedRemoteAddress(398, 0x8819b86ddF592c3aaAa6f9ec7cE1A0f99FC4322c)`. Seatbelt only treats a MegaETH LayerZero `execute` call as supported when that trusted-remote setup call appears earlier in the same proposal.
+Seatbelt simulates the Ethereum proposal normally, so source-side calls such as `setTrustedRemoteAddress(...)` are covered by the source simulation. Before replaying decoded destination calls, Seatbelt also reads the destination receiver's `trustedRemoteLookup(101)` entry and verifies it points back to the expected Uniswap mainnet sender. This means MegaETH does not need to configure the trusted remote in every proposal, but a bad or missing destination receiver config blocks the destination job before the inner calls are simulated.
 
 ## Wormhole Support Model
 
