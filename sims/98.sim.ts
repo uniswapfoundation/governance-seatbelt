@@ -416,27 +416,19 @@ export const config: SimulationConfigNew = {
     signatures: actions.map(action => action.signature),
     calldatas: actions.map(action => action.calldata),
     description: `
-# [RFC] Update Crosschain Governance Parameters for Avalanche, MegaETH, Soneium, and X Layer
+    # [RFC] Update Crosschain Governance Parameters for Avalanche, MegaETH, Soneium, and X Layer
 
 ## Summary
 
 Secure crosschain messaging is an integral part of Uniswap's governance model. Governance votes like protocol fee adjustments are executed by UNI holders on Ethereum Mainnet and must subsequently be relayed to destination chains.
 
-
-
 This proposal updates Uniswap's crosschain governance system to accommodate the latest best practices. Specifically, we propose to:
-
-
 
 * Transition ownership of the Uniswap v2 and v4 contracts on Soneium and X Layer to CrossChainAccount contracts, which we consider to be the current best practice for executing messages from Ethereum Mainnet on the OP Stack
 
 * Migrate the entire messaging system for the Avalanche and MegaETH deployments from LayerZero v1 (part of which is [being deprecated](https://layerzero.network/blog/ongoing-security-updates)) to Wormhole 
 
-
-
 Note that because Uniswap v3 on both Soneium and X Layer is owned by the \`v3OpenFeeAdapter\`, which is owned by the CrossChainAccount, we do not need to change the parameter on v3 on these chains.
-
-
 
 ---
 
@@ -444,13 +436,14 @@ Note that because Uniswap v3 on both Soneium and X Layer is owned by the \`v3Ope
 
 ### Current Configuration - Avalanche and MegaETH
 
-Both chains currently use LayerZero v1 for governance messaging:
+Both chains currently use LayerZero v1 for governance messaging. The OmnichainProposalSender contract exists on Ethereum and sends messages to OmnichainGovernanceExecutor on remote chains. Additionally, there exists a second OmnichainGovernanceExecutor on MegaETH which owns the ProxyAdmin contract administering the PositionDescriptor periphery contract responsible for rendering LP positions as NFT's.
 
 | Contract | Chain | Address |
 | :---- | :---- | :---- |
 | OmnichainProposalSender | Ethereum | [0xeb0BCF27D1Fb4b25e708fBB815c421Aeb51eA9fc](https://etherscan.io/address/0xeb0BCF27D1Fb4b25e708fBB815c421Aeb51eA9fc) |
 | OmnichainGovernanceExecutor | Avalanche | [0xeb0BCF27D1Fb4b25e708fBB815c421Aeb51eA9fc](https://snowtrace.io/address/0xeb0BCF27D1Fb4b25e708fBB815c421Aeb51eA9fc) |
-| OmnichainGovernanceExecutor | MegaETH | [0x8819b86ddF592c3aaAa6f9ec7cE1A0f99FC4322c](https://explorer.megaeth.com/address/0x8819b86ddF592c3aaAa6f9ec7cE1A0f99FC4322c) |
+| OmnichainGovernanceExecutor | MegaETH | [0x8819b86ddF592c3aaAa6f9ec7cE1A0f99FC4322c](https://mega.etherscan.io/address/0x8819b86ddF592c3aaAa6f9ec7cE1A0f99FC4322c) |
+| OmnichainGovernanceExecutor | MegaETH | [0x51F9629C1e75aF07421E662DBEb2B7dc8deDefd9](https://mega.etherscan.io/address/0x51F9629C1e75aF07421E662DBEb2B7dc8deDefd9) |
 
 ### Proposed Configuration - Avalanche and MegaETH
 
@@ -458,13 +451,13 @@ The LayerZero contracts are replaced with the Wormhole bridge infrastructure fro
 
 **UniswapWormholeSender (Ethereum):** The existing sender contract already deployed on mainnet will be reused — no new deployment required. 
 
-**UniswapWormholeReceiver (Avalanche and MegaETH):** Uniswap Labs has deployed new UniswapWormholeReceiver contracts on both chains. This proposal will authorize them as the trusted governance executors for each chain.
+**UniswapWormholeReceiver (Avalanche and MegaETH):** Uniswap Labs has deployed new UniswapWormholeReceiver contracts on both chains. This proposal will authorize them as the trusted governance executors for each chain. Additionally, the ProxyAdmin owned by the second OmnichainGovernanceExecutor will be unified with under the authority of the UniswapWormholeReceiver on MegaETH.
 
 | Contract | Chain | Address |
 | :---- | :---- | :---- |
 | UniswapWormholeSender | Ethereum | [0xf5F4496219F31CDCBa6130B5402873624585615a](https://etherscan.io/address/0xf5F4496219F31CDCBa6130B5402873624585615a) |
 | UniswapWormholeReceiver | Avalanche | [0x47eB0Cf11a1626462Da3C830bCDe64c3F582B5a6](https://snowtrace.io/address/0x47eB0Cf11a1626462Da3C830bCDe64c3F582B5a6) |
-| UniswapWormholeReceiver | MegaETH | [0xa107580F73BD797Bd8b87Ff24e98346D99F93DdB](https://explorer.megaeth.com/address/0xa107580F73BD797Bd8b87Ff24e98346D99F93DdB) |
+| UniswapWormholeReceiver | MegaETH | [0xa107580F73BD797Bd8b87Ff24e98346D99F93DdB](https://mega.etherscan.io/address/0xa107580F73BD797Bd8b87Ff24e98346D99F93DdB) |
 
 For a detailed discussion of how Wormhole works, please see [this report](https://uniswap.notion.site/Assessment-dac583c6db1240c7b9d294afd7f18035) by the Uniswap Foundation's Bridge Assessment Committee.
 
@@ -496,32 +489,40 @@ This proposal will change those parameters to a CrossChainAccount contract deplo
 
 **In this proposal** (executed if the vote passes):
 
-Execute seven actions:
+Execute nine actions:
 
-1. Finalize LayerZero configuration on MegaETH
+1. (Ethereum) Set Layer Zero "trusted remote" to the OmnichainGovernanceExecutor on MegaETH
 
-2. Transfer ownership of the protocol on MegaETH from LayerZero to Wormhole 
+2. (MegaETH) Transfer ownership of the protocol from OmnichainGovernanceExecutor to UniswapWormholeReceiver
 
-3. Transfer ownership of the protocol on Avalanche from LayerZero to Wormhole
+3. (Avalanche) Transfer ownership of the protocol from OmnichainGovernanceExecutor to UniswapWormholeReceiver
 
-4. Change v2's \`feeToSetter\` on X Layer from the alias address to the \`CrosschainAccount\`
+4. (Soneium) Transfer V2 ownership from the aliased Timelock to CrossChainAccount
 
-5. Change v4's \`owner\` on X Layer from the alias address to the \`CrosschainAccount\`
+5. (Soneium) Transfer V4 ownership from the aliased Timelock to CrossChainAccount
 
-6. Change v2's \`feeToSetter\` on Soneium from the alias address to the \`CrosschainAccount\`
+6. (XLayer) Transfer V2 ownership from aliased Timelock to CrossChainAccount
 
-7. Change v4's \`owner\` on Soneium from the alias address to the \`CrosschainAccount\`
+7. (XLayer) Transfer V4 ownership from the aliased Timelock to CrossChainAccount
 
+8. (Ethereum) Set Layer Zero "trusted remote" to the second OmnichainGovernanceExecutor on MegaETH
 
+9. (MegaETH) Consolidate ProxyAdmin ownership from the second OmnichainGovernanceExecutor to UniswapWormholeReceiver
 
+Notable Implementation Details:
+
+Regarding MegaETH "trusted remote" configurations: The OmnichainProposalSender on Ethereum must be configured to send messages to the OmnichainGovernanceExecutor on MegaETH, but not the OmnichainGovernanceExecutor on Avalanche. This is due to our OmnichainProposalSender's configuration on initial deployment. The "trusted remote" is Layer Zero's means of defining which sender contracts may interact with which receiver contracts.
+
+Regarding ProxyAdmin: There exists two ProxyAdmin contracts per chain, one for the NonfungiblePositionDescriptor (V3 NFT renderer) and one for the PositionDescriptor (V4 NFT renderer). Since ProxyAdmin contracts are designed to administer arbitrarily many proxy contracts, it seems reasonable to consolidate the proxy admin authority of both position descriptors while performing an ownership transition.
+
+Regarding CrossChainAccount: The low level OP-stack chain bridge uses OptimismPortal2. In short, OptimismPortal2's internal details means the protocol on Soneium and X Layer are owned by an "aliased" form of the Timelock address on Ethereum; this alias is derived from adding a standard offset to the Ethereum address. This is an unintuitive system and increases user-error in ownership transitions, so we are migrating to the higher level of abstraction defined by the CrosChainAccount system. This ensures the protocol on Soneium and X Layer are owned by a concrete contract with limits and authority checks from the messages bridged from Ethereum. We already use this system on other OP-stack chains, so this is to update more chains to use it as well. 
 ---
 
 ## Next Steps / Timeline
 
-* **RFC:** Jun 19, 2026
+* **RFC:** Jun 26, 2026
 
 * **Snapshot:** \~1 week after RFC
-
 * **Onchain vote:** Following Snapshot, per standard governance cadence
 
 ---
