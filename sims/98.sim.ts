@@ -8,8 +8,7 @@ const OMNICHAIN_PROPOSAL_SENDER_ABI = parseAbi([
 ]);
 
 const PROXY_ADMIN_ABI = parseAbi([
-    "function transferOwnership(address)",
-    "function changeProxyAdmin(address proxy, address newAdmin)"
+    "function transferOwnership(address)"
 ]);
 
 const V2_FACTORY_ABI = parseAbi([
@@ -202,10 +201,9 @@ const avaxLzTransferOwnershipCalls = [
         signature: "",
         calldata: encodeFunctionData({
             abi: PROXY_ADMIN_ABI,
-            functionName: "changeProxyAdmin",
+            functionName: "transferOwnership",
             args: [
-                AVAX.V3_POSITION_DESCRIPTOR,
-                AVAX.V4_PROXY_ADMIN,
+                AVAX.WORMHOLE_RECEIVER
             ]
         })
     },
@@ -380,10 +378,9 @@ const megaChangeProxyAdmin = {
                     [
                         encodeFunctionData({
                             abi: PROXY_ADMIN_ABI,
-                            functionName: "changeProxyAdmin",
+                            functionName: "transferOwnership",
                             args: [
-                                MEGA.V3_POSITION_DESCRIPTOR,
-                                MEGA.V4_PROXY_ADMIN
+                                AVAX.WORMHOLE_RECEIVER
                             ]
                         })
                     ],
