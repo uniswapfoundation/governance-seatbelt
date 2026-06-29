@@ -1,4 +1,4 @@
-import { encodeAbiParameters, encodeFunctionData, encodePacked, getAddress, parseAbi, parseAbiParameter, parseAbiParameters, parseEther, parseGwei, toBytes } from 'viem';
+import { encodeAbiParameters, encodeFunctionData, encodePacked, getAddress, parseAbi, parseAbiParameters } from 'viem';
 
 import type { SimulationConfigNew } from "../types";
 
@@ -75,6 +75,8 @@ const X_LAYER = {
 const LZ_AVAX_CHAIN_ID = 106;
 const LZ_MEGA_CHAIN_ID = 398;
 
+const FLAT_LAYER_ZERO_FEE = BigInt(0.01 * 1e18);
+
 // -------------------------------------------------------------------------------------------------
 // 00: (Ethereum) Set Layer Zero Trusted Remote For Mega
 //
@@ -140,7 +142,7 @@ const megaLzTransferOwnershipCalls = [
 
 const megaTransferOwnershipFromLzToWormhole = {
     target: ETHEREUM.OMNICHAIN_PROPOSAL_SENDER,
-    value: 0n,
+    value: FLAT_LAYER_ZERO_FEE,
     signature: "",
     calldata: encodeFunctionData({
         abi: OMNICHAIN_PROPOSAL_SENDER_ABI,
@@ -223,7 +225,7 @@ const avaxLzTransferOwnershipCalls = [
 
 const avaxTransferOwnershipFromLztoWormhole = {
     target: ETHEREUM.OMNICHAIN_PROPOSAL_SENDER,
-    value: 0n,
+    value: FLAT_LAYER_ZERO_FEE,
     signature: "",
     calldata: encodeFunctionData({
         abi: OMNICHAIN_PROPOSAL_SENDER_ABI,
@@ -360,9 +362,9 @@ const ethSetTrustedRemoteToMega0x55 = {
 // -------------------------------------------------------------------------------------------------
 // 08: (Mega) Change ProxyAdmin for NonfungiblePositionDescriptor (OPTIONAL)
 //
-const megaChangeProxyAdmin = {
+const megaTransferProxyAdminOwnership = {
     target: ETHEREUM.OMNICHAIN_PROPOSAL_SENDER,
-    value: 0n,
+    value: FLAT_LAYER_ZERO_FEE,
     signature: "",
     calldata: encodeFunctionData({
         abi: OMNICHAIN_PROPOSAL_SENDER_ABI,
@@ -400,7 +402,7 @@ const actions = [
     xLayerV2SetFeeToSetter,
     xLayerPoolManagerTransferOwnership,
     ethSetTrustedRemoteToMega0x55,
-    megaChangeProxyAdmin,
+    megaTransferProxyAdminOwnership,
 ];
 
 export const config: SimulationConfigNew = {
@@ -504,13 +506,13 @@ Execute nine actions:
 
 8. (Ethereum) Set Layer Zero "trusted remote" to the second OmnichainGovernanceExecutor on MegaETH
 
-9. (MegaETH) Consolidate ProxyAdmin ownership from the second OmnichainGovernanceExecutor to UniswapWormholeReceiver
+9. (MegaETH) Transfer ProxyAdmin ownership from the second OmnichainGovernanceExecutor to UniswapWormholeReceiver
 
 Notable Implementation Details:
 
 Regarding MegaETH "trusted remote" configurations: The OmnichainProposalSender on Ethereum must be configured to send messages to the OmnichainGovernanceExecutor on MegaETH, but not the OmnichainGovernanceExecutor on Avalanche. This is due to our OmnichainProposalSender's configuration on initial deployment. The "trusted remote" is Layer Zero's means of defining which sender contracts may interact with which receiver contracts.
 
-Regarding ProxyAdmin: There exists two ProxyAdmin contracts per chain, one for the NonfungiblePositionDescriptor (V3 NFT renderer) and one for the PositionDescriptor (V4 NFT renderer). Since ProxyAdmin contracts are designed to administer arbitrarily many proxy contracts, it seems reasonable to consolidate the proxy admin authority of both position descriptors while performing an ownership transition.
+Regarding ProxyAdmin: There exists two ProxyAdmin contracts per chain, one for the NonfungiblePositionDescriptor (V3 NFT renderer) and one for the PositionDescriptor (V4 NFT renderer). The ProxyAdmin of the V3 descriptor is owned a different OmnichainGovernanceExecutor than the OmnichainGovernanceExecutor which owns the rest of the protocol (including the V4 descriptor). We are transferring ownership of all of them to the same WormholeReceiver, which necessitates two separate "setTrustedRemote" actions (one for each governance executor) and two separate ownership transfer actions.
 
 Regarding CrossChainAccount: The low level OP-stack chain bridge uses OptimismPortal2. In short, OptimismPortal2's internal details means the protocol on Soneium and X Layer are owned by an "aliased" form of the Timelock address on Ethereum; this alias is derived from adding a standard offset to the Ethereum address. This is an unintuitive system and increases user-error in ownership transitions, so we are migrating to the higher level of abstraction defined by the CrosChainAccount system. This ensures the protocol on Soneium and X Layer are owned by a concrete contract with limits and authority checks from the messages bridged from Ethereum. We already use this system on other OP-stack chains, so this is to update more chains to use it as well. 
 ---
