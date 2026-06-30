@@ -33,28 +33,22 @@ const ETHEREUM = {
 const MEGA = {
   OMNICHAIN_GOVERNANCE_EXECUTOR: getAddress('0x8819b86ddF592c3aaAa6f9ec7cE1A0f99FC4322c'),
   OMNICHAIN_GOVERNANCE_EXECUTOR_2: getAddress('0x51F9629C1e75aF07421E662DBEb2B7dc8deDefd9'),
-  LZ_ENDPOINT: getAddress('0xb6319cC6c8c27A8F5dAF0dD3DF91EA35C4720dd7'),
   WORMHOLE_RECEIVER: getAddress('0xa107580F73BD797Bd8b87Ff24e98346D99F93DdB'),
   V2_FACTORY: getAddress('0xbf56488c857A881ae7e3BED27Cf99c10A7Ab7e50'),
   V3_FACTORY: getAddress('0x3a5F0CD7d62452b7f899B2A5758BFa57be0dE478'),
   POOL_MANAGER: getAddress('0xaCB7e78fa05D562e0A5D3089ec896D57D057d38E'),
   V3_PROXY_ADMIN: getAddress('0xdaFBcEB5cA32Dc1DD27A413dA361F32636694BC4'),
   V4_PROXY_ADMIN: getAddress('0x07e7c1cEd961e2C11196751A1aC76E64b0e8b007'),
-  V3_POSITION_DESCRIPTOR: getAddress('0x8D9F62d363486ebadD3F3d735301a99a487a8fD8'),
-  V4_POSITION_DESCRIPTOR: getAddress('0xA9fDbB9D3dce2e1cFB91c4AF1B8Cf4ed62c0041A'),
 };
 
 const AVAX = {
   OMNICHAIN_GOVERNANCE_EXECUTOR: getAddress('0xeb0BCF27D1Fb4b25e708fBB815c421Aeb51eA9fc'),
-  LZ_ENDPOINT: getAddress('0x3c2269811836af69497E5F486A85D7316753cf62'),
   WORMHOLE_RECEIVER: getAddress('0x47eB0Cf11a1626462Da3C830bCDe64c3F582B5a6'),
   V2_FACTORY: getAddress('0x9e5A52f57b3038F1B8EeE45F28b3C1967e22799C'),
   V3_FACTORY: getAddress('0x740b1c1de25031C31FF4fC9A62f554A55cdC1baD'),
   POOL_MANAGER: getAddress('0x06380C0e0912312B5150364B9DC4542BA0DbBc85'),
   V3_PROXY_ADMIN: getAddress('0x9AdA7D7879214073F40183F3410F2b3f088c6381'),
   V4_PROXY_ADMIN: getAddress('0x9b0481d2A2912051f56dC0B806cafe6bdE461c3D'),
-  V3_POSITION_DESCRIPTOR: getAddress('0xE1f93a7cB6fFa2dB4F9d5A2FD43158A428993C09'),
-  V4_POSITION_DESCRIPTOR: getAddress('0x2b1AED9445B05AC1A3B203eCCC1e25dD9351F0A9'),
 };
 
 const SONEIUM = {
@@ -75,6 +69,12 @@ const LZ_AVAX_CHAIN_ID = 106;
 const LZ_MEGA_CHAIN_ID = 398;
 
 const FLAT_LAYER_ZERO_FEE = BigInt(0.01 * 1e18);
+const LAYER_ZERO_ADAPTER_PARAMS_VERSION = 1;
+const LAYER_ZERO_MSG_GAS = 3_000_000n;
+const LAYER_ZERO_ADAPTER_PARAMS = encodePacked(
+  ["uint16", "uint256"],
+  [LAYER_ZERO_ADAPTER_PARAMS_VERSION, LAYER_ZERO_MSG_GAS]
+);
 
 // -------------------------------------------------------------------------------------------------
 // 00: (Ethereum) Set Layer Zero Trusted Remote For Mega
@@ -156,7 +156,7 @@ const megaTransferOwnershipFromLzToWormhole = {
           megaLzTransferOwnershipCalls.map((lzCall) => lzCall.calldata),
         ],
       ),
-      '0x',
+      LAYER_ZERO_ADAPTER_PARAMS,
     ],
   }),
 };
@@ -237,7 +237,7 @@ const avaxTransferOwnershipFromLztoWormhole = {
           avaxLzTransferOwnershipCalls.map((lzCall) => lzCall.calldata),
         ],
       ),
-      '0x',
+      LAYER_ZERO_ADAPTER_PARAMS,
     ],
   }),
 };
@@ -339,9 +339,9 @@ const xLayerPoolManagerTransferOwnership = {
 };
 
 // -------------------------------------------------------------------------------------------------
-// 07: (Ethereum) Set Layer Zero Trusted Remote For Mega (OPTIONAL)
+// 07: (Ethereum) Set Layer Zero Trusted Remote For Mega
 //
-const ethSetTrustedRemoteToMega0x55 = {
+const ethSetTrustedRemoteToMega0x51 = {
   target: ETHEREUM.OMNICHAIN_PROPOSAL_SENDER,
   value: 0n,
   signature: '',
@@ -353,7 +353,7 @@ const ethSetTrustedRemoteToMega0x55 = {
 };
 
 // -------------------------------------------------------------------------------------------------
-// 08: (Mega) Change ProxyAdmin for NonfungiblePositionDescriptor (OPTIONAL)
+// 08: (Mega) Change ProxyAdmin for NonfungiblePositionDescriptor
 //
 const megaTransferProxyAdminOwnership = {
   target: ETHEREUM.OMNICHAIN_PROPOSAL_SENDER,
@@ -381,7 +381,7 @@ const megaTransferProxyAdminOwnership = {
           ],
         ],
       ),
-      '0x',
+      LAYER_ZERO_ADAPTER_PARAMS,
     ],
   }),
 };
@@ -394,7 +394,7 @@ const actions = [
   soneiumPoolManagerTransferOwnership,
   xLayerV2SetFeeToSetter,
   xLayerPoolManagerTransferOwnership,
-  ethSetTrustedRemoteToMega0x55,
+  ethSetTrustedRemoteToMega0x51,
   megaTransferProxyAdminOwnership,
 ];
 
