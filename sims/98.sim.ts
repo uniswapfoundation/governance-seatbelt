@@ -72,8 +72,8 @@ const FLAT_LAYER_ZERO_FEE = BigInt(0.01 * 1e18);
 const LAYER_ZERO_ADAPTER_PARAMS_VERSION = 1;
 const LAYER_ZERO_MSG_GAS = 3_000_000n;
 const LAYER_ZERO_ADAPTER_PARAMS = encodePacked(
-  ["uint16", "uint256"],
-  [LAYER_ZERO_ADAPTER_PARAMS_VERSION, LAYER_ZERO_MSG_GAS]
+  ['uint16', 'uint256'],
+  [LAYER_ZERO_ADAPTER_PARAMS_VERSION, LAYER_ZERO_MSG_GAS],
 );
 
 // -------------------------------------------------------------------------------------------------
