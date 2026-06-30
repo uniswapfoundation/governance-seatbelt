@@ -3,6 +3,7 @@ import {
   type Hex,
   encodeAbiParameters,
   encodeFunctionData,
+  encodePacked,
   getAddress,
   parseAbi,
   toFunctionSelector,
@@ -12,6 +13,7 @@ import {
   LAYER_ZERO_ETHEREUM_REMOTE_CHAIN_ID,
   LAYER_ZERO_EXECUTE_ABI,
   LAYER_ZERO_LANE_SUPPORT_MATRIX,
+  LAYER_ZERO_SET_TRUSTED_REMOTE_ADDRESS_ABI,
   UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR,
   UNISWAP_OMNICHAIN_GOVERNANCE_EXECUTOR,
   UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
@@ -26,6 +28,17 @@ function buildLayerZeroExecuteCalldata(remoteChainId: number, payload: Hex): Hex
     abi: LAYER_ZERO_EXECUTE_ABI,
     functionName: 'execute',
     args: [remoteChainId, payload, '0x'],
+  });
+}
+
+function buildLayerZeroSetTrustedRemoteAddressCalldata(
+  remoteChainId: number,
+  receiver: `0x${string}`,
+): Hex {
+  return encodeFunctionData({
+    abi: LAYER_ZERO_SET_TRUSTED_REMOTE_ADDRESS_ABI,
+    functionName: 'setTrustedRemoteAddress',
+    args: [remoteChainId, encodePacked(['address'], [receiver])],
   });
 }
 
@@ -118,6 +131,42 @@ describe('LayerZero proposal parser', () => {
         l2Value: '0',
       },
     ]);
+  });
+
+  test('uses in-proposal trusted remote changes for subsequent MegaETH executes', () => {
+    const remoteChainId = LAYER_ZERO_LANE_SUPPORT_MATRIX.megaeth.layerZeroRemoteChainId;
+    const firstReceiver = UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR;
+    const secondReceiver = getAddress('0x51F9629C1e75aF07421E662DBEb2B7dc8deDefd9');
+    const firstTarget = getAddress('0x00000000000000000000000000000000000000c1');
+    const secondTarget = getAddress('0x00000000000000000000000000000000000000c2');
+    const firstCalldata = '0x12345678';
+    const secondCalldata = '0x87654321';
+
+    const jobs = extractLayerZeroL1L2JobsFromProposal(
+      [
+        UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
+        UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
+        UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
+        UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
+      ],
+      [
+        buildLayerZeroSetTrustedRemoteAddressCalldata(remoteChainId, firstReceiver),
+        buildLayerZeroExecuteCalldata(
+          remoteChainId,
+          buildExecutorPayload([{ target: firstTarget, calldata: firstCalldata }]),
+        ),
+        buildLayerZeroSetTrustedRemoteAddressCalldata(remoteChainId, secondReceiver),
+        buildLayerZeroExecuteCalldata(
+          remoteChainId,
+          buildExecutorPayload([{ target: secondTarget, calldata: secondCalldata }]),
+        ),
+      ],
+    );
+
+    expect(jobs).toHaveLength(2);
+    expect(jobs.map((job) => job.sourceOrder)).toEqual([1, 3]);
+    expect(jobs.map((job) => job.l2FromAddress)).toEqual([firstReceiver, secondReceiver]);
+    expect(jobs.map((job) => job.calls[0]?.l2TargetAddress)).toEqual([firstTarget, secondTarget]);
   });
 
   test('extracts the supplied Uniswap migration draft calldata shape', () => {

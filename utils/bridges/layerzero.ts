@@ -27,6 +27,9 @@ export const LAYER_ZERO_TRUSTED_REMOTE_LOOKUP_ABI = parseAbi([
 const LAYER_ZERO_EXECUTE_SELECTOR = toFunctionSelector(
   'function execute(uint16 remoteChainId, bytes payload, bytes adapterParams)',
 );
+const LAYER_ZERO_SET_TRUSTED_REMOTE_ADDRESS_SELECTOR = toFunctionSelector(
+  'function setTrustedRemoteAddress(uint16 remoteChainId, bytes remoteAddress)',
+);
 export const LAYER_ZERO_ETHEREUM_REMOTE_CHAIN_ID = 101;
 
 export const UNISWAP_OMNICHAIN_PROPOSAL_SENDER = getAddress(
@@ -92,17 +95,27 @@ function normalizeProposalTarget(target: string): string | null {
   }
 }
 
-function isKnownLayerZeroProposalCall(target: string, data: string): boolean {
-  if (!isHex(data) || data === '0x' || data.length < 10) {
-    return false;
-  }
-
+function isKnownLayerZeroSenderTarget(target: string): boolean {
   const normalizedTarget = normalizeProposalTarget(target);
-  if (!normalizedTarget || !KNOWN_LAYER_ZERO_SENDER_TARGETS.has(normalizedTarget)) {
-    return false;
+  return normalizedTarget !== null && KNOWN_LAYER_ZERO_SENDER_TARGETS.has(normalizedTarget);
+}
+
+function getCalldataSelector(data: string): Hex | null {
+  if (!isHex(data) || data === '0x' || data.length < 10) {
+    return null;
   }
 
-  return slice(data, 0, 4) === LAYER_ZERO_EXECUTE_SELECTOR;
+  return slice(data, 0, 4);
+}
+
+function decodeLayerZeroRemoteAddress(remoteAddress: Hex, calldataIndex: number): `0x${string}` {
+  if (remoteAddress.length !== 42) {
+    throw new Error(
+      `LayerZero trusted remote address in proposal calldata index ${calldataIndex} must be a 20-byte address`,
+    );
+  }
+
+  return getAddress(remoteAddress);
 }
 
 function decodeLayerZeroExecutorPayload(payload: Hex): LayerZeroPayloadDecodeResult {
@@ -178,11 +191,40 @@ export function extractLayerZeroL1L2JobsFromProposal(
   calldatas: readonly string[],
 ): CrossChainExecutionJob[] {
   const jobs: CrossChainExecutionJob[] = [];
+  const activeReceiverByRemoteChainId = new Map<number, `0x${string}`>();
 
   for (let i = 0; i < Math.min(targets.length, calldatas.length); i += 1) {
     const target = targets[i];
     const data = calldatas[i];
-    if (!target || !isKnownLayerZeroProposalCall(target, data)) continue;
+    if (!target || !data || !isKnownLayerZeroSenderTarget(target)) continue;
+
+    const selector = getCalldataSelector(data);
+    if (selector === LAYER_ZERO_SET_TRUSTED_REMOTE_ADDRESS_SELECTOR) {
+      const decoded = (() => {
+        try {
+          return decodeFunctionData({
+            abi: LAYER_ZERO_SET_TRUSTED_REMOTE_ADDRESS_ABI,
+            data: data as Hex,
+          });
+        } catch {
+          throw new Error(
+            `Malformed LayerZero setTrustedRemoteAddress calldata in proposal calldata index ${i}`,
+          );
+        }
+      })();
+
+      const [remoteChainId, remoteAddress] = decoded.args;
+      const resolvedRemoteChainId = Number(remoteChainId);
+      if (getLayerZeroLaneByRemoteChainId(resolvedRemoteChainId)) {
+        activeReceiverByRemoteChainId.set(
+          resolvedRemoteChainId,
+          decodeLayerZeroRemoteAddress(remoteAddress, i),
+        );
+      }
+      continue;
+    }
+
+    if (selector !== LAYER_ZERO_EXECUTE_SELECTOR) continue;
 
     const decoded = (() => {
       try {
@@ -194,8 +236,6 @@ export function extractLayerZeroL1L2JobsFromProposal(
         throw new Error(`Malformed LayerZero execute calldata in proposal calldata index ${i}`);
       }
     })();
-
-    if (decoded.functionName !== 'execute') continue;
 
     const [remoteChainId, payload] = decoded.args;
     const resolvedRemoteChainId = Number(remoteChainId);
@@ -221,7 +261,7 @@ export function extractLayerZeroL1L2JobsFromProposal(
     jobs.push({
       bridgeType: 'LayerZeroL1L2',
       destinationChainId: lane.destinationChainId,
-      l2FromAddress: lane.l2FromAddress,
+      l2FromAddress: activeReceiverByRemoteChainId.get(resolvedRemoteChainId) ?? lane.l2FromAddress,
       layerZeroTrustedRemote: {
         sourceRemoteChainId: LAYER_ZERO_ETHEREUM_REMOTE_CHAIN_ID,
         expectedRemoteAddress: lane.senderTarget,
