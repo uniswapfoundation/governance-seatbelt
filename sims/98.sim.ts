@@ -376,7 +376,7 @@ const megaTransferProxyAdminOwnership = {
             encodeFunctionData({
               abi: PROXY_ADMIN_ABI,
               functionName: 'transferOwnership',
-              args: [AVAX.WORMHOLE_RECEIVER],
+              args: [MEGA.WORMHOLE_RECEIVER],
             }),
           ],
         ],
