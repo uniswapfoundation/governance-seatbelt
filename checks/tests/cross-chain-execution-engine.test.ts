@@ -48,6 +48,7 @@ const TEMPO_RECEIVER = getWormholeLaneByKey('tempo').l2FromAddress;
 const CELO_RECEIVER = getWormholeLaneByKey('celo').l2FromAddress;
 const MONAD_RECEIVER = getWormholeLaneByKey('monad').l2FromAddress;
 const BNB_RECEIVER = getWormholeLaneByKey('bnb').l2FromAddress;
+const SECOND_MEGAETH_LAYER_ZERO_RECEIVER = getAddress('0x51F9629C1e75aF07421E662DBEb2B7dc8deDefd9');
 const CELO_WORMHOLE_CORE = getWormholeLaneByKey('celo').wormholeReceiverCoreAddress;
 const MONAD_WORMHOLE_CORE = getWormholeLaneByKey('monad').wormholeReceiverCoreAddress;
 
@@ -77,6 +78,7 @@ async function resolveMockedReceiverReadContract(
   if (
     request.functionName === 'trustedRemoteLookup' &&
     (receiverAddress === UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR ||
+      receiverAddress === SECOND_MEGAETH_LAYER_ZERO_RECEIVER ||
       receiverAddress === UNISWAP_OMNICHAIN_GOVERNANCE_EXECUTOR)
   ) {
     expect(request.args).toEqual([101]);
@@ -359,13 +361,14 @@ function makeLayerZeroCalldata(
 
 function makeLayerZeroTrustedRemoteCalldata(
   laneKey: keyof typeof LAYER_ZERO_LANE_SUPPORT_MATRIX,
+  receiver?: `0x${string}`,
 ): `0x${string}` {
   const lane = LAYER_ZERO_LANE_SUPPORT_MATRIX[laneKey];
 
   return encodeFunctionData({
     abi: LAYER_ZERO_SET_TRUSTED_REMOTE_ADDRESS_ABI,
     functionName: 'setTrustedRemoteAddress',
-    args: [lane.layerZeroRemoteChainId, lane.l2FromAddress],
+    args: [lane.layerZeroRemoteChainId, receiver ?? lane.l2FromAddress],
   });
 }
 
@@ -452,17 +455,25 @@ describe('cross-chain destination execution engine', () => {
     expect(result.destinationJobResults[0]?.status).toBe('success');
   });
 
-  test('executes LayerZero migration payloads on MegaETH and Avalanche after MegaETH setup', async () => {
+  test('executes LayerZero migration payloads after in-proposal receiver changes', async () => {
     const avalancheTarget = getAddress('0x0000000000000000000000000000000000000a60');
     const firstMegaethTarget = getAddress('0x0000000000000000000000000000000000000a61');
     const secondMegaethTarget = getAddress('0x0000000000000000000000000000000000000a62');
+    const thirdMegaethTarget = getAddress('0x0000000000000000000000000000000000000a63');
     const megaethSetupCalldata = makeLayerZeroTrustedRemoteCalldata('megaeth');
+    const secondMegaethSetupCalldata = makeLayerZeroTrustedRemoteCalldata(
+      'megaeth',
+      SECOND_MEGAETH_LAYER_ZERO_RECEIVER,
+    );
     const avalancheCalldata = makeLayerZeroCalldata('avalanche', [
       { target: avalancheTarget, data: '0x11111111' },
     ]);
     const megaethCalldata = makeLayerZeroCalldata('megaeth', [
       { target: firstMegaethTarget, value: 3n, data: '0x22222222' },
       { target: secondMegaethTarget, value: 0n, data: '0x33333333' },
+    ]);
+    const secondReceiverMegaethCalldata = makeLayerZeroCalldata('megaeth', [
+      { target: thirdMegaethTarget, data: '0x44444444' },
     ]);
 
     enqueueSimulation(
@@ -483,15 +494,32 @@ describe('cross-chain destination execution engine', () => {
         chainId: LAYER_ZERO_LANE_SUPPORT_MATRIX.avalanche.destinationChainId,
       }),
     );
+    enqueueSimulation(
+      makeSimulation({
+        id: 'layerzero-megaeth-second-receiver-step',
+        chainId: LAYER_ZERO_LANE_SUPPORT_MATRIX.megaeth.destinationChainId,
+      }),
+    );
 
     const result = await handleCrossChainSimulations(
-      makeSourceResult([megaethSetupCalldata, megaethCalldata, avalancheCalldata], {
-        targets: [
-          UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
-          UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
-          UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
+      makeSourceResult(
+        [
+          megaethSetupCalldata,
+          megaethCalldata,
+          avalancheCalldata,
+          secondMegaethSetupCalldata,
+          secondReceiverMegaethCalldata,
         ],
-      }),
+        {
+          targets: [
+            UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
+            UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
+            UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
+            UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
+            UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
+          ],
+        },
+      ),
     );
 
     const trustedRemoteReads = mockedReceiverReadContract.mock.calls
@@ -506,8 +534,12 @@ describe('cross-chain destination execution engine', () => {
         address: UNISWAP_OMNICHAIN_GOVERNANCE_EXECUTOR,
         args: [101],
       }),
+      expect.objectContaining({
+        address: SECOND_MEGAETH_LAYER_ZERO_RECEIVER,
+        args: [101],
+      }),
     ]);
-    expect(mockedSendSimulation).toHaveBeenCalledTimes(3);
+    expect(mockedSendSimulation).toHaveBeenCalledTimes(4);
     expect(transportCalls[0]).toMatchObject({
       network_id: `${LAYER_ZERO_LANE_SUPPORT_MATRIX.megaeth.destinationChainId}`,
       from: UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR,
@@ -529,12 +561,24 @@ describe('cross-chain destination execution engine', () => {
       input: '0x11111111',
       value: '0',
     });
+    expect(transportCalls[3]).toMatchObject({
+      network_id: `${LAYER_ZERO_LANE_SUPPORT_MATRIX.megaeth.destinationChainId}`,
+      from: SECOND_MEGAETH_LAYER_ZERO_RECEIVER,
+      to: thirdMegaethTarget,
+      input: '0x44444444',
+      value: '0',
+    });
     expect(result.destinationJobResults.map((job) => job.bridgeType)).toEqual([
       'LayerZeroL1L2',
       'LayerZeroL1L2',
+      'LayerZeroL1L2',
     ]);
-    expect(result.destinationJobResults.map((job) => job.stepResults.length)).toEqual([2, 1]);
-    expect(result.destinationJobResults.map((job) => job.status)).toEqual(['success', 'success']);
+    expect(result.destinationJobResults.map((job) => job.stepResults.length)).toEqual([2, 1, 1]);
+    expect(result.destinationJobResults.map((job) => job.status)).toEqual([
+      'success',
+      'success',
+      'success',
+    ]);
   });
 
   test('executes the receiver-auth LayerZero sim fixture when receiver trusts expected remote', async () => {
