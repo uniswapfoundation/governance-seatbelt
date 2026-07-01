@@ -25,9 +25,11 @@ import { ChainLogo } from './structured-report/ChainLogo';
 import {
   formatBridgeType,
   formatCrossChainCall,
+  getCrossChainJobSourceLabel,
   getCrossChainStepTarget,
   getCrossChainStepTargetLabel,
   getCrossChainTransportLabel,
+  groupCrossChainJobsByDisplayedSource,
 } from './structured-report/cross-chain';
 
 type RiskTag = 'Upgrade' | 'Admin/Role' | 'Token Approval' | 'Token Transfer' | 'ETH Value';
@@ -1012,41 +1014,61 @@ function CrossChainCallsSection({
               </div>
             </div>
 
-            {chainJobs.map((job) => {
-              const stepCount = job.steps.length;
+            {groupCrossChainJobsByDisplayedSource(chainJobs).map((jobGroup) => {
+              const firstJob = jobGroup[0];
+              if (!firstJob) return null;
+
+              const sourceOrders = jobGroup.map((job) => job.sourceOrder).join('-');
+              const groupKey = `${firstJob.bridgeType}-${firstJob.l2FromAddress}-${firstJob.status}-${sourceOrders}`;
+              const groupSteps = jobGroup.flatMap((job) => job.steps.map((msg) => ({ job, msg })));
+              const stepCount = groupSteps.length;
+              const sourceLabel = getCrossChainJobSourceLabel(firstJob);
 
               return (
                 <div
-                  key={`${chainId}-${job.sourceOrder}`}
+                  key={`${chainId}-${groupKey}`}
                   className="border border-muted rounded-lg p-3 bg-card space-y-2"
                 >
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-sm font-medium">
                         {stepCount} destination call{stepCount === 1 ? '' : 's'}
                       </span>
-                      {job.status === 'skipped' && (
+                      {firstJob.status === 'skipped' && (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                           Skipped
                         </Badge>
                       )}
-                      {job.status === 'failure' && (
+                      {firstJob.status === 'failure' && (
                         <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
                           Failed
                         </Badge>
                       )}
                     </div>
+                    {firstJob.l2FromAddress ? (
+                      <div className="inline-flex items-center gap-1 text-[11px] text-muted-foreground shrink-0">
+                        <span>{sourceLabel}</span>
+                        <ExplorerAddressLink
+                          address={firstJob.l2FromAddress}
+                          baseUrl={explorerBaseUrl}
+                          className="font-mono hover:underline"
+                        >
+                          {firstJob.l2FromAddress.slice(0, 6)}...
+                          {firstJob.l2FromAddress.slice(-4)}
+                        </ExplorerAddressLink>
+                      </div>
+                    ) : null}
                   </div>
 
-                  {job.error && (
+                  {firstJob.error && (
                     <div className="p-2 bg-red-100 border border-red-200 rounded text-red-800 text-[11px]">
-                      {job.error}
+                      {firstJob.error}
                     </div>
                   )}
 
                   <div className="space-y-2">
                     {stepCount ? (
-                      job.steps.map((msg, index) => {
+                      groupSteps.map(({ job, msg }, index) => {
                         const visibleSignature = formatCrossChainCall(msg);
                         const transportLabel = getCrossChainTransportLabel(msg);
                         const stepTarget = getCrossChainStepTarget(msg);
@@ -1057,7 +1079,7 @@ function CrossChainCallsSection({
 
                         return (
                           <details
-                            key={`${chainId}-${job.sourceOrder}-${index}`}
+                            key={`${chainId}-${job.sourceOrder}-${msg.stepIndex}-${index}`}
                             className={`group border rounded ${isFailed ? 'border-red-200 bg-red-50/50' : 'border-muted/60'}`}
                           >
                             <summary className="cursor-pointer select-none px-2.5 py-1.5 flex items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
@@ -1118,11 +1140,13 @@ function CrossChainCallsSection({
                                 </div>
                               )}
 
-                              {job.l2FromAddress && (
+                              {firstJob.l2FromAddress && (
                                 <div className="flex items-center gap-3">
-                                  <span className="text-muted-foreground w-14 shrink-0">From</span>
+                                  <span className="text-muted-foreground w-14 shrink-0">
+                                    {sourceLabel}
+                                  </span>
                                   <AddressValue
-                                    address={job.l2FromAddress}
+                                    address={firstJob.l2FromAddress}
                                     baseUrl={explorerBaseUrl}
                                     labels={labels}
                                     chainId={chainId}
@@ -1156,7 +1180,7 @@ function CrossChainCallsSection({
 
                                     return (
                                       <div
-                                        key={`${chainId}-${job.sourceOrder}-${index}-arg-${argIndex}`}
+                                        key={`${chainId}-${job.sourceOrder}-${msg.stepIndex}-${index}-arg-${argIndex}`}
                                         className="flex items-center gap-3"
                                       >
                                         <span className="text-muted-foreground w-14 shrink-0 truncate">

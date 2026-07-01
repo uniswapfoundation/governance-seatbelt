@@ -17,6 +17,29 @@ export function formatBridgeType(bridgeType: string | undefined): string | undef
   return BRIDGE_TYPE_LABELS[bridgeType] ?? bridgeType;
 }
 
+export function getCrossChainJobSourceLabel(job: CrossChainJobPreview): string {
+  return job.bridgeType === 'LayerZeroL1L2' ? 'Receiver' : 'From';
+}
+
+export function groupCrossChainJobsByDisplayedSource(
+  jobs: CrossChainJobPreview[],
+): CrossChainJobPreview[][] {
+  const groups = new Map<string, CrossChainJobPreview[]>();
+
+  for (const job of jobs) {
+    const key = [job.bridgeType, job.l2FromAddress.toLowerCase(), job.status, job.error ?? ''].join(
+      ':',
+    );
+    const group = groups.get(key) ?? [];
+    group.push(job);
+    groups.set(key, group);
+  }
+
+  return Array.from(groups.values()).map((group) =>
+    [...group].sort((a, b) => a.sourceOrder - b.sourceOrder),
+  );
+}
+
 export function formatCrossChainCall(step: CrossChainJobStepPreview): string {
   if (step.forwardedCall?.signature) return step.forwardedCall.signature;
   if (step.forwardedCall?.selector) return step.forwardedCall.selector;
