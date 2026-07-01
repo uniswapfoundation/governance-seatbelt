@@ -9,9 +9,11 @@ import { ChainLogo } from './ChainLogo';
 import {
   formatBridgeType,
   formatCrossChainCall,
+  getCrossChainJobSourceLabel,
   getCrossChainStepTarget,
   getCrossChainStepTargetLabel,
   getCrossChainTransportLabel,
+  groupCrossChainJobsByDisplayedSource,
 } from './cross-chain';
 import { buildAddressLinkForExplorer } from './explorer';
 
@@ -80,22 +82,50 @@ export function CrossChainPreview({ jobs }: { jobs: CrossChainJobPreview[] }) {
             </div>
 
             <div className="space-y-2">
-              {chainJobs.map((job) => {
-                const jobKey = `${job.chainId}-${job.bridgeType}-${job.sourceOrder}-${job.l2FromAddress}-${job.status}`;
-                const stepCount = job.steps.length;
+              {groupCrossChainJobsByDisplayedSource(chainJobs).map((jobGroup) => {
+                const firstJob = jobGroup[0];
+                if (!firstJob) return null;
+
+                const sourceOrders = jobGroup.map((job) => job.sourceOrder).join('-');
+                const jobKey = `${firstJob.chainId}-${firstJob.bridgeType}-${sourceOrders}-${firstJob.l2FromAddress}-${firstJob.status}`;
+                const groupSteps = jobGroup.flatMap((job) =>
+                  job.steps.map((step) => ({ job, step })),
+                );
+                const stepCount = groupSteps.length;
+                const sourceLabel = getCrossChainJobSourceLabel(firstJob);
 
                 return (
                   <div key={jobKey} className="border border-border/40 rounded bg-muted/20 p-2.5">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="text-xs font-medium">
-                        {stepCount} destination call{stepCount === 1 ? '' : 's'}
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium">
+                          {stepCount} destination call{stepCount === 1 ? '' : 's'}
+                        </div>
+                        {firstJob.l2FromAddress ? (
+                          <div className="mt-0.5 text-[10px] text-muted-foreground">
+                            {sourceLabel}{' '}
+                            <a
+                              href={buildAddressLinkForExplorer(
+                                firstJob.l2FromAddress,
+                                explorerBaseUrl,
+                              )}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono hover:text-foreground"
+                              title={firstJob.l2FromAddress}
+                            >
+                              {firstJob.l2FromAddress.slice(0, 6)}...
+                              {firstJob.l2FromAddress.slice(-4)}
+                            </a>
+                          </div>
+                        ) : null}
                       </div>
-                      <CrossChainStatusBadge status={job.status} />
+                      <CrossChainStatusBadge status={firstJob.status} />
                     </div>
 
                     {stepCount ? (
                       <div className="mt-2 space-y-2">
-                        {job.steps.map((step, index) => {
+                        {groupSteps.map(({ job, step }, index) => {
                           const target = getCrossChainStepTarget(step);
                           const targetLabel = getCrossChainStepTargetLabel(step);
                           const call = formatCrossChainCall(step);
@@ -103,7 +133,7 @@ export function CrossChainPreview({ jobs }: { jobs: CrossChainJobPreview[] }) {
 
                           return (
                             <div
-                              key={`${jobKey}-${step.stepIndex}-${index}`}
+                              key={`${jobKey}-${job.sourceOrder}-${step.stepIndex}-${index}`}
                               className="rounded border border-border/30 bg-background/70 p-2"
                             >
                               <div className="flex items-center justify-between gap-2">
@@ -158,8 +188,8 @@ export function CrossChainPreview({ jobs }: { jobs: CrossChainJobPreview[] }) {
                       </code>
                     )}
 
-                    {job.error ? (
-                      <div className="text-[10px] text-red-600 mt-1">{job.error}</div>
+                    {firstJob.error ? (
+                      <div className="text-[10px] text-red-600 mt-1">{firstJob.error}</div>
                     ) : null}
                   </div>
                 );

@@ -125,9 +125,10 @@ describe('CallGroupedView cross-chain summary headers', () => {
     expect(html).toContain('bridgeSecond');
     expect(html).toContain('cleanup');
     expect(html).toContain('3 cross-chain destination calls');
-    expect(html).toContain('2 destination calls');
+    expect(html).toContain('3 destination calls');
     expect(html).toContain('via Arbitrum');
     expect(html).not.toContain('via ArbitrumL1L2');
+    expect(html).toContain('From');
     expect(html).toContain('Arbitrum target 1');
     expect(html).toContain('Arbitrum target 2');
     expect(html).toContain('0x2222222222222222222222222222222222222222');
@@ -137,6 +138,50 @@ describe('CallGroupedView cross-chain summary headers', () => {
     );
     expect(html).not.toContain('1 step');
     expect(html).not.toContain('2 steps');
+  });
+
+  it('labels LayerZero job sources as receivers', () => {
+    const html = renderToStaticMarkup(
+      createElement(CallGroupedView, {
+        proposal,
+        report: makeReport([
+          makeJob({
+            bridgeType: 'LayerZeroL1L2',
+            chainName: 'MegaETH',
+            l2FromAddress: '0x51F9629C1e75aF07421E662DBEb2B7dc8deDefd9',
+          }),
+        ]),
+      }),
+    );
+
+    expect(html).toContain('via LayerZero');
+    expect(html).toContain('Receiver');
+    expect(html).toContain('0x51F9...efd9');
+  });
+
+  it('keeps different LayerZero receivers in separate cards', () => {
+    const html = renderToStaticMarkup(
+      createElement(CallGroupedView, {
+        proposal,
+        report: makeReport([
+          makeJob({
+            bridgeType: 'LayerZeroL1L2',
+            chainName: 'MegaETH',
+            l2FromAddress: '0x8819b86ddF592c3aaAa6f9ec7cE1A0f99FC4322c',
+          }),
+          makeJob({
+            bridgeType: 'LayerZeroL1L2',
+            chainName: 'MegaETH',
+            l2FromAddress: '0x51F9629C1e75aF07421E662DBEb2B7dc8deDefd9',
+            sourceOrder: 1,
+          }),
+        ]),
+      }),
+    );
+
+    expect(html).toContain('0x8819...322c');
+    expect(html).toContain('0x51F9...efd9');
+    expect(html.match(/1 destination call/g) ?? []).toHaveLength(2);
   });
 
   it('shows forwarded inner calls in the detailed cross-chain call list', () => {
