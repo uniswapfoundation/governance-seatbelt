@@ -139,26 +139,18 @@ export async function getProposalIds(
   latestBlockNum: bigint,
 ): Promise<bigint[]> {
   if (governorType === 'bravo') {
-    // Fetch all proposal IDs
     const governor = governorBravo(address);
-    const proposalCreatedEvents = await publicClient.getContractEvents({
-      address: governor.address,
-      abi: GOVERNOR_ABI,
-      eventName: 'ProposalCreated',
-      fromBlock: 0n,
-      toBlock: latestBlockNum,
-    });
+    const [initialProposalId, proposalCount] = await Promise.all([
+      governor.read.initialProposalId(),
+      governor.read.proposalCount(),
+    ]);
 
-    // Get all proposal IDs from events
-    const allProposalIds = proposalCreatedEvents
-      .map((event) => event.args.id)
-      .filter((id): id is bigint => id !== undefined);
+    const proposalIds: bigint[] = [];
+    for (let id = initialProposalId + 1n; id <= proposalCount; id += 1n) {
+      proposalIds.push(id);
+    }
 
-    // Remove proposals from GovernorAlpha based on the initial GovernorBravo proposal ID
-    const initialProposalId = await governor.read.initialProposalId();
-
-    // Filter out those that are less than or equal to initialProposalId
-    return allProposalIds.filter((id) => id > initialProposalId);
+    return proposalIds;
   }
 
   // Fetch all proposal IDs for OZ governor
