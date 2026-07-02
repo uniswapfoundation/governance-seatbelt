@@ -52,7 +52,7 @@ export interface ChainConfig {
   rpcUrl: string;
 }
 
-const MAINNET_RPC_URL = process.env.MAINNET_RPC_URL || 'https://cloudflare-eth.com';
+const MAINNET_RPC_URL = process.env.MAINNET_RPC_URL || 'https://ethereum-rpc.publicnode.com';
 const ARBITRUM_RPC_URL = process.env.ARBITRUM_RPC_URL || arbitrum.rpcUrls.default.http[0];
 
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
