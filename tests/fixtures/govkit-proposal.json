@@ -1,0 +1,14 @@
+{
+  "type": "new",
+  "daoName": "Uniswap",
+  "description": "GovKit exported proposal fixture",
+  "governorAddress": "0x408ED6354d4973f66138C91495F2f2FCbd8724C3",
+  "governorType": "bravo",
+  "targets": [
+    "0x0000000000000000000000000000000000000123",
+    "0x0000000000000000000000000000000000000456"
+  ],
+  "values": [0, 0],
+  "signatures": ["", ""],
+  "calldatas": ["0x", "0x"]
+}

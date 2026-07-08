@@ -42,11 +42,13 @@ import {
   evaluateDependencyOutcome,
   mergeStateObjects,
 } from './utils/derived-state';
+import { readGovKitProposalJson } from './utils/govkit-proposal-json';
 
 interface CliOptions {
   proposalId?: bigint;
   derivedFromProposalId?: bigint;
   derivedFromSimId?: string;
+  proposalJsonPath?: string;
 }
 
 interface DerivedContext {
@@ -82,9 +84,16 @@ function parseCliOptions(argv: string[]): CliOptions {
       continue;
     }
 
+    if (arg === '--proposal-json') {
+      if (!next) throw new Error('Missing value for --proposal-json');
+      options.proposalJsonPath = next;
+      i += 1;
+      continue;
+    }
+
     if (arg === '--help') {
       console.log(
-        '\nSeatbelt simulation CLI options:\n  --proposal-id <id>                Run only this on-chain proposal\n  --derived-from-proposal-id <id>   Derive state from predecessor proposal before running target\n  --derived-from-sim-id <sim-name>  Derive state from predecessor local sim config (sims/<sim-name>.sim.ts)\n',
+        '\nSeatbelt simulation CLI options:\n  --proposal-id <id>                Run only this on-chain proposal\n  --proposal-json <path>            Run a new proposal from a GovKit JSON export\n  --derived-from-proposal-id <id>   Derive state from predecessor proposal before running target\n  --derived-from-sim-id <sim-name>  Derive state from predecessor local sim config (sims/<sim-name>.sim.ts)\n',
       );
       process.exit(0);
     }
@@ -505,15 +514,36 @@ async function main() {
     );
   }
 
-  let governorType: GovernorType;
+  if (cliOptions.proposalJsonPath && cliOptions.proposalId) {
+    throw new Error('Choose only one proposal source: --proposal-json or --proposal-id');
+  }
 
-  if (SIM_NAME) {
+  if (cliOptions.proposalJsonPath && SIM_NAME) {
+    throw new Error('Choose only one local simulation source: --proposal-json or SIM_NAME');
+  }
+
+  let governorType: GovernorType;
+  let localSimulation: { config: SimulationConfig; label: string } | null = null;
+
+  if (cliOptions.proposalJsonPath) {
+    localSimulation = {
+      config: readGovKitProposalJson(cliOptions.proposalJsonPath),
+      label: cliOptions.proposalJsonPath,
+    };
+  } else if (SIM_NAME) {
     const configPath = `./sims/${SIM_NAME}.sim.ts`;
     if (!existsSync(configPath)) {
       throw new Error(`Simulation config file not found for '${SIM_NAME}' at path: ${configPath}`);
     }
 
-    const config: SimulationConfig = await import(configPath).then((d) => d.config);
+    localSimulation = {
+      config: await import(configPath).then((d) => d.config),
+      label: SIM_NAME,
+    };
+  }
+
+  if (localSimulation) {
+    const { config, label } = localSimulation;
     governorType = config.governorType;
 
     let derivedExecutionOptions: SimulationExecutionOptions | undefined;
@@ -567,25 +597,23 @@ async function main() {
       provenance = derivedContext.provenance;
     }
 
-    console.log(`[Index] Simulating source chain for ${SIM_NAME}...`);
+    console.log(`[Index] Simulating source chain for ${label}...`);
     const finalResult = await runSimulationPipeline(config, derivedExecutionOptions);
-    console.log(`[Index] Cross-chain handling complete for ${SIM_NAME}.`);
+    console.log(`[Index] Cross-chain handling complete for ${label}.`);
 
     const { sim, proposal, deps } = finalResult;
 
     if (!sim.transaction.status) {
       console.error(
-        `[Index][FAILURE] Source simulation failed for ${SIM_NAME}. Proceeding to checks/reporting anyway.`,
+        `[Index][FAILURE] Source simulation failed for ${label}. Proceeding to checks/reporting anyway.`,
       );
     }
 
     if (finalResult.crossChainFailure) {
-      console.error(
-        `[Index][FAILURE] One or more destination execution jobs failed for ${SIM_NAME}.`,
-      );
+      console.error(`[Index][FAILURE] One or more destination execution jobs failed for ${label}.`);
     }
 
-    console.log(`[Index] Processing ${SIM_NAME} simulation...`);
+    console.log(`[Index] Processing ${label} simulation...`);
     await processSimulation(
       config,
       governorType,
@@ -597,7 +625,7 @@ async function main() {
       provenance,
     );
 
-    console.log(`[Index] Reports saved for ${SIM_NAME}.`);
+    console.log(`[Index] Reports saved for ${label}.`);
   } else {
     if (!GOVERNOR_ADDRESS) throw new Error('Must provide a GOVERNOR_ADDRESS');
     if (!DAO_NAME) throw new Error('Must provide a DAO_NAME');

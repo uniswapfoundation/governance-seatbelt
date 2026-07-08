@@ -359,6 +359,22 @@ export const config = {
 
 Then run: `SIM_NAME=my-proposal bun start`
 
+### GovKit JSON Exports
+
+For proposal JSON exported from GovKit, pass the file directly:
+
+```bash
+bun run index.ts --proposal-json ./proposal.json
+```
+
+GovKit JSON is parsed as a new proposal simulation. Large wei values must be decimal strings so JavaScript does not lose precision:
+
+```json
+"values": ["0", "1000000000000000000"]
+```
+
+Small safe JSON numbers like `0` are accepted for compatibility, but unsafe large JSON numbers are rejected.
+
 ### Testing Setup
 
 To verify your setup works:
