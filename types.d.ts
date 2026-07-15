@@ -913,6 +913,8 @@ export interface GenerateReportsParams {
   proposalState?: string;
   // Provenance metadata for derived-state simulation chains
   provenance?: DerivedSimulationDependency;
+  // Override bulk output when a local flow should feed the frontend directly
+  simulationResultsOutputPath?: string;
 }
 
 export interface WriteSimulationResultsJsonParams {

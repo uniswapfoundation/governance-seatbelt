@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process';
 import { existsSync, promises as fsp, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 import { mdToPdf } from 'md-to-pdf';
 import type { Link, Root } from 'mdast';
 import rehypeSanitize from 'rehype-sanitize';
@@ -1186,7 +1186,7 @@ export function writeSimulationResultsJson(params: WriteSimulationResultsJsonPar
 
 /**
  * Generates the proposal report and saves Markdown, PDF, and HTML versions of it.
- * Also writes the report data to the frontend/public directory for easy access.
+ * Also writes the simulation results to the configured output path.
  * @param blocks the relevant blocks for the proposal.
  * @param proposal The proposal details.
  * @param checks The checks results.
@@ -1215,6 +1215,7 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     contracts,
     proposalState,
     provenance,
+    simulationResultsOutputPath,
   } = params;
   console.log(`[Report] Generating report for proposal ${proposal.id} (${proposal.proposalId})`);
   console.log(`[Report] Output directory: ${outputDir}`);
@@ -1347,10 +1348,7 @@ export async function generateAndSaveReports(params: GenerateReportsParams) {
     writeCoverageJson(coverage, outputDir, id);
   }
 
-  // Write simulation results JSON for both SIM_NAME and bulk modes
-  const simulationResultsPath = process.env.SIM_NAME
-    ? join(dirname(__dirname), 'frontend', 'public', 'simulation-results.json') // SIM_NAME mode: frontend directory
-    : `${path}-simulation-results.json`; // Bulk mode: alongside other reports
+  const simulationResultsPath = simulationResultsOutputPath ?? `${path}-simulation-results.json`;
 
   writeSimulationResultsJson({
     governorType,

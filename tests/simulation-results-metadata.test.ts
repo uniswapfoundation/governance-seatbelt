@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type {
@@ -190,6 +190,28 @@ describe('Simulation Results Metadata', () => {
       expect(data).toHaveProperty('report');
       expect(data.report.structuredReport.metadata.governorAddress).toBe(mockGovernorAddress);
     }
+  });
+
+  test('should replace an existing frontend artifact at an explicit output path', async () => {
+    const frontendPublicDir = join(testOutputDir, 'frontend', 'public');
+    const frontendArtifactPath = join(frontendPublicDir, 'simulation-results.json');
+    mkdirSync(frontendPublicDir, { recursive: true });
+    writeFileSync(frontendArtifactPath, JSON.stringify({ proposalData: { id: 'stale' } }));
+
+    await generateAndSaveReports({
+      governorType: 'bravo',
+      blocks: mockBlocks,
+      proposal: mockProposal,
+      checks: mockChecks,
+      outputDir: testOutputDir,
+      governorAddress: mockGovernorAddress,
+      simulationResultsOutputPath: frontendArtifactPath,
+    });
+
+    const content = readFileSync(frontendArtifactPath, 'utf8');
+    const data = JSON.parse(content);
+    expect(data.proposalData.id).toBe('123');
+    expect(data.proposalData.description).toBe(mockProposal.description);
   });
 
   test('should include coverage section in markdown report when provided', async () => {
