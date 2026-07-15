@@ -22,7 +22,7 @@
     "contract:check": "bun test checks/tests/report-json-contract.test.ts",
     "check-proposal": "bun run-checks.ts",
     "sim": "bun start",
-    "propose": "bun run setup && bun run sim && cd frontend && bun dev",
+    "propose": "bash scripts/propose.sh",
     "e2e:local": "bun run scripts/e2e-local-frontend.ts",
     "e2e:local:set-proposed": "bun run scripts/e2e-local-set-proposed.ts",
     "upload": "bun run scripts/upload.ts",
