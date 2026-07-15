@@ -3,6 +3,7 @@
  */
 
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { getAddress } from 'viem';
 import { mainnet } from 'viem/chains';
 import { generateAndSaveReports } from './presentation/report';
@@ -54,6 +55,13 @@ interface CliOptions {
 interface DerivedContext {
   executionOptions: SimulationExecutionOptions;
   provenance: DerivedSimulationDependency;
+}
+
+interface ProcessSimulationOptions {
+  provenance?: DerivedSimulationDependency;
+  shouldCache?: boolean;
+  simulationResultsOutputPath?: string;
+  writeReports?: boolean;
 }
 
 function parseCliOptions(argv: string[]): CliOptions {
@@ -231,10 +239,14 @@ async function processSimulation(
   simulationResult: SimulationResult,
   proposalId: string,
   proposalState: string,
-  shouldCache = true,
-  provenance?: DerivedSimulationDependency,
-  writeReports = true,
+  options: ProcessSimulationOptions = {},
 ) {
+  const {
+    provenance,
+    shouldCache = true,
+    simulationResultsOutputPath,
+    writeReports = true,
+  } = options;
   const {
     sim,
     proposal,
@@ -373,6 +385,7 @@ async function processSimulation(
       contracts: sim.contracts,
       proposalState,
       provenance,
+      simulationResultsOutputPath,
     });
   }
 
@@ -462,9 +475,7 @@ async function buildDerivedContext(params: {
     predecessorResult,
     predecessorResult.proposal.id.toString(),
     params.predecessorState,
-    false,
-    undefined,
-    false,
+    { shouldCache: false, writeReports: false },
   );
 
   const outcome = evaluateDependencyOutcome(
@@ -621,8 +632,16 @@ async function main() {
       finalResult,
       proposal.id.toString(),
       'Pending',
-      false,
-      provenance,
+      {
+        provenance,
+        shouldCache: false,
+        simulationResultsOutputPath: join(
+          import.meta.dir,
+          'frontend',
+          'public',
+          'simulation-results.json',
+        ),
+      },
     );
 
     console.log(`[Index] Reports saved for ${label}.`);
@@ -800,8 +819,7 @@ async function main() {
           finalResult,
           simProposal.id.toString(),
           simProposal.state,
-          shouldCacheCanonicalProposal,
-          provenance,
+          { provenance, shouldCache: shouldCacheCanonicalProposal },
         );
 
         simOutputs.push(processed.simulationData);
