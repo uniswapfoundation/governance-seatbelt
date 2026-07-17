@@ -5,6 +5,7 @@ import { generateProposalSummary } from '../utils/proposal-summary';
 
 describe('Proposal Summary Generation', () => {
   const arbitrumName = getChainName(42161);
+  const robinhoodName = getChainName(4663);
   const optimismName = getChainName(10);
 
   // Helper function to create a basic proposal
@@ -147,6 +148,28 @@ describe('Proposal Summary Generation', () => {
 
       const summary = generateProposalSummary(proposal, checks);
       expect(summary).toContain(`Sends via ${arbitrumName} bridge`);
+    });
+
+    it('should identify Robinhood retryable tickets by their Inbox target', () => {
+      const proposal = createProposal({
+        targets: [
+          '0x1A07cc4BD17E0118BdB54D70990D2158AbAD7a2D',
+          '0x1A07cc4BD17E0118BdB54D70990D2158AbAD7a2D',
+        ],
+      });
+      const checks = createChecks([
+        '`0x123...` calls `createRetryableTicket(...)` on Inbox at 0x1A07... (decoded from ABI)',
+      ]);
+      const l2Checks: Record<number, AllCheckResults> = {
+        4663: createChecks([
+          '`0x2bad...` calls `setFeeTo(...)` on UniswapV2Factory (decoded from ABI)',
+        ]),
+      };
+
+      const summary = generateProposalSummary(proposal, checks, undefined, l2Checks);
+
+      expect(summary).toContain(`Sends via ${robinhoodName} bridge`);
+      expect(summary).not.toContain(arbitrumName);
     });
 
     it('should detect Optimism sendMessage calls', () => {

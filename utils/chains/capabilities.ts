@@ -7,9 +7,11 @@ import {
   celo,
   ink,
   mainnet,
+  megaeth,
   monad,
   optimism,
   polygon,
+  robinhood,
   soneium,
   tempo,
   unichain,
@@ -18,7 +20,6 @@ import {
   zora,
 } from 'viem/chains';
 import { getCanonicalChainName } from './chain-name';
-import { megaeth } from './megaeth';
 
 type ChainCapability = {
   supportsL2Checks: boolean;
@@ -43,6 +44,11 @@ const CHAIN_CAPABILITIES: Record<number, ChainCapability> = {
     isOpStackDestination: true,
   },
   [arbitrum.id]: {
+    supportsL2Checks: true,
+    supportsTenderlyDestinationSimulation: true,
+    isOpStackDestination: false,
+  },
+  [robinhood.id]: {
     supportsL2Checks: true,
     supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: false,

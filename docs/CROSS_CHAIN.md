@@ -44,6 +44,8 @@ type BridgeType =
 - Source bridge call: `DelayedInbox.createRetryableTicket(...)`
 - Address model: L1 sender is alias-adjusted on L2
 - Main job: extract retryable ticket payload and simulate the L2 call
+- Supported lanes: Arbitrum One (`42161`) and Robinhood Chain (`4663`)
+- Lane selection: the Ethereum Inbox address determines the destination chain
 
 ### OptimismL1L2
 
@@ -229,3 +231,10 @@ Do not claim support for a new lane until all of those steps are done.
 3. Verify the messenger implements `sendMessage(address,bytes,uint32)`.
 4. Add extraction or execution coverage if the chain behaves differently from the existing OP-stack set.
 5. Validate the lane with a representative simulation before claiming support.
+
+## Adding A New Arbitrum Orbit Chain
+
+1. Add the Ethereum Inbox and destination chain ID to [arbitrum.ts](../utils/bridges/arbitrum.ts).
+2. Add the chain RPC, explorer, name, and capability metadata.
+3. Add parser and destination-execution coverage using representative retryable-ticket calldata.
+4. Run a live proposal simulation before claiming support.

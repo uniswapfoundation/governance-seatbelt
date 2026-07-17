@@ -12,8 +12,23 @@ import type { CrossChainExecutionJob } from '../../types.d';
 // Assuming ABI is available, similar to sims/arb-grant.sim.ts
 import ArbitrumDelayedInboxAbi from '../abis/ArbitrumDelayedInboxAbi.json' assert { type: 'json' };
 
-const ARBITRUM_DELAYED_INBOX: Address = '0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f';
-const ARBITRUM_CHAIN_ID = '42161';
+const ARBITRUM_INBOX_LANES = [
+  {
+    inboxAddress: getAddress('0x4Dbd4fc535Ac27206064B68FfCf827b0A60BAB3f'),
+    destinationChainId: 42_161,
+  },
+  {
+    inboxAddress: getAddress('0x1A07cc4BD17E0118BdB54D70990D2158AbAD7a2D'),
+    destinationChainId: 4_663,
+  },
+] as const;
+const ARBITRUM_CHAIN_ID_BY_INBOX = new Map(
+  ARBITRUM_INBOX_LANES.map((lane) => [lane.inboxAddress.toLowerCase(), lane.destinationChainId]),
+);
+
+export function getArbitrumDestinationChainId(inboxAddress: string): number | undefined {
+  return ARBITRUM_CHAIN_ID_BY_INBOX.get(inboxAddress.toLowerCase());
+}
 const ARB_ALIAS_OFFSET = BigInt('0x1111000000000000000000000000000000001111');
 const ARBITRUM_HANDLED_SELECTORS = new Set([
   toFunctionSelector(
@@ -64,14 +79,17 @@ function calculateL2Alias(l1Address: Address): Address {
 /**
  * Recursively searches the call trace for calls to the Arbitrum Delayed Inbox.
  */
-function findArbitrumInboxCalls(call: CallTrace): CallTrace[] {
-  let inboxCalls: CallTrace[] = [];
+function findArbitrumInboxCalls(
+  call: CallTrace,
+): Array<{ call: CallTrace; destinationChainId: number }> {
+  let inboxCalls: Array<{ call: CallTrace; destinationChainId: number }> = [];
 
   // Check if the current call is to the inbox
   // Use optional chaining for safety
-  if (call?.to?.toLowerCase() === ARBITRUM_DELAYED_INBOX.toLowerCase()) {
+  const destinationChainId = call?.to ? getArbitrumDestinationChainId(call.to) : undefined;
+  if (destinationChainId) {
     // Add all calls to the inbox, not just createRetryableTicket
-    inboxCalls.push(call);
+    inboxCalls.push({ call, destinationChainId });
   }
 
   // Recursively check sub-calls
@@ -105,7 +123,7 @@ export function extractArbitrumL1L2Jobs(sourceSim: TenderlySimulation): CrossCha
   // Find all calls to the Arbitrum Delayed Inbox
   const inboxCalls = findArbitrumInboxCalls(sourceSim.transaction.transaction_info.call_trace);
 
-  for (const call of inboxCalls) {
+  for (const { call, destinationChainId } of inboxCalls) {
     if (!call || !call.input || !call.from) continue; // Ensure from exists
 
     // Skip empty or invalid calldata
@@ -156,14 +174,14 @@ export function extractArbitrumL1L2Jobs(sourceSim: TenderlySimulation): CrossCha
           // Create the message
           const message: CrossChainExecutionJob = {
             bridgeType: 'ArbitrumL1L2',
-            destinationChainId: Number(ARBITRUM_CHAIN_ID),
+            destinationChainId,
             l2FromAddress: l2Alias,
             sourceOrder: jobsByTargetAndCalldata.size,
             calls: [{ l2TargetAddress, l2InputData, l2Value: l2Value.toString() }],
           };
 
           // Use both target address and calldata hash as key
-          const key = `${l2TargetAddress}-${l2InputData}`;
+          const key = `${destinationChainId}-${l2TargetAddress}-${l2InputData}`;
           jobsByTargetAndCalldata.set(key, message);
           break;
         }
@@ -184,13 +202,13 @@ export function extractArbitrumL1L2Jobs(sourceSim: TenderlySimulation): CrossCha
 
           const message: CrossChainExecutionJob = {
             bridgeType: 'ArbitrumL1L2',
-            destinationChainId: Number(ARBITRUM_CHAIN_ID),
+            destinationChainId,
             l2FromAddress: l2Alias,
             sourceOrder: jobsByTargetAndCalldata.size,
             calls: [{ l2TargetAddress, l2InputData, l2Value: '0' }],
           };
 
-          const key = `${l2TargetAddress}-${l2InputData}`;
+          const key = `${destinationChainId}-${l2TargetAddress}-${l2InputData}`;
           jobsByTargetAndCalldata.set(key, message);
           break;
         }
@@ -213,13 +231,13 @@ export function extractArbitrumL1L2Jobs(sourceSim: TenderlySimulation): CrossCha
 
           const message: CrossChainExecutionJob = {
             bridgeType: 'ArbitrumL1L2',
-            destinationChainId: Number(ARBITRUM_CHAIN_ID),
+            destinationChainId,
             l2FromAddress: l2Alias,
             sourceOrder: jobsByTargetAndCalldata.size,
             calls: [{ l2TargetAddress, l2InputData, l2Value: l2Value.toString() }],
           };
 
-          const key = `${l2TargetAddress}-${l2InputData}`;
+          const key = `${destinationChainId}-${l2TargetAddress}-${l2InputData}`;
           jobsByTargetAndCalldata.set(key, message);
           break;
         }
@@ -254,13 +272,13 @@ export function extractArbitrumL1L2Jobs(sourceSim: TenderlySimulation): CrossCha
 
             const message: CrossChainExecutionJob = {
               bridgeType: 'ArbitrumL1L2',
-              destinationChainId: Number(ARBITRUM_CHAIN_ID),
+              destinationChainId,
               l2FromAddress: l2Alias,
               sourceOrder: jobsByTargetAndCalldata.size,
               calls: [{ l2TargetAddress, l2InputData: messageArgs[1], l2Value: '0' }],
             };
 
-            const key = `${l2TargetAddress}-${messageArgs[1]}`;
+            const key = `${destinationChainId}-${l2TargetAddress}-${messageArgs[1]}`;
             jobsByTargetAndCalldata.set(key, message);
           } catch (error) {
             console.error('[Arbitrum Parser] Error decoding L2 message data:', error);
@@ -316,7 +334,6 @@ export function extractArbitrumL1L2JobsFromProposal(
   l1Sender?: Address,
 ): CrossChainExecutionJob[] {
   const jobs: CrossChainExecutionJob[] = [];
-  const inboxLower = ARBITRUM_DELAYED_INBOX.toLowerCase();
   const from = l1Sender
     ? getAddress(l1Sender)
     : getAddress('0x0000000000000000000000000000000000000000');
@@ -325,7 +342,9 @@ export function extractArbitrumL1L2JobsFromProposal(
   for (let i = 0; i < Math.min(targets.length, calldatas.length); i++) {
     const target = targets[i];
     const data = calldatas[i];
-    if (!target || !data || getAddress(target).toLowerCase() !== inboxLower) continue;
+    if (!target || !data) continue;
+    const destinationChainId = getArbitrumDestinationChainId(getAddress(target));
+    if (!destinationChainId) continue;
     if (data === '0x' || data.length < 10) continue;
 
     try {
@@ -352,7 +371,7 @@ export function extractArbitrumL1L2JobsFromProposal(
           jobs.push({
             bridgeType: 'ArbitrumL1L2',
             l2FromAddress: l2Alias,
-            destinationChainId: Number(ARBITRUM_CHAIN_ID),
+            destinationChainId,
             sourceOrder: i,
             calls: [
               { l2TargetAddress: args[0], l2InputData: args[7], l2Value: args[1].toString() },
@@ -367,7 +386,7 @@ export function extractArbitrumL1L2JobsFromProposal(
           jobs.push({
             bridgeType: 'ArbitrumL1L2',
             l2FromAddress: l2Alias,
-            destinationChainId: Number(ARBITRUM_CHAIN_ID),
+            destinationChainId,
             sourceOrder: i,
             calls: [{ l2TargetAddress: args[2], l2InputData: args[3], l2Value: '0' }],
           });
@@ -380,7 +399,7 @@ export function extractArbitrumL1L2JobsFromProposal(
           jobs.push({
             bridgeType: 'ArbitrumL1L2',
             l2FromAddress: l2Alias,
-            destinationChainId: Number(ARBITRUM_CHAIN_ID),
+            destinationChainId,
             sourceOrder: i,
             calls: [
               { l2TargetAddress: args[2], l2InputData: args[4], l2Value: args[3].toString() },

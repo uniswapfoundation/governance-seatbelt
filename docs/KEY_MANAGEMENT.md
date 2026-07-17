@@ -10,6 +10,7 @@ This document provides a reference for the API keys and secrets required by gove
 | `RPC_URL` | Ethereum mainnet access | Infura, Alchemy, or other RPC provider |
 | `MAINNET_RPC_URL` | Explicit mainnet RPC for cross-chain | Same as RPC_URL |
 | `ARBITRUM_RPC_URL` | Arbitrum L2 access | [Alchemy](https://dashboard.alchemy.com/) or [Infura](https://infura.io/) |
+| `ROBINHOOD_RPC_URL` | Robinhood Chain L2 access | [Robinhood Chain docs](https://docs.robinhood.com/chain/connecting/) |
 | `TENDERLY_ACCESS_TOKEN` | Simulation API access | [Tenderly Dashboard](https://dashboard.tenderly.co/) > Account > Authorization |
 | `TENDERLY_USER` | Tenderly org/user identifier | Your Tenderly username or org name |
 | `TENDERLY_PROJECT_SLUG` | Tenderly project identifier | From your Tenderly project URL |

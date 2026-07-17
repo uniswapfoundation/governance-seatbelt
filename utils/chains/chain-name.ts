@@ -7,9 +7,11 @@ import {
   celo,
   ink,
   mainnet,
+  megaeth,
   monad,
   optimism,
   polygon,
+  robinhood,
   soneium,
   tempo,
   unichain,
@@ -17,13 +19,13 @@ import {
   xLayer,
   zora,
 } from 'viem/chains';
-import { megaeth } from './megaeth';
 
 export const CANONICAL_CHAIN_NAMES: Record<number, string> = {
   [mainnet.id]: mainnet.name,
   [optimism.id]: optimism.name,
   [base.id]: base.name,
   [arbitrum.id]: arbitrum.name,
+  [robinhood.id]: robinhood.name,
   [unichain.id]: unichain.name,
   [ink.id]: ink.name,
   [soneium.id]: soneium.name,

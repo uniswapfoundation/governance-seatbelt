@@ -11,6 +11,9 @@ import {
 import { bsc, celo, mainnet, monad, polygon, tempo } from 'viem/chains';
 import { config as layerZeroReceiverAuthTestConfig } from '../../sims/layerzero-receiver-auth-test.sim';
 import type { TenderlySimulation } from '../../types.d';
+import ArbitrumDelayedInboxAbi from '../../utils/abis/ArbitrumDelayedInboxAbi.json' assert {
+  type: 'json',
+};
 import {
   LAYER_ZERO_EXECUTE_ABI,
   LAYER_ZERO_LANE_SUPPORT_MATRIX,
@@ -415,6 +418,48 @@ function makeSourceResult(
 }
 
 describe('cross-chain destination execution engine', () => {
+  test('executes Robinhood retryable tickets on chain 4663 from the aliased timelock', async () => {
+    const robinhoodInbox = getAddress('0x1A07cc4BD17E0118BdB54D70990D2158AbAD7a2D');
+    const v2Factory = getAddress('0x8bcEaA40B9AcdfAedF85AdF4FF01F5Ad6517937f');
+    const innerCalldata =
+      '0xf46901ed0000000000000000000000000e197b5b7c9eeeea25e7c8378516d68aa0df7d92';
+    const retryableCalldata = encodeFunctionData({
+      abi: ArbitrumDelayedInboxAbi,
+      functionName: 'createRetryableTicket',
+      args: [
+        v2Factory,
+        0n,
+        10_000_000_000_000_000n,
+        getAddress('0x2BAD8182C09F50c8318d769245beA52C32Be46CD'),
+        getAddress('0x2BAD8182C09F50c8318d769245beA52C32Be46CD'),
+        200_000n,
+        100_000_000n,
+        innerCalldata,
+      ],
+    });
+
+    enqueueSimulation(makeSimulation({ id: 'robinhood-retryable-step', chainId: 4663 }));
+
+    const result = await handleCrossChainSimulations(
+      makeSourceResult([retryableCalldata], { targets: [robinhoodInbox] }),
+    );
+
+    expect(mockedSendSimulation).toHaveBeenCalledTimes(1);
+    expect(transportCalls[0]).toMatchObject({
+      network_id: '4663',
+      from: '0x2BAD8182C09F50c8318d769245beA52C32Be46CD',
+      to: v2Factory,
+      input: innerCalldata,
+      value: '0',
+    });
+    expect(result.destinationJobResults).toHaveLength(1);
+    expect(result.destinationJobResults[0]).toMatchObject({
+      chainId: 4663,
+      bridgeType: 'ArbitrumL1L2',
+      status: 'success',
+    });
+  });
+
   test('executes Polygon FxPortal messages through the FxChild handoff', async () => {
     const polygonReceiver = getAddress('0x8a1B966aC46F42275860f905dbC75EfBfDC12374');
     const childMessage = '0x12345678' as const;

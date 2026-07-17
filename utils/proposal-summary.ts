@@ -1,5 +1,6 @@
 import { formatUnits, getAddress } from 'viem';
 import type { AllCheckResults, ProposalEvent, TenderlySimulation } from '../types';
+import { getArbitrumDestinationChainId } from './bridges/arbitrum';
 import { getChainName, getOpStackDestinationChainIds } from './chains/capabilities';
 
 /**
@@ -129,12 +130,18 @@ function detectCrossChainOperations(
       ) {
         if (!detectedChains.has('Arbitrum')) {
           detectedChains.add('Arbitrum');
-          const description = buildCrossChainDescription(
-            getChainName(42161),
-            42161,
-            l2Checks,
-            totalEthForGas,
-          );
+          const arbitrumChainIds = findArbitrumChainIds(proposal);
+          const description =
+            arbitrumChainIds.length > 1
+              ? `Sends via Arbitrum bridge to ${formatHumanList(
+                  arbitrumChainIds.map((chainId) => getChainName(chainId)),
+                )}${formatEthForGasSuffix(totalEthForGas)}`
+              : buildCrossChainDescription(
+                  getChainName(arbitrumChainIds[0]),
+                  arbitrumChainIds[0],
+                  l2Checks,
+                  totalEthForGas,
+                );
           operations.push({
             type: 'crossChain',
             description,
@@ -196,6 +203,17 @@ function detectCrossChainOperations(
   }
 
   return operations;
+}
+
+function findArbitrumChainIds(proposal?: ProposalEvent): number[] {
+  const chainIds = new Set<number>();
+
+  for (const target of proposal?.targets ?? []) {
+    const chainId = getArbitrumDestinationChainId(target);
+    if (chainId) chainIds.add(chainId);
+  }
+
+  return chainIds.size > 0 ? Array.from(chainIds) : [42_161];
 }
 
 /**

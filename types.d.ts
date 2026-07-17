@@ -360,7 +360,7 @@ type ContractObject = {
 };
 
 export type TenderlyPayload = {
-  network_id: '1' | '3' | '4' | '5' | '42' | '42161';
+  network_id: '1' | '3' | '4' | '5' | '42' | '4663' | '42161';
   block_number?: number;
   transaction_index?: number;
   from: string;

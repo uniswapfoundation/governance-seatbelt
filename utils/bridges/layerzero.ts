@@ -8,9 +8,8 @@ import {
   slice,
   toFunctionSelector,
 } from 'viem';
-import { avalanche } from 'viem/chains';
+import { avalanche, megaeth } from 'viem/chains';
 import type { CrossChainExecutionCall, CrossChainExecutionJob } from '../../types.d';
-import { MEGAETH_CHAIN_ID } from '../chains/megaeth';
 
 export const LAYER_ZERO_EXECUTE_ABI = parseAbi([
   'function execute(uint16 remoteChainId, bytes payload, bytes adapterParams)',
@@ -59,7 +58,7 @@ export const LAYER_ZERO_LANE_SUPPORT_MATRIX: Record<LayerZeroLaneKey, LayerZeroL
     senderTarget: UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
   },
   megaeth: {
-    destinationChainId: MEGAETH_CHAIN_ID,
+    destinationChainId: megaeth.id,
     layerZeroRemoteChainId: 398,
     l2FromAddress: UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR,
     senderTarget: UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
