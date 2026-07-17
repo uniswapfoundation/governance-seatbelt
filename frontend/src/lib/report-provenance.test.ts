@@ -40,8 +40,10 @@ describe('report provenance helpers', () => {
     expect(getCanonicalPublishedFileUrl(publish, 'metadata')).toBe(
       'https://a-c270963b-e243-48a6-b853-bb8166929c76.publish.scopelift.co/publish-metadata.json',
     );
-    expect(formatAuthenticityBadgeLabel(publish.authenticity)).toBe('Artifact verified');
-    expect(formatAuthenticityDetails(publish.authenticity)).toBe('ed25519 · authenticity-v1');
+    expect(formatAuthenticityBadgeLabel(publish.authenticity)).toBe('Verified');
+    expect(formatAuthenticityDetails(publish.authenticity)).toBe(
+      'This report matches the signed artifact that was published.',
+    );
   });
 
   it('falls back to the original vercel url when publish id is blank', () => {

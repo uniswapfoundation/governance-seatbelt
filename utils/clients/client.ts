@@ -9,9 +9,11 @@ import {
   celo,
   ink,
   mainnet,
+  megaeth,
   monad,
   optimism,
   polygon,
+  robinhood,
   soneium,
   tempo,
   unichain,
@@ -19,7 +21,6 @@ import {
   xLayer,
   zora,
 } from 'viem/chains';
-import { megaeth } from '../chains/megaeth';
 import { DEFAULT_BLOCK_EXPLORER_BASE_URL, normalizeBlockExplorerBaseUrl } from '../explorer-links';
 
 export enum BlockExplorerSource {
@@ -54,6 +55,7 @@ export interface ChainConfig {
 
 const MAINNET_RPC_URL = process.env.MAINNET_RPC_URL || 'https://ethereum-rpc.publicnode.com';
 const ARBITRUM_RPC_URL = process.env.ARBITRUM_RPC_URL || arbitrum.rpcUrls.default.http[0];
+const ROBINHOOD_RPC_URL = process.env.ROBINHOOD_RPC_URL || robinhood.rpcUrls.default.http[0];
 
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
 const OPTIMISM_RPC_URL =
@@ -94,6 +96,7 @@ const ETHERSCAN_V2_API_URL = 'https://api.etherscan.io/v2/api';
 type ChainById = {
   [mainnet.id]: typeof mainnet;
   [arbitrum.id]: typeof arbitrum;
+  [robinhood.id]: typeof robinhood;
   [optimism.id]: typeof optimism;
   [base.id]: typeof base;
   [unichain.id]: typeof unichain;
@@ -115,6 +118,7 @@ type ChainById = {
 const CHAIN_BY_ID: ChainById = {
   [mainnet.id]: mainnet,
   [arbitrum.id]: arbitrum,
+  [robinhood.id]: robinhood,
   [optimism.id]: optimism,
   [base.id]: base,
   [unichain.id]: unichain,
@@ -163,6 +167,17 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       apiKey: process.env.ETHERSCAN_API_KEY,
     },
     rpcUrl: ARBITRUM_RPC_URL,
+  },
+  [robinhood.id]: {
+    chainId: robinhood.id,
+    blockExplorer: {
+      baseUrl: robinhood.blockExplorers.default.url,
+    },
+    verification: {
+      backend: VerificationBackend.Blockscout,
+      apiUrl: 'https://robinhoodchain.blockscout.com/api/v2',
+    },
+    rpcUrl: ROBINHOOD_RPC_URL,
   },
   [optimism.id]: {
     chainId: optimism.id,
@@ -409,6 +424,10 @@ const clients = {
   [arbitrum.id]: createPublicClient({
     chain: arbitrum,
     transport: http(CHAIN_CONFIGS[arbitrum.id].rpcUrl),
+  }),
+  [robinhood.id]: createPublicClient({
+    chain: robinhood,
+    transport: http(CHAIN_CONFIGS[robinhood.id].rpcUrl),
   }),
   [optimism.id]: createPublicClient({
     chain: optimism,

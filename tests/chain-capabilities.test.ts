@@ -10,6 +10,7 @@ describe('chain capabilities registry', () => {
   test('returns canonical chain names when known', () => {
     expect(getChainName(1)).toBe('Ethereum');
     expect(getChainName(42161)).toContain('Arbitrum');
+    expect(getChainName(4663)).toBe('Robinhood Chain');
     expect(getChainName(10)).toBeTruthy();
     expect(getChainName(56)).toContain('BNB');
     expect(getChainName(137)).toContain('Polygon');
@@ -29,6 +30,8 @@ describe('chain capabilities registry', () => {
 
     expect(supportsL2Checks(42161)).toBe(true);
     expect(supportsTenderlyDestinationSimulation(42161)).toBe(true);
+    expect(supportsL2Checks(4663)).toBe(true);
+    expect(supportsTenderlyDestinationSimulation(4663)).toBe(true);
     expect(supportsL2Checks(56)).toBe(true);
     expect(supportsTenderlyDestinationSimulation(56)).toBe(true);
     expect(supportsL2Checks(137)).toBe(true);

@@ -24,6 +24,12 @@ cp .env.example .env
 SIM_NAME=uni-transfer bun start
 ```
 
+To run the Robinhood Chain protocol-fee proposal fixture, use:
+
+```bash
+SIM_NAME=robinhood-fee-activation bun start
+```
+
 Reports are saved to `reports/` folder.
 
 ### 2a. Run the opt-in live BNB legacy Wormhole validation
@@ -216,6 +222,7 @@ MAINNET_RPC_URL=yourMainnetRpcUrl
 
 # URL to your Arbitrum mainnet RPC (required for cross-chain).
 ARBITRUM_RPC_URL=yourArbitrumRpcUrl
+ROBINHOOD_RPC_URL=yourRobinhoodRpcUrl
 
 # Tenderly access token.
 # Access token is obtained from the Tenderly UI via Account > Authorization > Generate Access Token.

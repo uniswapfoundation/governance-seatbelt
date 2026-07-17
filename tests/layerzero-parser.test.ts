@@ -8,6 +8,7 @@ import {
   parseAbi,
   toFunctionSelector,
 } from 'viem';
+import { megaeth } from 'viem/chains';
 import { config as migrationDraftConfig } from '../sims/layerzero-wormhole-migration-test.sim';
 import {
   LAYER_ZERO_ETHEREUM_REMOTE_CHAIN_ID,
@@ -19,7 +20,6 @@ import {
   UNISWAP_OMNICHAIN_PROPOSAL_SENDER,
   extractLayerZeroL1L2JobsFromProposal,
 } from '../utils/bridges/layerzero';
-import { MEGAETH_CHAIN_ID } from '../utils/chains/megaeth';
 
 const SET_WORMHOLE_SENDER_ABI = parseAbi(['function setWormholeSender(address sender)']);
 
@@ -116,7 +116,7 @@ describe('LayerZero proposal parser', () => {
     );
 
     expect(jobs).toHaveLength(1);
-    expect(jobs[0]?.destinationChainId).toBe(MEGAETH_CHAIN_ID);
+    expect(jobs[0]?.destinationChainId).toBe(megaeth.id);
     expect(jobs[0]?.l2FromAddress).toBe(UNISWAP_MEGAETH_OMNICHAIN_GOVERNANCE_EXECUTOR);
     expect(jobs[0]?.sourceOrder).toBe(0);
     expect(jobs[0]?.calls).toEqual([

@@ -7,9 +7,11 @@ import {
   celo,
   ink,
   mainnet,
+  megaeth,
   monad,
   optimism,
   polygon,
+  robinhood,
   soneium,
   tempo,
   unichain,
@@ -17,8 +19,6 @@ import {
   xLayer,
   zora,
 } from 'viem/chains';
-
-const MEGAETH_CHAIN_ID = 4326;
 
 // Chain logos stored in /public/chain-logos/
 // Existing official assets:
@@ -41,6 +41,7 @@ const MEGAETH_CHAIN_ID = 4326;
 // - World: https://world.org/brand#world-logo
 // - Soneium: https://soneium.org/en/brand-kit/
 // - Zora: provided by team brand asset
+// - Robinhood Chain: https://docs.robinhood.com/chain/
 
 export function ChainLogo({ chainId, size = 20 }: { chainId: number; size?: number }) {
   const logoFiles: Partial<Record<number, string>> = {
@@ -61,7 +62,8 @@ export function ChainLogo({ chainId, size = 20 }: { chainId: number; size?: numb
     [avalanche.id]: '/chain-logos/avalanche.svg',
     [monad.id]: '/chain-logos/monad.svg',
     [tempo.id]: '/chain-logos/tempo.svg',
-    [MEGAETH_CHAIN_ID]: '/chain-logos/megaeth.svg',
+    [megaeth.id]: '/chain-logos/megaeth.svg',
+    [robinhood.id]: '/chain-logos/robinhood.svg',
   };
 
   const logoPath = logoFiles[chainId];

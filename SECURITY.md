@@ -48,6 +48,7 @@ All sensitive data is loaded from environment variables, never hardcoded. See [d
 | `TENDERLY_ACCESS_TOKEN` | Simulation API |
 | `RPC_URL` / `MAINNET_RPC_URL` | Blockchain access |
 | `ARBITRUM_RPC_URL` | Arbitrum L2 access |
+| `ROBINHOOD_RPC_URL` | Robinhood Chain L2 access |
 
 ## Simulation Security
 
