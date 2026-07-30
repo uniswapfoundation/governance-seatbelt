@@ -14,6 +14,7 @@ import { useMemo, useState } from 'react';
 import { mainnet } from 'viem/chains';
 import { CallGroupedView } from './CallGroupedView';
 import { DecisionHeader } from './DecisionHeader';
+import { ProposalDescriptionPreview } from './ProposalDescriptionPreview';
 import { ChainLogo } from './structured-report/ChainLogo';
 import { ChecksSection } from './structured-report/ChecksSection';
 import { CoverageSummary } from './structured-report/CoverageSummary';
@@ -193,16 +194,7 @@ export function StructuredReport({ report, proposal }: StructuredReportProps) {
           )}
 
           {/* Secondary: Proposal Details - Full width, less prominent */}
-          {report.proposalText && (
-            <section>
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                Proposal Details
-              </h3>
-              <div className="bg-muted/50 border border-border/50 p-4 rounded-lg text-sm whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
-                {report.proposalText}
-              </div>
-            </section>
-          )}
+          {report.proposalText && <ProposalDescriptionPreview description={report.proposalText} />}
 
           {/* Tertiary: Technical Details - Collapsible or compact */}
           <div className="border-t border-border/50 pt-4">
