@@ -1,5 +1,6 @@
 import {
   arbitrum,
+  arc,
   avalanche,
   base,
   bob,
@@ -42,9 +43,11 @@ import {
 // - Soneium: https://soneium.org/en/brand-kit/
 // - Zora: provided by team brand asset
 // - Robinhood Chain: https://docs.robinhood.com/chain/
+// - Arc: https://www.circle.com/pressroom (Arc Network Icon)
 
 export function ChainLogo({ chainId, size = 20 }: { chainId: number; size?: number }) {
   const logoFiles: Partial<Record<number, string>> = {
+    [arc.id]: '/chain-logos/arc.svg',
     [mainnet.id]: '/chain-logos/ethereum.svg',
     [optimism.id]: '/chain-logos/optimism.svg',
     [xLayer.id]: '/chain-logos/xlayer.webp',
