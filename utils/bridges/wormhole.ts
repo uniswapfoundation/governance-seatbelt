@@ -166,7 +166,7 @@ function tryDecodeWormholeBatch(data: string): WormholeBatchDecodeResult | null 
 /**
  * Extract wormhole destination calls from proposal calldata.
  *
- * Current coverage: BNB (4), Polygon (5), Avalanche (6), Celo (14), Monad (48), and Tempo (68).
+ * Current coverage: BNB (4), Polygon (5), Avalanche (6), Celo (14), Monad (48), Tempo (68), and Arc (71).
  * Receiver-mode is enabled where the destination authority is a Wormhole receiver; other lanes
  * continue to use direct-mode simulation until their live destination contracts match that path.
  */

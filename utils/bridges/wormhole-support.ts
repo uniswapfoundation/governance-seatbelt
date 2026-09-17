@@ -1,11 +1,11 @@
 import { getAddress } from 'viem';
-import { avalanche, bsc, celo, monad, polygon, tempo } from 'viem/chains';
+import { arc, avalanche, bsc, celo, monad, polygon, tempo } from 'viem/chains';
 import {
   LEGACY_BNB_WORMHOLE_MESSAGE_PAYLOAD_VERSION,
   LEGACY_BNB_WORMHOLE_NEXT_MINIMUM_SEQUENCE_SLOT,
 } from './wormhole-runtime-state';
 
-export type WormholeLaneKey = 'bnb' | 'polygon' | 'avalanche' | 'celo' | 'monad' | 'tempo';
+export type WormholeLaneKey = 'bnb' | 'polygon' | 'avalanche' | 'celo' | 'monad' | 'tempo' | 'arc';
 
 export type WormholeLaneValidationTargets = {
   v2Factory: `0x${string}`;
@@ -34,6 +34,22 @@ export type WormholeLaneSupport = {
 const UNISWAP_WORMHOLE_SENDER = getAddress('0xf5F4496219F31CDCBa6130B5402873624585615a');
 
 export const WORMHOLE_LANE_SUPPORT_MATRIX: Record<WormholeLaneKey, WormholeLaneSupport> = {
+  // Arc mainnet; receiver authority validated against all three targets.
+  arc: {
+    key: 'arc',
+    chainName: arc.name,
+    destinationChainId: arc.id,
+    wormholeChainId: 71,
+    executionMode: 'receiver-modern',
+    l2FromAddress: getAddress('0xbCA30b5429935205037069cF5b8A165F55d05a75'),
+    senderTargets: [UNISWAP_WORMHOLE_SENDER],
+    wormholeReceiverCoreAddress: getAddress('0xC8aD24fC6063c41cB5C12a8e3851AafC3b3CF027'),
+    validationTargets: {
+      v2Factory: getAddress('0x89e5DB8B5aA49aA85AC63f691524311AEB649eba'),
+      v3Factory: getAddress('0xf0db7b58379503491d857dB50AC9ece64c653918'),
+      v4PoolManager: getAddress('0x8366a39CC670B4001A1121B8F6A443A643e40951'),
+    },
+  },
   // BNB Smart Chain references:
   // - receiver: https://bscscan.com/address/0x341c1511141022cf8eE20824Ae0fFA3491F1302b
   // - wormhole core: https://bscscan.com/address/0x98f3c9e6E3fAce36bAAd05FE09d375Ef1464288B
@@ -155,6 +171,7 @@ export const SUPPORTED_WORMHOLE_LANE_KEYS = [
   'celo',
   'monad',
   'tempo',
+  'arc',
 ] as const satisfies readonly WormholeLaneKey[];
 
 let wormholeSupportMatrixValidated = false;

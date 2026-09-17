@@ -45,6 +45,13 @@ export const TEST_ONLY_WORMHOLE_LANES = {
     l2FromAddress: WORMHOLE_LANE_SUPPORT_MATRIX.tempo.l2FromAddress,
     name: WORMHOLE_LANE_SUPPORT_MATRIX.tempo.chainName,
   },
+
+  arc: {
+    chainId: WORMHOLE_LANE_SUPPORT_MATRIX.arc.destinationChainId,
+    wormholeChainId: WORMHOLE_LANE_SUPPORT_MATRIX.arc.wormholeChainId,
+    l2FromAddress: WORMHOLE_LANE_SUPPORT_MATRIX.arc.l2FromAddress,
+    name: WORMHOLE_LANE_SUPPORT_MATRIX.arc.chainName,
+  },
 } satisfies Record<
   WormholeLaneKey,
   {
@@ -131,6 +138,15 @@ export const TEST_ONLY_WORMHOLE_LANE_ARTIFACTS: Record<
     v4PoolManager: getAddress('0x100000000000000000000000000000000000b513'),
     feeAdapter: getAddress('0x100000000000000000000000000000000000b514'),
     tokenJar: getAddress('0x100000000000000000000000000000000000b515'),
+  },
+
+  arc: {
+    crossChainAccount: getAddress('0x100000000000000000000000000000000000b610'),
+    v2Factory: getAddress('0x100000000000000000000000000000000000b611'),
+    v3Factory: getAddress('0x100000000000000000000000000000000000b612'),
+    v4PoolManager: getAddress('0x100000000000000000000000000000000000b613'),
+    feeAdapter: getAddress('0x100000000000000000000000000000000000b614'),
+    tokenJar: getAddress('0x100000000000000000000000000000000000b615'),
   },
 };
 

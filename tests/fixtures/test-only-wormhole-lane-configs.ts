@@ -41,6 +41,7 @@ export const LIVE_WORMHOLE_LANE_VALIDATION_TARGETS = {
   celo: WORMHOLE_LANE_SUPPORT_MATRIX.celo.validationTargets,
   monad: WORMHOLE_LANE_SUPPORT_MATRIX.monad.validationTargets,
   tempo: WORMHOLE_LANE_SUPPORT_MATRIX.tempo.validationTargets,
+  arc: WORMHOLE_LANE_SUPPORT_MATRIX.arc.validationTargets,
 } satisfies Record<WormholeLaneKey, WormholeLaneValidationTargets>;
 
 function buildWormholeProposalCall(

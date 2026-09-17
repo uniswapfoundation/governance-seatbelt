@@ -1,5 +1,6 @@
 import {
   arbitrum,
+  arc,
   avalanche,
   base,
   bob,
@@ -35,6 +36,7 @@ export const CANONICAL_CHAIN_NAMES: Record<number, string> = {
   [polygon.id]: polygon.name,
   [avalanche.id]: avalanche.name,
   [monad.id]: monad.name,
+  [arc.id]: arc.name,
   [tempo.id]: tempo.name,
   [megaeth.id]: megaeth.name,
   [worldchain.id]: worldchain.name,
