@@ -2,6 +2,7 @@ import { http, createPublicClient } from 'viem';
 import type { PublicClient, Transport } from 'viem';
 import {
   arbitrum,
+  arc,
   avalanche,
   base,
   bob,
@@ -94,6 +95,7 @@ const XLAYER_RPC_URL = process.env.XLAYER_RPC_URL || xLayer.rpcUrls.default.http
 const ETHERSCAN_V2_API_URL = 'https://api.etherscan.io/v2/api';
 
 type ChainById = {
+  [arc.id]: typeof arc;
   [mainnet.id]: typeof mainnet;
   [arbitrum.id]: typeof arbitrum;
   [robinhood.id]: typeof robinhood;
@@ -116,6 +118,7 @@ type ChainById = {
 };
 
 const CHAIN_BY_ID: ChainById = {
+  [arc.id]: arc,
   [mainnet.id]: mainnet,
   [arbitrum.id]: arbitrum,
   [robinhood.id]: robinhood,
@@ -144,6 +147,16 @@ type ClientRegistry = {
 };
 
 export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
+  [arc.id]: {
+    chainId: arc.id,
+    blockExplorer: { baseUrl: 'https://arc.etherscan.io' },
+    verification: {
+      backend: VerificationBackend.EtherscanV2,
+      apiUrl: ETHERSCAN_V2_API_URL,
+      apiKey: process.env.ETHERSCAN_API_KEY,
+    },
+    rpcUrl: process.env.ARC_RPC_URL || 'https://rpc.mainnet.arc.io',
+  },
   [mainnet.id]: {
     chainId: mainnet.id,
     blockExplorer: {
@@ -472,6 +485,10 @@ const clients = {
   [monad.id]: createPublicClient({
     chain: monad,
     transport: http(CHAIN_CONFIGS[monad.id].rpcUrl),
+  }),
+  [arc.id]: createPublicClient({
+    chain: arc,
+    transport: http(CHAIN_CONFIGS[arc.id].rpcUrl),
   }),
   [tempo.id]: createPublicClient({
     chain: tempo,

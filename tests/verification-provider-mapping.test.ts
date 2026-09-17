@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { megaeth, robinhood, tempo, worldchain, xLayer, zora } from 'viem/chains';
+import { arc, megaeth, robinhood, tempo, worldchain, xLayer, zora } from 'viem/chains';
 import {
   seedRpcEnv,
   setMockFetch,
@@ -14,6 +14,7 @@ describe('verification backend provider mapping', () => {
 
     const { VerificationBackend, getChainConfig } = await import('../utils/clients/client');
 
+    expect(getChainConfig(arc.id).verification?.backend).toBe(VerificationBackend.EtherscanV2);
     expect(getChainConfig(zora.id).verification?.backend).toBe(VerificationBackend.Blockscout);
     expect(getChainConfig(worldchain.id).verification?.backend).toBe(
       VerificationBackend.EtherscanV2,

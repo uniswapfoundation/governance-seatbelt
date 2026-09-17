@@ -47,6 +47,7 @@ process.env.MAINNET_RPC_URL ??= 'http://localhost:8545';
 process.env.ARBITRUM_RPC_URL ??= 'http://localhost:8545';
 
 const RECEIVER_PAYLOAD_VERSION = LEGACY_BNB_WORMHOLE_MESSAGE_PAYLOAD_VERSION;
+const ARC_RECEIVER = getWormholeLaneByKey('arc').l2FromAddress;
 const TEMPO_RECEIVER = getWormholeLaneByKey('tempo').l2FromAddress;
 const CELO_RECEIVER = getWormholeLaneByKey('celo').l2FromAddress;
 const MONAD_RECEIVER = getWormholeLaneByKey('monad').l2FromAddress;
@@ -89,6 +90,7 @@ async function resolveMockedReceiverReadContract(
   }
 
   if (
+    receiverAddress === getAddress(ARC_RECEIVER) ||
     receiverAddress === getAddress(TEMPO_RECEIVER) ||
     receiverAddress === getAddress(CELO_RECEIVER) ||
     receiverAddress === getAddress(MONAD_RECEIVER)

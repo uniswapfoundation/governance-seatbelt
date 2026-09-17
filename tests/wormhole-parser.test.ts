@@ -179,7 +179,7 @@ describe('wormhole proposal parser', () => {
   });
 
   test('reports the expected wormhole lane capabilities', () => {
-    expect([...SUPPORTED_WORMHOLE_CHAIN_IDS]).toEqual([4, 5, 6, 14, 48, 68]);
+    expect([...SUPPORTED_WORMHOLE_CHAIN_IDS]).toEqual([4, 5, 6, 14, 48, 68, 71]);
 
     expect(getWormholeLaneCapabilities(4)).toEqual({
       kind: 'legacy',

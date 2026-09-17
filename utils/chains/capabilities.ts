@@ -1,5 +1,6 @@
 import {
   arbitrum,
+  arc,
   avalanche,
   base,
   bob,
@@ -28,6 +29,11 @@ type ChainCapability = {
 };
 
 const CHAIN_CAPABILITIES: Record<number, ChainCapability> = {
+  [arc.id]: {
+    supportsL2Checks: true,
+    supportsTenderlyDestinationSimulation: true,
+    isOpStackDestination: false,
+  },
   [mainnet.id]: {
     supportsL2Checks: false,
     supportsTenderlyDestinationSimulation: false,
