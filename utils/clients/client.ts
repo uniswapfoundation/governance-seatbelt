@@ -151,7 +151,9 @@ type ClientRegistry = {
 export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   [arc.id]: {
     chainId: arc.id,
-    blockscoutApiUrl: 'https://explorer.arc.io/api/v2',
+    blockscoutApiUrl: process.env.BLOCKSCOUT_API_KEY
+      ? 'https://api.blockscout.com/5042/api/v2'
+      : 'https://explorer.arc.io/api/v2',
     blockExplorer: { baseUrl: 'https://arc.etherscan.io' },
     verification: {
       backend: VerificationBackend.EtherscanV2,
