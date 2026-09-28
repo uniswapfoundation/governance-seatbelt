@@ -11,7 +11,6 @@ import {
 } from 'viem';
 import type { DecodedCall, ProposalData, ProposalEvent } from '../../types';
 import { CacheManager } from '../../utils/clients/block-explorers/cache';
-import { CHAIN_CONFIGS } from '../../utils/clients/client';
 import { EIP1967_BEACON_SLOT, EIP1967_IMPLEMENTATION_SLOT } from '../../utils/contracts/proxy';
 import { checkDecodeCalldata } from '../check-decode-calldata';
 import { checkLogs } from '../check-logs';
@@ -109,7 +108,11 @@ function buildDeps(mode: 'slot' | 'beacon' | 'none' | 'unavailable', chainId = 1
     governor: null,
     timelock: { address: TIMELOCK },
     publicClient,
-    chainConfig: CHAIN_CONFIGS[chainId],
+    chainConfig: {
+      chainId,
+      blockExplorer: { baseUrl: 'https://example.invalid' },
+      rpcUrl: 'https://example.invalid',
+    },
     targets: [],
     touchedContracts: [],
   };
