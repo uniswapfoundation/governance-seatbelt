@@ -1,5 +1,5 @@
 import type { Address, Hex, PublicClient } from 'viem';
-import { getAddress, zeroAddress } from 'viem';
+import { getAddress, parseAbi, zeroAddress } from 'viem';
 
 export const EIP1967_IMPLEMENTATION_SLOT =
   '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc' as const;
@@ -25,7 +25,7 @@ async function readBeaconImplementation(
   publicClient: PublicClient,
   blockNumber: bigint,
 ): Promise<Address | null> {
-  const abi = ['function implementation() external view returns (address)'] as const;
+  const abi = parseAbi(['function implementation() view returns (address)']);
   try {
     const impl = (await publicClient.readContract({
       address: beacon,

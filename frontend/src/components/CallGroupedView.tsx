@@ -8,6 +8,7 @@ import type {
   SimulationCheck,
   StructuredSimulationReport,
 } from '@/hooks/use-simulation-results';
+import { formatCallPreview } from '@/lib/call-preview';
 import { resolveChainName } from '@/lib/chain-name';
 import { formatRawLogFromJson } from '@/lib/raw-log';
 import { CheckIcon, ChevronDownIcon, CopyIcon } from 'lucide-react';
@@ -95,15 +96,6 @@ function stringifyDecodedValue(value: unknown): string {
   return String(value);
 }
 
-function stableHash(input: string) {
-  // djb2
-  let hash = 5381;
-  for (let i = 0; i < input.length; i += 1) {
-    hash = (hash * 33) ^ input.charCodeAt(i);
-  }
-  return (hash >>> 0).toString(16);
-}
-
 function getAddressLabelFor(
   address: string,
   labels?: StructuredSimulationReport['metadata']['addressLabels'],
@@ -188,17 +180,17 @@ function AddressValue({
 
   if (isHeader) {
     return (
-      <div className="group flex items-start gap-2 min-w-0">
+      <div className="group flex items-start gap-2 min-w-0 w-full">
         {label?.type === 'token' ? (
           <TokenLogo address={address} chainId={chainId} className="h-6 w-6 rounded-full" />
         ) : null}
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 min-w-0">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
             {label?.label ? (
               <ExplorerAddressLink
                 address={address}
                 baseUrl={baseUrl}
-                className="text-sm font-medium hover:underline break-words"
+                className="text-sm font-medium hover:underline break-all min-w-0"
               >
                 {label.label}
               </ExplorerAddressLink>
@@ -217,53 +209,40 @@ function AddressValue({
               </Badge>
             ) : null}
           </div>
-          <div className="text-xs font-mono text-muted-foreground break-all">
-            <ExplorerAddressLink address={address} baseUrl={baseUrl} className="hover:underline">
-              {address}
-            </ExplorerAddressLink>
-          </div>
+          {label?.label && (
+            <div className="text-xs font-mono text-muted-foreground break-all">
+              <ExplorerAddressLink address={address} baseUrl={baseUrl} className="hover:underline">
+                {address.slice(0, 6)}…{address.slice(-4)}
+              </ExplorerAddressLink>
+            </div>
+          )}
         </div>
         <CopyButton value={address} className={`h-6 w-6 ${hoverCopyClasses}`} />
       </div>
     );
   }
 
-  // Inline variant: single line, always show full address (no truncation)
   return (
-    <div className="group inline-flex items-center gap-1.5 min-w-0">
-      {label?.type === 'token' ? (
-        <TokenLogo address={address} chainId={chainId} className="h-4 w-4 rounded-full" />
-      ) : null}
-      {label?.label ? (
-        <>
+    <div className="group flex w-full items-start gap-2 min-w-0">
+      <div className="min-w-0 flex-1 space-y-1">
+        {label?.label && (
           <ExplorerAddressLink
             address={address}
             baseUrl={baseUrl}
-            className="text-xs hover:underline"
+            className="block text-xs hover:underline break-all"
           >
             {label.label}
           </ExplorerAddressLink>
-          <span className="text-xs font-mono text-muted-foreground break-all">
-            <ExplorerAddressLink address={address} baseUrl={baseUrl} className="hover:underline">
-              {address}
-            </ExplorerAddressLink>
-          </span>
-          {label.type && label.type !== 'token' && (
-            <Badge variant="outline" className="text-[10px] px-1 py-0 leading-tight">
-              {label.type}
-            </Badge>
-          )}
-        </>
-      ) : (
+        )}
         <ExplorerAddressLink
           address={address}
           baseUrl={baseUrl}
-          className="text-xs font-mono text-muted-foreground hover:underline"
+          className="block text-xs font-mono text-muted-foreground hover:underline break-all"
         >
           {address}
         </ExplorerAddressLink>
-      )}
-      <CopyButton value={address} className={`h-4 w-4 ${hoverCopyClasses}`} />
+      </div>
+      <CopyButton value={address} className={`h-4 w-4 shrink-0 ${hoverCopyClasses}`} />
     </div>
   );
 }
@@ -278,7 +257,7 @@ function ValueWithCopy({
   truncate?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const isLongValue = value.length > 66; // longer than an address
+  const isLongValue = value.length > 96; // Keep addresses and uint256 values intact.
   const isExpandable = truncate && isLongValue;
   const shouldTruncate = isExpandable && !expanded;
 
@@ -295,9 +274,9 @@ function ValueWithCopy({
     : undefined;
 
   return (
-    <div className={`group inline-flex items-center gap-1 min-w-0 ${className || ''}`}>
+    <div className={`group flex w-full items-start gap-2 min-w-0 ${className || ''}`}>
       <span
-        className={`font-mono text-xs ${shouldTruncate ? 'cursor-pointer hover:text-foreground' : ''} ${isLongValue && !expanded ? 'text-muted-foreground' : ''}`}
+        className={`min-w-0 flex-1 break-all font-mono text-xs ${shouldTruncate ? 'cursor-pointer hover:text-foreground' : ''} ${isLongValue && !expanded ? 'text-muted-foreground' : ''}`}
         onClick={handleToggle}
         onKeyDown={handleKeyDown}
         tabIndex={isExpandable ? 0 : undefined}
@@ -306,11 +285,7 @@ function ValueWithCopy({
         aria-label={isExpandable ? (expanded ? 'Collapse value' : 'Expand value') : undefined}
         title={isExpandable ? (expanded ? 'Click to collapse' : 'Click to expand') : undefined}
       >
-        {expanded ? (
-          <span className="break-all">{value}</span>
-        ) : (
-          <span className={shouldTruncate ? '' : 'break-all'}>{displayValue}</span>
-        )}
+        {displayValue}
       </span>
       <CopyButton value={value} className={`h-4 w-4 shrink-0 ${hoverCopyClasses}`} />
     </div>
@@ -360,11 +335,6 @@ function CopyButton({ value, className }: { value: string; className?: string })
   );
 }
 
-function getDecodeCalldataInfo(checks: SimulationCheck[]) {
-  const decodeCheck = checks.find((c) => c.checkId === 'checkDecodeCalldata');
-  return decodeCheck?.info ?? [];
-}
-
 function parseLogsByEmitter(checks: SimulationCheck[]) {
   const logsCheck = checks.find((c) => c.checkId === 'checkLogs');
   const info = logsCheck?.info ?? [];
@@ -405,28 +375,20 @@ function parseDecodedSentence(decodedText: string) {
   // `0xFROM` calls `transfer(0xTO, 123)` on Name at `0xTARGET` (decoded from ABI)
   // `0xFROM` transfers 0.1 ETH to `0xTARGET` (formatted)
   const callMatch = decodedText.match(
-    /^`(0x[a-fA-F0-9]{40})`\s+calls\s+`(.+?)`\s+on\s+(.+?)\s+at\s+`(0x[a-fA-F0-9]{40})`/,
+    /^`(0x[a-fA-F0-9]{40})`\s+calls\s+`(.+?)`\s+on\s+(?:(.+?)\s+at\s+)?`(0x[a-fA-F0-9]{40})`/,
   );
   if (callMatch) {
-    const [, from, fnCall, contractName, target] = callMatch;
+    const fnCall = callMatch[2];
     const fnMatch = fnCall.match(/^([a-zA-Z0-9_]+)\((.*)\)$/);
     const fnName = fnMatch?.[1] ?? null;
-    const rawArgs = fnMatch?.[2] ?? null;
-    const args = rawArgs
-      ? rawArgs
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : [];
 
     return {
       kind: 'call' as const,
-      from,
       fnCall,
       fnName,
-      args,
-      contractName,
-      target,
+      from: callMatch[1],
+      source: decodedText.match(/\(decoded from (.+?)\)$/)?.[1],
+      implementation: decodedText.match(/implementation ABI at `(0x[a-fA-F0-9]{40})`/)?.[1],
     };
   }
 
@@ -434,13 +396,7 @@ function parseDecodedSentence(decodedText: string) {
     /^`(0x[a-fA-F0-9]{40})`\s+transfers\s+(.+?)\s+ETH\s+to\s+`(0x[a-fA-F0-9]{40})`/,
   );
   if (ethTransferMatch) {
-    const [, from, amount, to] = ethTransferMatch;
-    return {
-      kind: 'eth-transfer' as const,
-      from,
-      to,
-      amountEth: amount,
-    };
+    return { kind: 'eth-transfer' as const };
   }
 
   return { kind: 'unknown' as const };
@@ -493,7 +449,7 @@ function formatEthValue(value: bigint) {
 
 type DecodedSignatureCall = {
   functionName: string;
-  inputs: Array<{ name?: string; type: string }>;
+  inputs: readonly { name?: string; type: string }[];
   args: readonly unknown[];
   fullCalldata: `0x${string}`;
 };
@@ -513,35 +469,79 @@ function getFullCalldata(signature: string | undefined, calldata: `0x${string}`)
   }
 }
 
+function getFunctionAbi(signature: string | undefined) {
+  if (!signature?.trim() || signature.startsWith('0x')) return null;
+  try {
+    const abiItem = parseAbiItem(`function ${signature.trim()}`);
+    return abiItem.type === 'function' ? abiItem : null;
+  } catch {
+    return null;
+  }
+}
+
 function tryDecodeFromSignature(
   signature: string | undefined,
   calldata: `0x${string}`,
 ): DecodedSignatureCall | null {
-  if (!signature) return null;
-  const trimmed = signature.trim();
-  if (!trimmed || trimmed.startsWith('0x')) return null;
-
+  const abiItem = getFunctionAbi(signature);
+  if (!abiItem) return null;
   try {
-    const abiItem = parseAbiItem(`function ${trimmed}`);
-    // biome-ignore lint/suspicious/noExplicitAny: viem AbiFunction typing is complex
-    const inputs = ((abiItem as any).inputs ?? []) as Array<{ name?: string; type: string }>;
-
-    const fullCalldata = getFullCalldata(trimmed, calldata);
-    const decoded = decodeFunctionData({
-      // biome-ignore lint/suspicious/noExplicitAny: viem AbiFunction typing is complex
-      abi: [abiItem as any],
-      data: fullCalldata,
-    });
-
+    const fullCalldata = getFullCalldata(signature, calldata);
+    const decoded = decodeFunctionData({ abi: [abiItem], data: fullCalldata });
     return {
       functionName: decoded.functionName,
       args: decoded.args,
-      inputs,
+      inputs: abiItem.inputs,
       fullCalldata,
     };
   } catch {
     return null;
   }
+}
+
+function DetailField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-[8rem_minmax(0,1fr)] gap-1 sm:gap-4">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 text-xs break-words">{children}</dd>
+    </div>
+  );
+}
+
+function CallArguments({
+  args,
+  inputs,
+  baseUrl,
+  labels,
+  chainId,
+}: {
+  args: readonly unknown[];
+  inputs?: readonly { name?: string }[];
+  baseUrl: string;
+  labels?: StructuredSimulationReport['metadata']['addressLabels'];
+  chainId: number | undefined;
+}) {
+  return (
+    <div className="space-y-3 text-xs">
+      {args.map((arg, index) => {
+        const raw = stringifyDecodedValue(arg);
+        return (
+          <div key={index} className="space-y-1">
+            {inputs?.[index]?.name && (
+              <p className="text-muted-foreground break-all">{inputs[index].name}</p>
+            )}
+            <div className="min-w-0">
+              {isHexAddress(raw) ? (
+                <AddressValue address={raw} baseUrl={baseUrl} labels={labels} chainId={chainId} />
+              ) : (
+                <ValueWithCopy value={raw} />
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function parseEventSignature(eventText: string) {
@@ -565,7 +565,7 @@ function parseEventSignature(eventText: string) {
   return { name, params };
 }
 
-function EventCard({
+function EventRow({
   eventText,
   baseUrl,
   labels,
@@ -578,57 +578,37 @@ function EventCard({
 }) {
   const parsed = parseEventSignature(eventText);
   if (!parsed) {
-    return <div className="text-xs font-mono break-all text-muted-foreground">{eventText}</div>;
-  }
-
-  const hasParams = parsed.params.length > 0;
-  const couldNotDecode = parsed.name === 'RawLog';
-  const couldNotDecodeBadge = couldNotDecode ? (
-    <Badge
-      variant="outline"
-      className="bg-yellow-100 text-yellow-800 border-yellow-300 text-[10px] px-1.5 py-0"
-    >
-      Could not decode
-    </Badge>
-  ) : null;
-
-  if (!hasParams) {
     return (
-      <div className="flex items-center gap-2 text-xs">
-        <span className="font-medium text-foreground">{parsed.name}</span>
-        {couldNotDecodeBadge}
+      <div className="py-2 first:pt-0 last:pb-0 text-xs font-mono break-all text-muted-foreground">
+        {eventText}
       </div>
     );
   }
 
+  const couldNotDecode = parsed.name === 'RawLog';
   return (
-    <details className="group">
-      <summary className="cursor-pointer select-none flex items-center gap-2 text-xs [&::-webkit-details-marker]:hidden">
-        <ChevronDownIcon className="h-3 w-3 text-muted-foreground transition-transform group-open:rotate-180 shrink-0" />
-        <span className="font-medium text-foreground">{parsed.name}</span>
-        {couldNotDecodeBadge}
-        <span className="text-muted-foreground">({parsed.params.length} params)</span>
-      </summary>
-      <div className="mt-1.5 ml-5 space-y-1 border-l-2 border-muted/50 pl-3">
+    <div className="py-3 first:pt-0 last:pb-0 space-y-3">
+      <p className="text-sm font-medium">{couldNotDecode ? 'Unrecognized event' : parsed.name}</p>
+      {couldNotDecode && (
+        <p className="text-xs text-muted-foreground">This report could not identify the event.</p>
+      )}
+      <dl className="space-y-3">
         {parsed.params.map((p) => {
           const raw = p.value;
           const isAddr = isHexAddress(raw);
 
           return (
-            <div key={`${parsed.name}-${p.name}-${raw}`} className="flex items-start gap-2 text-xs">
-              <span className="text-muted-foreground w-20 shrink-0 truncate" title={p.name}>
-                {p.name}
-              </span>
+            <DetailField key={`${parsed.name}-${p.name}-${raw}`} label={p.name}>
               {isAddr ? (
                 <AddressValue address={raw} baseUrl={baseUrl} labels={labels} chainId={chainId} />
               ) : (
-                <ValueWithCopy value={raw} />
+                <ValueWithCopy value={raw} truncate={false} />
               )}
-            </div>
+            </DetailField>
           );
         })}
-      </div>
-    </details>
+      </dl>
+    </div>
   );
 }
 
@@ -639,7 +619,8 @@ export function CallGroupedView({
   proposal: Proposal;
   report: StructuredSimulationReport;
 }) {
-  const decodedByIndex = getDecodeCalldataInfo(report.checks);
+  const decodeCheck = report.checks.find((check) => check.checkId === 'checkDecodeCalldata');
+  const decodedByIndex = (decodeCheck?.info ?? []).filter((line) => !line.startsWith('Advisory:'));
   const eventsByEmitter = parseLogsByEmitter(report.checks);
   const chainId = report.metadata.chainId;
 
@@ -662,6 +643,9 @@ export function CallGroupedView({
       calldata,
       fullCalldata: decodedSignature?.fullCalldata ?? getFullCalldata(signature, calldata),
       decodedText,
+      notes: (decodeCheck?.info ?? []).filter(
+        (line) => line.startsWith('Advisory:') && line.toLowerCase().includes(target.toLowerCase()),
+      ),
       decoded: decodedText ? parseDecodedSentence(decodedText) : null,
       decodedSignature,
       tags,
@@ -713,7 +697,7 @@ export function CallGroupedView({
     <div className="space-y-4">
       {/* Summary Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-        <div className="flex items-center gap-4 text-sm">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm min-w-0">
           <span className="font-medium">
             {totalCalls} call{totalCalls === 1 ? '' : 's'}
           </span>
@@ -751,6 +735,12 @@ export function CallGroupedView({
         )}
       </div>
 
+      {[...(decodeCheck?.errors ?? []), ...(decodeCheck?.warnings ?? [])].map((message, index) => (
+        <p key={`decode-warning-${index}`} className="text-sm text-destructive break-words">
+          {message}
+        </p>
+      ))}
+
       {Object.entries(byTarget).map(([targetKey, targetCalls]) => {
         const target = targetCalls[0]?.target ?? targetKey;
 
@@ -768,7 +758,7 @@ export function CallGroupedView({
             {/* Target header with accent bar */}
             <div className="bg-muted/30 border-b border-border/50 px-4 py-3">
               <div className="flex items-start justify-between gap-3">
-                <div className="flex flex-col gap-1.5 min-w-0">
+                <div className="flex flex-col flex-1 gap-1.5 min-w-0">
                   <AddressValue
                     address={target}
                     baseUrl={baseUrl}
@@ -790,17 +780,22 @@ export function CallGroupedView({
                     </div>
                   )}
                 </div>
-                <div className="text-xs text-muted-foreground whitespace-nowrap bg-background/50 px-2 py-1 rounded">
-                  {targetCalls.length} call{targetCalls.length === 1 ? '' : 's'}
-                  {totalEth > 0n ? ` · ${formatEthValue(totalEth)}` : ''}
+                <div className="text-xs text-muted-foreground text-right max-w-1/2 bg-background/50 px-2 py-1 rounded">
+                  <span className="whitespace-nowrap">
+                    {targetCalls.length} call{targetCalls.length === 1 ? '' : 's'}
+                  </span>
+                  {totalEth > 0n && (
+                    <span className="block break-all">{formatEthValue(totalEth)}</span>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Calls list */}
-            <div className="p-3 space-y-2">
+            <h4 className="px-4 pt-4 text-xs font-medium text-muted-foreground">
+              {targetCalls.length === 1 ? 'Call' : 'Calls'}
+            </h4>
+            <div className="divide-y divide-border/60">
               {targetCalls.map((call) => {
-                const hasDetails = Boolean(call.decodedText || call.signature || call.calldata);
                 const decoded = call.decoded;
                 const decodedSignature = call.decodedSignature;
                 const fnLabel =
@@ -811,143 +806,134 @@ export function CallGroupedView({
                       ? 'ETH transfer'
                       : (getFunctionName(call.signature, call.decodedText) ?? 'Call'));
 
-                const showEth = call.value > 0n;
+                const preview = decodedSignature
+                  ? `${fnLabel}(${decodedSignature.args.map(stringifyDecodedValue).join(', ')})`
+                  : decoded?.kind === 'call'
+                    ? decoded.fnCall
+                    : fnLabel;
 
                 return (
-                  <details
-                    key={`${call.target}-${call.index}`}
-                    className="group border border-border/60 rounded-md bg-background/50 hover:bg-background/80 transition-colors"
-                  >
-                    <summary className="cursor-pointer select-none px-3 py-2 flex items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
-                      <div className="min-w-0 flex items-center gap-2.5">
-                        <span className="inline-flex items-center justify-center h-6 w-6 rounded-md bg-primary/10 text-primary text-xs font-bold shrink-0">
-                          {call.index + 1}
-                        </span>
-                        <span className="text-sm font-semibold text-foreground">{fnLabel}</span>
-                        {showEth && (
-                          <Badge
-                            variant="outline"
-                            className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]"
-                          >
-                            {formatEthValue(call.value)}
-                          </Badge>
+                  <details key={`${call.target}-${call.index}`} className="group/call">
+                    <summary className="cursor-pointer list-none p-4 flex items-start gap-2 [&::-webkit-details-marker]:hidden">
+                      <span className="inline-flex items-center justify-center h-6 w-6 rounded-md bg-primary/10 text-primary text-xs font-bold shrink-0">
+                        {call.index + 1}
+                      </span>
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <code className="text-sm break-all">{formatCallPreview(preview)}</code>
+                        {call.value > 0n && <p className="text-xs">{formatEthValue(call.value)}</p>}
+                        {call.decodedText?.includes('(not decoded)') && (
+                          <p className="text-sm text-destructive">Could not decode this call.</p>
                         )}
                       </div>
-                      <ChevronDownIcon className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180 shrink-0" />
+                      <ChevronDownIcon className="h-4 w-4 shrink-0 mt-1 text-muted-foreground group-open/call:rotate-180" />
                     </summary>
-
-                    {hasDetails && (
-                      <div className="px-3 pb-3 pt-2 space-y-2 text-xs border-t border-border/40 bg-muted/20">
-                        {(decoded?.kind === 'call' || decoded?.kind === 'eth-transfer') && (
-                          <div className="flex items-center gap-3">
-                            <span className="text-muted-foreground w-14 shrink-0">Caller</span>
+                    <div className="border-t border-border/60 p-4 space-y-4">
+                      <h4 className="text-sm font-medium">Technical details</h4>
+                      <dl className="space-y-4">
+                        <DetailField label="Target contract">
+                          <AddressValue
+                            address={call.target}
+                            baseUrl={baseUrl}
+                            labels={labels}
+                            chainId={chainId}
+                          />
+                        </DetailField>
+                        {decoded?.kind === 'call' && (
+                          <DetailField label="Called by">
                             <AddressValue
                               address={decoded.from}
                               baseUrl={baseUrl}
                               labels={labels}
                               chainId={chainId}
                             />
-                          </div>
+                          </DetailField>
                         )}
-
+                        {decodedSignature ? (
+                          <DetailField label="Arguments">
+                            <CallArguments
+                              args={decodedSignature.args}
+                              inputs={decodedSignature.inputs}
+                              baseUrl={baseUrl}
+                              labels={labels}
+                              chainId={chainId}
+                            />
+                          </DetailField>
+                        ) : decoded?.kind === 'call' ? (
+                          <DetailField label="Full call">
+                            <ValueWithCopy value={decoded.fnCall} />
+                          </DetailField>
+                        ) : null}
+                        {decoded?.kind === 'call' && decoded.source && (
+                          <DetailField label="Decoded using">
+                            {decoded.implementation
+                              ? 'Implementation contract’s ABI'
+                              : decoded.source}
+                          </DetailField>
+                        )}
+                        {decoded?.kind === 'call' && decoded.implementation && (
+                          <DetailField label="Implementation">
+                            <AddressValue
+                              address={decoded.implementation}
+                              baseUrl={baseUrl}
+                              chainId={chainId}
+                            />
+                          </DetailField>
+                        )}
+                        {call.notes.length > 0 && (
+                          <DetailField label="Trace note">
+                            {call.notes.map((note, index) => (
+                              <p key={index}>
+                                {note.includes('no exact trace match')
+                                  ? 'No exact call match was found in the simulation trace. The arguments were decoded separately.'
+                                  : note.replace(/^Advisory: /, '')}
+                              </p>
+                            ))}
+                          </DetailField>
+                        )}
+                        {call.signature && (
+                          <DetailField label="Signature">
+                            <ValueWithCopy value={call.signature} />
+                          </DetailField>
+                        )}
                         {call.value > 0n && (
-                          <div className="flex items-center gap-3">
-                            <span className="text-muted-foreground w-14 shrink-0">Value (wei)</span>
+                          <DetailField label="Value (wei)">
                             <ValueWithCopy value={call.value.toString()} />
-                          </div>
+                          </DetailField>
                         )}
-
-                        {decodedSignature?.args.map((arg, argIndex) => {
-                          const input = decodedSignature.inputs[argIndex];
-                          const labelText = input?.name?.trim() || `arg${argIndex}`;
-                          const raw = stringifyDecodedValue(arg);
-                          const looksLikeAddress = isHexAddress(raw);
-
-                          return (
-                            <div
-                              key={`${call.target}-${call.index}-arg-${argIndex}`}
-                              className="flex items-center gap-3"
-                            >
-                              <span className="text-muted-foreground w-14 shrink-0 truncate">
-                                {labelText}
-                              </span>
-                              {looksLikeAddress ? (
-                                <AddressValue
-                                  address={raw}
-                                  baseUrl={baseUrl}
-                                  labels={labels}
-                                  chainId={chainId}
-                                />
-                              ) : (
-                                <ValueWithCopy value={raw} />
-                              )}
-                            </div>
-                          );
-                        })}
-
-                        {(call.signature || call.fullCalldata) && (
-                          <details className="mt-2">
-                            <summary className="cursor-pointer text-muted-foreground hover:text-foreground text-[11px]">
-                              Raw data
-                            </summary>
-                            <div className="mt-1 space-y-1 pl-2 border-l border-muted">
-                              {call.signature && (
-                                <div className="flex items-start gap-2">
-                                  <span className="text-muted-foreground shrink-0">sig</span>
-                                  <code className="font-mono text-[11px] break-all">
-                                    {call.signature}
-                                  </code>
-                                </div>
-                              )}
-                              {call.fullCalldata && (
-                                <div className="flex items-start gap-2">
-                                  <span className="text-muted-foreground shrink-0">data</span>
-                                  <code className="font-mono text-[11px] break-all text-muted-foreground">
-                                    {call.fullCalldata}
-                                  </code>
-                                </div>
-                              )}
-                            </div>
-                          </details>
+                        <DetailField label="Raw calldata">
+                          <ValueWithCopy value={call.fullCalldata} />
+                        </DetailField>
+                        {decoded?.kind === 'unknown' && call.decodedText && (
+                          <DetailField label="Report note">
+                            {call.decodedText.replaceAll('`', '')}
+                          </DetailField>
                         )}
-                      </div>
-                    )}
+                      </dl>
+                    </div>
                   </details>
                 );
               })}
             </div>
 
-            {eventCount > 0 ? (
-              <div className="pt-2 border-t border-muted/50">
-                <details className="group outline-none" open={eventCount === 1}>
-                  <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 [&::-webkit-details-marker]:hidden outline-none">
-                    <ChevronDownIcon className="h-3 w-3 transition-transform group-open:rotate-180" />
-                    {eventCount} event{eventCount === 1 ? '' : 's'}
-                  </summary>
-                  <div className="mt-2 space-y-3 pl-4">
-                    {(() => {
-                      const seen = new Map<string, number>();
-                      return (emitted?.events ?? []).map((evt) => {
-                        const hash = stableHash(evt);
-                        const occurrence = (seen.get(hash) ?? 0) + 1;
-                        seen.set(hash, occurrence);
-                        const key = `${targetKey}-evt-${hash}-${occurrence}`;
-
-                        return (
-                          <EventCard
-                            key={key}
-                            eventText={evt}
-                            baseUrl={baseUrl}
-                            labels={labels}
-                            chainId={chainId}
-                          />
-                        );
-                      });
-                    })()}
-                  </div>
-                </details>
-              </div>
-            ) : null}
+            {eventCount > 0 && (
+              <section
+                className="border-t border-border/60 px-4 py-4 space-y-3"
+                aria-label="Events"
+              >
+                <h4 className="text-xs font-medium text-muted-foreground">Events</h4>
+                <div className="divide-y divide-border/60">
+                  {(emitted?.events ?? []).map((eventText, index) => (
+                    <EventRow
+                      key={`${targetKey}-event-${index}`}
+                      eventText={eventText}
+                      baseUrl={baseUrl}
+                      labels={labels}
+                      chainId={chainId}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
         );
       })}
@@ -1061,12 +1047,12 @@ function CrossChainCallsSection({
                   </div>
 
                   {firstJob.error && (
-                    <div className="p-2 bg-red-100 border border-red-200 rounded text-red-800 text-[11px]">
+                    <div className="p-2 bg-red-100 border border-red-200 rounded text-red-800 text-[11px] break-words">
                       {firstJob.error}
                     </div>
                   )}
 
-                  <div className="space-y-2">
+                  <div className="divide-y divide-border/60">
                     {stepCount ? (
                       groupSteps.map(({ job, msg }, index) => {
                         const visibleSignature = formatCrossChainCall(msg);
@@ -1077,149 +1063,96 @@ function CrossChainCallsSection({
                         const hasValue = msg.l2Value && msg.l2Value !== '0';
                         const isFailed = msg.status === 'failure';
 
+                        const visibleCall = msg.forwardedCall ?? msg.call;
+                        const inputs = getFunctionAbi(visibleCall?.signature)?.inputs;
+                        const args =
+                          visibleCall?.args ??
+                          (!msg.forwardedCall && msg.l2InputData
+                            ? tryDecodeFromSignature(msg.call?.signature, msg.l2InputData)?.args
+                            : undefined);
+
+                        const preview = args
+                          ? `${fnName}(${args.map(stringifyDecodedValue).join(', ')})`
+                          : visibleSignature;
                         return (
                           <details
                             key={`${chainId}-${job.sourceOrder}-${msg.stepIndex}-${index}`}
-                            className={`group border rounded ${isFailed ? 'border-red-200 bg-red-50/50' : 'border-muted/60'}`}
+                            className="group/call"
                           >
-                            <summary className="cursor-pointer select-none px-2.5 py-1.5 flex items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
-                              <div className="min-w-0 flex items-center gap-2">
-                                <span className="inline-flex items-center justify-center h-5 w-5 rounded bg-muted text-[10px] font-semibold text-muted-foreground shrink-0">
-                                  {index + 1}
-                                </span>
-                                <span className="text-sm font-medium truncate">{fnName}</span>
-                                {stepTarget ? (
-                                  <span className="inline-flex items-center gap-1 min-w-0">
-                                    {stepTargetLabel ? (
-                                      <span className="text-xs text-muted-foreground truncate">
-                                        {stepTargetLabel}
-                                      </span>
-                                    ) : null}
-                                    <ExplorerAddressLink
-                                      address={stepTarget}
-                                      baseUrl={explorerBaseUrl}
-                                      className="text-xs font-mono text-muted-foreground hover:underline shrink-0"
-                                    >
-                                      {stepTarget.slice(0, 6)}...{stepTarget.slice(-4)}
-                                    </ExplorerAddressLink>
-                                  </span>
-                                ) : (
-                                  <span className="text-xs text-muted-foreground">
-                                    Unknown target
-                                  </span>
-                                )}
-                                {hasValue && (
-                                  <span className="text-xs text-muted-foreground">
-                                    {msg.l2Value} wei
-                                  </span>
-                                )}
-                                {isFailed && (
-                                  <Badge variant="destructive" className="text-[10px] px-1.5">
-                                    Failed
-                                  </Badge>
+                            <summary className="cursor-pointer list-none p-4 flex items-start gap-2 [&::-webkit-details-marker]:hidden">
+                              <span className="inline-flex items-center justify-center h-6 w-6 rounded bg-muted text-xs shrink-0">
+                                {index + 1}
+                              </span>
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <p className="text-xs text-muted-foreground break-all">
+                                  {stepTargetLabel || stepTarget || 'Unknown target'}
+                                </p>
+                                <code className="text-sm break-all">
+                                  {formatCallPreview(preview)}
+                                </code>
+                                {hasValue && <p className="text-xs break-all">{msg.l2Value} wei</p>}
+                                {msg.error && (
+                                  <p className="text-xs text-destructive break-words">
+                                    {msg.error}
+                                  </p>
                                 )}
                               </div>
-                              <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground transition-transform group-open:rotate-180 shrink-0" />
+                              {isFailed && <Badge variant="destructive">Failed</Badge>}
+                              {msg.status === 'skipped' && <Badge variant="outline">Skipped</Badge>}
+                              <ChevronDownIcon className="h-4 w-4 shrink-0 mt-1 text-muted-foreground group-open/call:rotate-180" />
                             </summary>
-
-                            <div className="px-3 pb-3 pt-1 space-y-1.5 text-xs">
-                              {stepTarget && (
-                                <div className="flex items-center gap-3">
-                                  <span className="text-muted-foreground w-14 shrink-0">To</span>
-                                  <AddressValue
-                                    address={stepTarget}
-                                    baseUrl={explorerBaseUrl}
-                                    labels={labels}
-                                    chainId={chainId}
-                                  />
-                                  {stepTargetLabel && !getAddressLabelFor(stepTarget, labels) ? (
-                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                                      {stepTargetLabel}
-                                    </Badge>
-                                  ) : null}
-                                </div>
-                              )}
-
-                              {firstJob.l2FromAddress && (
-                                <div className="flex items-center gap-3">
-                                  <span className="text-muted-foreground w-14 shrink-0">
-                                    {sourceLabel}
-                                  </span>
-                                  <AddressValue
-                                    address={firstJob.l2FromAddress}
-                                    baseUrl={explorerBaseUrl}
-                                    labels={labels}
-                                    chainId={chainId}
-                                  />
-                                </div>
-                              )}
-
-                              {visibleSignature && (
-                                <div className="flex items-start gap-3">
-                                  <span className="text-muted-foreground w-14 shrink-0">Sig</span>
-                                  <code className="font-mono text-[11px] break-all">
-                                    {visibleSignature}
-                                  </code>
-                                </div>
-                              )}
-
-                              {transportLabel && transportLabel !== visibleSignature && (
-                                <div className="flex items-start gap-3">
-                                  <span className="text-muted-foreground w-14 shrink-0">Via</span>
-                                  <code className="font-mono text-[11px] break-all">
-                                    {transportLabel}
-                                  </code>
-                                </div>
-                              )}
-
-                              {msg.call?.args && msg.call.args.length > 0 && (
-                                <div className="space-y-1">
-                                  {msg.call.args.map((arg, argIndex) => {
-                                    const raw = stringifyDecodedValue(arg);
-                                    const looksLikeAddress = isHexAddress(raw);
-
-                                    return (
-                                      <div
-                                        key={`${chainId}-${job.sourceOrder}-${msg.stepIndex}-${index}-arg-${argIndex}`}
-                                        className="flex items-center gap-3"
-                                      >
-                                        <span className="text-muted-foreground w-14 shrink-0 truncate">
-                                          arg{argIndex}
-                                        </span>
-                                        {looksLikeAddress ? (
-                                          <AddressValue
-                                            address={raw}
-                                            baseUrl={explorerBaseUrl}
-                                            labels={labels}
-                                            chainId={chainId}
-                                          />
-                                        ) : (
-                                          <ValueWithCopy value={raw} />
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-
-                              {msg.error && (
-                                <div className="mt-2 p-2 bg-red-100 border border-red-200 rounded text-red-800 text-[11px]">
-                                  {msg.error}
-                                </div>
-                              )}
-
-                              {msg.l2InputData && (
-                                <details className="mt-2">
-                                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground text-[11px]">
-                                    Raw data
-                                  </summary>
-                                  <div className="mt-1 pl-2 border-l border-muted">
-                                    <code className="font-mono text-[11px] break-all text-muted-foreground">
-                                      {msg.l2InputData}
-                                    </code>
-                                  </div>
-                                </details>
-                              )}
+                            <div className="border-t border-border/60 p-4 space-y-4">
+                              <h4 className="text-sm font-medium">Technical details</h4>
+                              <dl className="space-y-4">
+                                {stepTarget && (
+                                  <DetailField label="Target contract">
+                                    <AddressValue
+                                      address={stepTarget}
+                                      baseUrl={explorerBaseUrl}
+                                      labels={labels}
+                                      chainId={chainId}
+                                    />
+                                  </DetailField>
+                                )}
+                                {firstJob.l2FromAddress && (
+                                  <DetailField label={sourceLabel}>
+                                    <AddressValue
+                                      address={firstJob.l2FromAddress}
+                                      baseUrl={explorerBaseUrl}
+                                      labels={labels}
+                                      chainId={chainId}
+                                    />
+                                  </DetailField>
+                                )}
+                                {args && (
+                                  <DetailField label="Arguments">
+                                    <CallArguments
+                                      args={args}
+                                      inputs={inputs}
+                                      baseUrl={explorerBaseUrl}
+                                      labels={labels}
+                                      chainId={chainId}
+                                    />
+                                  </DetailField>
+                                )}
+                                <DetailField label="Signature">
+                                  <ValueWithCopy value={visibleSignature} />
+                                </DetailField>
+                                {transportLabel && transportLabel !== visibleSignature && (
+                                  <DetailField label="Sent via">
+                                    <ValueWithCopy value={transportLabel} />
+                                  </DetailField>
+                                )}
+                                {msg.l2InputData && (
+                                  <DetailField
+                                    label={
+                                      msg.forwardedCall ? 'Transport calldata' : 'Raw calldata'
+                                    }
+                                  >
+                                    <ValueWithCopy value={msg.l2InputData} />
+                                  </DetailField>
+                                )}
+                              </dl>
                             </div>
                           </details>
                         );
