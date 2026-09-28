@@ -72,3 +72,24 @@ Configure this repository secret before enabling CI deploys:
 - `VERCEL_TOKEN`: Vercel token with access to project `seatbelt-viewer` in scope `marcos-projects-5a62a7ed`
 
 The workflow links the project non-interactively and runs `vercel deploy --prod`.
+
+## Call UI stress fixture
+
+Run `bun dev` in `frontend`, then open `/dev/call-fixtures`. This development-only
+page renders the real Calls and calldata-check components with synthetic data;
+it requires no report file or simulation. It returns 404 outside development.
+
+Check at 320px, 390px, desktop, and 200% zoom:
+
+- Function/contract names wrap; no horizontal page scroll.
+- Named arguments retain their labels, links, and copy controls.
+- Large call payloads stay compact until expanded; copy returns the full value.
+- Event arguments stay visible in full, with no event expanders or duplicate previews.
+- Repeated proxy targets and sentence-only decodes remain readable.
+- Calls with several ordinary addresses keep every argument visible, including `false`.
+- Destination calls show the forwarded call's arguments, not the transport's.
+- Older destination reports without argument arrays decode their signature and calldata.
+- Decode warnings, destination failures, and skipped calls remain visible.
+- Clicking a function row or pressing Enter opens Technical details with complete input data.
+
+These are presentation fixtures, not evidence of a successful onchain simulation.

@@ -2,6 +2,7 @@ import { type Abi, decodeEventLog, getAddress } from 'viem';
 import type { Log, ProposalCheck, TenderlyContract } from '../types';
 import { BlockExplorerFactory } from '../utils/clients/block-explorers/factory';
 import { getContractName } from '../utils/clients/tenderly';
+import { detectProxy } from '../utils/contracts/proxy';
 
 function isHex(value: unknown): value is `0x${string}` {
   return typeof value === 'string' && /^0x[a-fA-F0-9]*$/.test(value);
@@ -62,10 +63,6 @@ function formatRawLog(log: Log): string {
   return `RawLog(${fields.join(', ')})`;
 }
 
-function formatLog(log: Log, abi: Abi | null): string {
-  return formatTenderlyDecodedLog(log) ?? formatAbiDecodedLog(log, abi) ?? formatRawLog(log);
-}
-
 function getTenderlyAbi(contract: TenderlyContract | undefined): Abi | null {
   return contract?.data?.abi?.length ? (contract.data.abi as Abi) : null;
 }
@@ -112,8 +109,32 @@ export const checkLogs: ProposalCheck = {
         ? await getLogDecodingAbi(contract, address, deps.chainConfig?.chainId)
         : null;
 
-      for (const log of logs) {
-        info.push(`    \`${formatLog(log, abi)}\``);
+      const decoded = logs.map(
+        (log) => formatTenderlyDecodedLog(log) ?? formatAbiDecodedLog(log, abi),
+      );
+      let implementationAbi: Abi | null = null;
+      if (decoded.includes(null) && deps.chainConfig?.chainId && deps.publicClient) {
+        try {
+          const proxy = await detectProxy(
+            getAddress(address),
+            deps.publicClient,
+            BigInt(sim.transaction.block_number),
+          );
+          if (proxy.kind !== 'none' && proxy.implementation) {
+            implementationAbi = await BlockExplorerFactory.fetchContractAbi(
+              proxy.implementation,
+              deps.chainConfig.chainId,
+            );
+          }
+        } catch {
+          // Keep the raw event when historical state or its ABI is unavailable.
+        }
+      }
+
+      for (const [index, log] of logs.entries()) {
+        const description =
+          decoded[index] ?? formatAbiDecodedLog(log, implementationAbi) ?? formatRawLog(log);
+        info.push(`    \`${description}\``);
       }
     }
 

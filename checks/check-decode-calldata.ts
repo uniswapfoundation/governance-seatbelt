@@ -6,13 +6,17 @@ import {
   parseAbiItem,
   toFunctionSelector,
 } from 'viem';
-import type { DecodedCall, ProposalCheck, TenderlyContract, TenderlySimulation } from '../types';
+import type {
+  DecodedCall,
+  ProposalCheck,
+  ProposalData,
+  TenderlyContract,
+  TenderlySimulation,
+} from '../types';
 import { BlockExplorerFactory } from '../utils/clients/block-explorers/factory';
 import { getContractNameFromTenderly } from '../utils/clients/tenderly';
 import { fetchTokenMetadata } from '../utils/contracts/erc20';
-
-// Cache for decoded function data to avoid redundant decoding
-const decodedFunctionCache: Record<string, { name: string; args: unknown[] }> = {};
+import { detectProxy } from '../utils/contracts/proxy';
 
 // Keep this small to avoid rate limiting and reduce ABI/metadata lookup fan-out.
 // If decoding becomes a bottleneck, tune this constant.
@@ -77,7 +81,7 @@ type MatchKind =
   | 'target-selector-order'
   | 'selector-order';
 
-type DecodeSource = 'cache' | 'abi' | 'signature' | 'token' | 'generic' | 'eth-transfer';
+type DecodeSource = 'abi' | 'signature' | 'token' | 'generic' | 'eth-transfer';
 
 type CalldataDescriptionResult = {
   description: string;
@@ -124,7 +128,7 @@ export const checkDecodeCalldata: ProposalCheck = {
 
     if (isL2Chain) {
       // Handle L2 calldata decoding (destination simulation for this chain only)
-      return await handleL2CrossChainCalldata(sim, warnings, deps.chainConfig.chainId);
+      return await handleL2CrossChainCalldata(sim, warnings, deps);
     }
 
     // Handle regular L1 calldata decoding (existing logic)
@@ -173,7 +177,7 @@ export const checkDecodeCalldata: ProposalCheck = {
             value: proposal.values?.[i].toString() ?? '0',
           };
         } else {
-          call = returnCallOrMatchingSubcall(calldata, match.call);
+          call = match.call;
         }
 
         const contract = sim.contracts.find(
@@ -185,11 +189,12 @@ export const checkDecodeCalldata: ProposalCheck = {
           targetAddress,
           localWarnings,
           contract,
-          deps.chainConfig.chainId,
+          deps,
+          BigInt(sim.transaction.block_number),
         );
 
         if (traceMatchWarning) {
-          if (['abi', 'signature', 'cache', 'token'].includes(descriptionResult.decodeSource)) {
+          if (['abi', 'signature', 'token'].includes(descriptionResult.decodeSource)) {
             localAdvisories.push(
               `Advisory: no exact trace match for target ${targetAddress}; decoded calldata via ${descriptionResult.decodeSource} fallback.`,
             );
@@ -223,7 +228,7 @@ export const checkDecodeCalldata: ProposalCheck = {
 async function handleL2CrossChainCalldata(
   sim: TenderlySimulation,
   warnings: string[],
-  chainId: number,
+  deps: ProposalData,
 ) {
   const allL2Calls: DecodedCall[] = [];
 
@@ -246,7 +251,14 @@ async function handleL2CrossChainCalldata(
       (c: TenderlyContract) => getAddress(c.address) === getAddress(call.to),
     );
 
-    return prettifyCalldata(call, call.to, localWarnings, contract, chainId);
+    return prettifyCalldata(
+      call,
+      call.to,
+      localWarnings,
+      contract,
+      deps,
+      BigInt(sim.transaction.block_number),
+    );
   });
 
   for (const localWarnings of warningsByCallIndex) warnings.push(...localWarnings);
@@ -317,7 +329,7 @@ type TraceCallLike = {
   to?: string;
   input?: string;
   value?: string;
-  calls?: TraceCallLike[];
+  calls?: DecodedCall[];
   function_name?: string;
   decoded_input?: DecodedCall['decoded_input'];
   decoded_output?: DecodedCall['decoded_output'];
@@ -344,6 +356,7 @@ function flattenCalls(calls: readonly unknown[]): DecodedCall[] {
           to: node.to,
           input: node.input,
           value: node.value ?? '0',
+          calls: node.calls,
           function_name: node.function_name,
           decoded_input: node.decoded_input,
           decoded_output: node.decoded_output,
@@ -404,8 +417,13 @@ function findMatchingCallWithFallback(
     return null;
   };
 
-  const strict = findLastCall((call) => addressesEqual(call.from, from) && call.input === calldata);
-  if (strict) return { call: strict, kind: 'strict-from-calldata' };
+  const strict = flattenedCalls.filter(
+    (call) =>
+      addressesEqual(call.from, from) &&
+      addressesEqual(call.to, target) &&
+      call.input.slice(0, 10).toLowerCase() === selector,
+  )[targetSelectorOrdinal];
+  if (strict?.input === calldata) return { call: strict, kind: 'strict-from-calldata' };
 
   const targetAndCalldata = findLastCall(
     (call) => addressesEqual(call.to, target) && call.input === calldata,
@@ -435,15 +453,15 @@ function findMatchingCallWithFallback(
 }
 
 /**
- * Given a call, check if any subcalls have matching calldata. If so, return the deepest call as
- * this will be the decoded call (e.g. if there are proxies the top level call with matching
- * calldata will be the fallback function)
+ * Follow proxy delegation, including implementations changed earlier in the simulation.
+ * Ordinary calls with identical calldata are not proxy implementations.
  */
 function returnCallOrMatchingSubcall(calldata: string, call: DecodedCall): DecodedCall {
-  if (!call.calls || !call.calls?.length) return call;
-  return call.calls[0].input === calldata
-    ? returnCallOrMatchingSubcall(calldata, call.calls[0] as DecodedCall)
-    : call;
+  const delegated = call.calls?.find(
+    (child) =>
+      child.input === calldata && (child.call_type ?? child.type)?.toUpperCase() === 'DELEGATECALL',
+  );
+  return delegated ? returnCallOrMatchingSubcall(calldata, delegated) : call;
 }
 
 /**
@@ -561,8 +579,11 @@ async function prettifyCalldata(
   target: string,
   warnings: string[],
   contract: TenderlyContract | undefined,
-  chainId: number,
+  deps: ProposalData,
+  blockNumber: bigint,
 ): Promise<CalldataDescriptionResult> {
+  const chainId = deps.chainConfig.chainId;
+  const implementationCall = returnCallOrMatchingSubcall(call.input, call);
   // Handle ETH transfers (empty calldata with value)
   if (call.input === '0x' && call.value && BigInt(call.value) > 0n) {
     const ethAmount = formatUnits(BigInt(call.value), 18);
@@ -578,44 +599,47 @@ async function prettifyCalldata(
   // Format the contract identifier using the contract information from the simulation
   const contractIdentifier = contract ? getContractNameFromTenderly(contract) : `\`${target}\``;
 
-  // Check if we have a cached decoded function
-  const cacheKey = `${target}-${call.input}`;
-  if (decodedFunctionCache[cacheKey]) {
-    const decoded = decodedFunctionCache[cacheKey];
-    let description = `\`${call.from}\` calls \`${decoded.name}(`;
-    const formattedArgs = formatArgs(decoded.args);
-    if (formattedArgs) {
-      description += formattedArgs;
-    }
-    description += `)\` on ${contractIdentifier} (decoded from cache)`;
-    return { description, decodeSource: 'cache' };
-  }
-
   // Try to decode using block explorer ABI first
   let abiDecodeError: string | null = null;
   try {
-    const decoded = await BlockExplorerFactory.decodeFunctionWithAbi(
+    let decoded = await BlockExplorerFactory.decodeFunctionWithAbi(
       target,
       call.input as `0x${string}`,
       chainId,
     );
-    if (decoded) {
-      decodedFunctionCache[cacheKey] = decoded;
+    let implementation: string | null = null;
+    if (!decoded) {
+      if (implementationCall !== call) {
+        implementation = implementationCall.to;
+      } else {
+        const proxy = await detectProxy(getAddress(target), deps.publicClient, blockNumber);
+        if (proxy.kind !== 'none') implementation = proxy.implementation;
+      }
+      if (implementation) {
+        decoded = await BlockExplorerFactory.decodeFunctionWithAbi(
+          implementation,
+          call.input,
+          chainId,
+        );
+      }
+    }
 
+    if (decoded) {
       let description = `\`${call.from}\` calls \`${decoded.name}(`;
       const formattedArgs = formatArgs(decoded.args);
       if (formattedArgs) {
         description += formattedArgs;
       }
 
-      description += `)\` on ${contractIdentifier} (decoded from ABI)`;
+      description += implementation
+        ? `)\` on ${contractIdentifier} (decoded from implementation ABI at \`${implementation}\`)`
+        : `)\` on ${contractIdentifier} (decoded from ABI)`;
       return { description, decodeSource: 'abi' };
     }
 
     abiDecodeError = `Failed to decode function with selector ${selector} for contract ${target} using block explorer ABI`;
-  } catch (error) {
-    console.warn(`Failed to decode using Etherscan ABI for ${target}:`, error);
-    abiDecodeError = `Error decoding function with selector ${selector} for contract ${target}: ${error}`;
+  } catch {
+    abiDecodeError = `Could not resolve or decode implementation for contract ${target} with selector ${selector}`;
   }
 
   // Fallback: decode using known function signatures (useful for proxies where ABI lookup fails)
@@ -633,7 +657,6 @@ async function prettifyCalldata(
         });
 
         const fnName = parsed.name;
-        decodedFunctionCache[cacheKey] = { name: fnName, args: Array.from(args) };
 
         const transportDescription = formatTransportCallDescription(
           fnName,
@@ -673,9 +696,9 @@ async function prettifyCalldata(
 
   if (abiDecodeError) warnings.push(abiDecodeError);
 
-  const sig = getSignature(call);
+  const sig = getSignature(implementationCall);
   return {
-    description: getDescription(contractIdentifier, sig, call),
+    description: getDescription(contractIdentifier, sig, implementationCall),
     decodeSource: 'generic',
   };
 }

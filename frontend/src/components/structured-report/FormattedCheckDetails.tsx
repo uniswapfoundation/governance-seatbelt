@@ -6,6 +6,7 @@ import type {
   SimulationStateChange,
   StructuredSimulationReport,
 } from '@/hooks/use-simulation-results';
+import { formatCallPreview } from '@/lib/call-preview';
 import { ExternalLinkIcon } from 'lucide-react';
 import type React from 'react';
 import { useMemo } from 'react';
@@ -62,7 +63,12 @@ export function FormattedCheckDetails({
 
     const cleanedDetails = preprocessedDetails.replace(/\*\*([^*]+)\*\*:/g, '$1:');
 
-    const lines = cleanedDetails.split('\n').filter((line: string) => line.trim() !== '');
+    const allLines = cleanedDetails.split('\n').filter((line: string) => line.trim() !== '');
+    const isCalldataCheck = check.checkId === 'checkDecodeCalldata';
+    const notes = isCalldataCheck
+      ? allLines.filter((line) => line.trim().startsWith('Advisory:'))
+      : [];
+    const lines = allLines.filter((line) => !notes.includes(line));
 
     const effectiveMetadata = metadata || { proposalId: '', proposer: '' as `0x${string}` };
 
@@ -113,10 +119,10 @@ export function FormattedCheckDetails({
                         href={buildAddressLink(contractAddress, effectiveMetadata)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                        className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center max-w-full break-all"
                       >
                         {contractAddress}
-                        <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                        <ExternalLinkIcon className="h-3 w-3 ml-1 shrink-0" />
                       </a>
                       {isPlaceholderAddress(contractAddress, effectiveMetadata) && (
                         <SimulationPlaceholderBadge />
@@ -217,92 +223,54 @@ export function FormattedCheckDetails({
             }
           }
 
+          if (isCalldataCheck && processedLine.includes('(not decoded)')) {
+            return (
+              <div key={`undecoded-${index}`} className="mb-3 space-y-2">
+                <p className="text-destructive">Could not decode this call.</p>
+                <details>
+                  <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                    Technical details
+                  </summary>
+                  <p className="mt-2 text-xs text-muted-foreground break-all">
+                    {processedLine.replaceAll('`', '')}
+                  </p>
+                </details>
+              </div>
+            );
+          }
+
           const isDecodedCalldataLine =
             processedLine.includes('calls `') &&
             processedLine.includes('` on ') &&
-            (processedLine.includes('(decoded from ABI)') ||
-              processedLine.includes('(decoded from signature)'));
+            processedLine.includes('(decoded from ');
 
           if (isDecodedCalldataLine) {
-            const callerMatch = processedLine.match(/`(0x[a-fA-F0-9]{40})`\s*calls/);
-            const functionMatch = processedLine.match(/calls\s*`([^`]+)`\s*on/);
-            const targetMatch = processedLine.match(/on\s+(\S+)\s+at\s+`(0x[a-fA-F0-9]{40})`/);
-            const decodedFromMatch = processedLine.match(/\((decoded from [^)]+)\)/);
-
-            const caller = callerMatch?.[1];
-            const functionCall = functionMatch?.[1];
-            const contractName = targetMatch?.[1];
-            const targetAddress = targetMatch?.[2];
-            const decodedFrom = decodedFromMatch?.[1] || 'decoded';
-
-            const truncateFunctionCall = (fn: string) => {
-              if (fn.length <= 60) return fn;
-              const parenIndex = fn.indexOf('(');
-              if (parenIndex === -1) return `${fn.slice(0, 60)}...`;
-              const fnName = fn.slice(0, parenIndex);
-              const args = fn.slice(parenIndex + 1, -1);
-              const truncatedArgs = args.split(', ').map((arg) => {
-                if (arg.startsWith('0x') && arg.length > 20) {
-                  return `${arg.slice(0, 10)}...${arg.slice(-6)}`;
-                }
-                return arg;
-              });
-              return `${fnName}(${truncatedArgs.join(', ')})`;
-            };
+            const functionCall = processedLine.match(/calls\s*`([^`]+)`\s*on/)?.[1];
+            const target = processedLine.match(/on\s+(?:(.+?)\s+at\s+)?`(0x[a-fA-F0-9]{40})`/);
 
             return (
-              <div key={`calldata-${index}`} className="mb-2">
-                <div className="flex items-start justify-between gap-3 p-3 bg-muted/30 rounded-md">
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {caller && (
-                        <a
-                          href={buildAddressLink(caller, effectiveMetadata)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded hover:underline inline-flex items-center gap-1"
-                        >
-                          {caller.slice(0, 10)}...{caller.slice(-8)}
-                          <ExternalLinkIcon className="h-3 w-3" />
-                        </a>
-                      )}
-                      <span className="text-muted-foreground text-sm">calls</span>
-                      {functionCall && (
-                        <code className="font-mono text-xs bg-blue-50 text-blue-800 px-1.5 py-0.5 rounded break-all">
-                          {truncateFunctionCall(functionCall)}
-                        </code>
-                      )}
-                    </div>
-                    {(contractName || targetAddress) && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-                        <span>on</span>
-                        {contractName && (
-                          <span className="font-medium text-foreground">{contractName}</span>
-                        )}
-                        {targetAddress && (
-                          <>
-                            <span>at</span>
-                            <a
-                              href={buildAddressLink(targetAddress, effectiveMetadata)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="font-mono text-xs hover:underline inline-flex items-center gap-1"
-                            >
-                              {targetAddress.slice(0, 10)}...{targetAddress.slice(-8)}
-                              <ExternalLinkIcon className="h-3 w-3" />
-                            </a>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className="text-xs bg-green-100 text-green-800 border-green-300 shrink-0"
+              <div key={`calldata-${index}`} className="mb-3 p-3 bg-muted/30 rounded-md space-y-2">
+                {target && (
+                  <a
+                    href={buildAddressLink(target[2], effectiveMetadata)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium hover:underline break-all"
                   >
-                    {decodedFrom}
-                  </Badge>
-                </div>
+                    {target[1] || target[2]}
+                  </a>
+                )}
+                <code className="block font-mono text-sm break-all">
+                  {functionCall ? formatCallPreview(functionCall) : ''}
+                </code>
+                <details>
+                  <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                    Technical details
+                  </summary>
+                  <p className="mt-2 text-xs text-muted-foreground break-all">
+                    {processedLine.replaceAll('`', '')}
+                  </p>
+                </details>
               </div>
             );
           }
@@ -338,10 +306,10 @@ export function FormattedCheckDetails({
                         href={buildAddressLink(fromAddress, effectiveMetadata)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                        className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center max-w-full break-all"
                       >
                         {fromAddress}
-                        <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                        <ExternalLinkIcon className="h-3 w-3 ml-1 shrink-0" />
                       </a>
                       {isPlaceholderAddress(fromAddress, effectiveMetadata) && (
                         <SimulationPlaceholderBadge />
@@ -353,10 +321,10 @@ export function FormattedCheckDetails({
                         href={buildAddressLink(toAddress, effectiveMetadata)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                        className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center max-w-full break-all"
                       >
                         {toAddress}
-                        <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                        <ExternalLinkIcon className="h-3 w-3 ml-1 shrink-0" />
                       </a>
                       {isPlaceholderAddress(toAddress, effectiveMetadata) && (
                         <SimulationPlaceholderBadge />
@@ -406,16 +374,16 @@ export function FormattedCheckDetails({
             parts.push(
               <span
                 key={`address-wrapper-${address}-${combinedMatch.index}`}
-                className="inline-flex items-center gap-1"
+                className="inline-flex max-w-full items-center gap-1"
               >
                 <a
                   href={buildAddressLink(address, effectiveMetadata)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
+                  className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center max-w-full break-all"
                 >
                   {address}
-                  <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                  <ExternalLinkIcon className="h-3 w-3 ml-1 shrink-0" />
                 </a>
                 {isPlaceholder && <SimulationPlaceholderBadge />}
               </span>,
@@ -436,20 +404,34 @@ export function FormattedCheckDetails({
           ) {
             return (
               <div key={`info-line-${index}`} className="mb-3">
-                <p className="text-muted-foreground">{parts.length > 0 ? parts : processedLine}</p>
+                <p className="text-muted-foreground break-words">
+                  {parts.length > 0 ? parts : processedLine}
+                </p>
               </div>
             );
           }
 
           return (
-            <p key={`line-${index}-${processedLine.substring(0, 20)}`} className="mb-2">
+            <p key={`line-${index}-${processedLine.substring(0, 20)}`} className="mb-2 break-words">
               {parts.length > 0 ? parts : processedLine}
             </p>
           );
         })}
+        {notes.length > 0 && (
+          <details className="mt-3">
+            <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+              Decoding notes
+            </summary>
+            {notes.map((note, index) => (
+              <p key={`note-${index}`} className="mt-2 text-xs text-muted-foreground break-words">
+                {note}
+              </p>
+            ))}
+          </details>
+        )}
       </>
     );
-  }, [check.details, check.title, stateChanges, metadata]);
+  }, [check.details, check.title, check.checkId, stateChanges, metadata]);
 
   if (!formatted) return null;
   return <>{formatted}</>;

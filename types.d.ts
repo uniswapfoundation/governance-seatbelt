@@ -21,6 +21,8 @@ export interface DecodedCall {
   to: string;
   input: string;
   value: string;
+  type?: string;
+  call_type?: string;
   calls?: DecodedCall[];
   function_name?: string;
   decoded_input?: Array<{

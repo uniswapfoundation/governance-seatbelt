@@ -133,9 +133,7 @@ describe('CallGroupedView cross-chain summary headers', () => {
     expect(html).toContain('Arbitrum target 2');
     expect(html).toContain('0x2222222222222222222222222222222222222222');
     expect(html).toContain('0x3333333333333333333333333333333333333333');
-    expect(html).toContain(
-      'inline-flex items-center justify-center h-5 w-5 rounded bg-muted text-[10px] font-semibold text-muted-foreground shrink-0',
-    );
+    expect(html).toContain('Technical details');
     expect(html).not.toContain('1 step');
     expect(html).not.toContain('2 steps');
   });
@@ -239,9 +237,8 @@ describe('CallGroupedView event rendering', () => {
       }),
     );
 
-    expect(html).toContain('1 event');
-    expect(html).toContain('RawLog');
-    expect(html).toContain('Could not decode');
+    expect(html).toContain('Unrecognized event');
+    expect(html).toContain('This report could not identify the event');
     expect(html).toContain('topic0');
     expect(html).toContain(account.slice(2).toLowerCase());
     expect(html).toContain('0x1234');

@@ -381,6 +381,7 @@ export function useSimulationResults() {
     { proposalData: Proposal; report: SimulationResponse['report'] }
   >({
     queryKey: ['simulationResults', artifactUrl ?? null, publishId ?? null],
+    enabled: pathname === '/' || pathname === '/action' || Boolean(publishId || artifactUrl),
     queryFn: async () => {
       const requestParams = new URLSearchParams();
       if (artifactUrl) {
