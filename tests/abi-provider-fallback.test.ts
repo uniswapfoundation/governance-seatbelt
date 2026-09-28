@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { encodeFunctionData, parseAbi } from 'viem';
@@ -13,6 +13,13 @@ const abi = parseAbi(['function setFeeTo(address feeTo)']);
 const recipient = uniqueAddress(7000);
 const calldata = encodeFunctionData({ abi, functionName: 'setFeeTo', args: [recipient] });
 const cacheFiles = new Set<string>();
+const originalBlockscoutUrl = CHAIN_CONFIGS[chainId].blockscoutApiUrl;
+const originalBlockscoutKey = process.env.BLOCKSCOUT_API_KEY;
+
+beforeEach(() => {
+  CHAIN_CONFIGS[chainId].blockscoutApiUrl = 'https://explorer.arc.io/api/v2';
+  Reflect.deleteProperty(process.env, 'BLOCKSCOUT_API_KEY');
+});
 
 function cachePath(address: string) {
   const path = join(process.cwd(), 'cache', 'abis', `${chainId}-${address}.json`);
@@ -21,6 +28,10 @@ function cachePath(address: string) {
 }
 
 afterEach(() => {
+  CHAIN_CONFIGS[chainId].blockscoutApiUrl = originalBlockscoutUrl;
+  if (originalBlockscoutKey === undefined)
+    Reflect.deleteProperty(process.env, 'BLOCKSCOUT_API_KEY');
+  else process.env.BLOCKSCOUT_API_KEY = originalBlockscoutKey;
   for (const path of cacheFiles) if (existsSync(path)) unlinkSync(path);
   cacheFiles.clear();
   BlockExplorerFactory.clear();
@@ -30,6 +41,59 @@ afterEach(() => {
 // Only provider HTTP responses are doubled: availability and rate limits cannot
 // be deterministic in CI. Exercise the real factory, providers, disk cache, and viem decoder.
 describe('ABI provider fallback integration', () => {
+  test('authenticates Arc PRO lookup without sending the key to other providers', async () => {
+    const config = CHAIN_CONFIGS[chainId];
+    const originalVerification = config.verification;
+    config.verification = { ...originalVerification!, apiKey: '' };
+    config.blockscoutApiUrl = 'https://api.blockscout.com/5042/api/v2';
+    process.env.BLOCKSCOUT_API_KEY = 'test-blockscout-key';
+    let proAvailable = true;
+    const requested: string[] = [];
+    const restore = setMockFetch(async (input, init) => {
+      const url = toFetchUrl(input);
+      const authorization = new Headers(init?.headers).get('authorization');
+      requested.push(url.hostname);
+      expect(url.searchParams.has('apikey')).toBe(false);
+      if (url.hostname === 'api.blockscout.com') {
+        expect(url.pathname).toStartWith('/5042/api/v2/smart-contracts/');
+        expect(authorization === 'Bearer test-blockscout-key').toBe(true);
+        expect(init?.redirect).toBe('error');
+        return proAvailable
+          ? Response.json({ is_verified: true, abi })
+          : new Response(null, { status: 404 });
+      }
+      expect(authorization).toBeNull();
+      if (url.hostname === 'sourcify.dev') {
+        return Response.json({
+          address: url.pathname.split('/').at(-1),
+          chainId,
+          match: 'exact_match',
+          abi,
+        });
+      }
+      throw new Error('Unexpected external request');
+    });
+    try {
+      for (const [index, source] of ['Blockscout', 'Sourcify'].entries()) {
+        const address = uniqueAddress(7400 + index);
+        const path = cachePath(address);
+        if (existsSync(path)) unlinkSync(path);
+        expect(
+          await BlockExplorerFactory.decodeFunctionWithAbi(address, calldata, chainId),
+        ).toEqual({
+          name: 'setFeeTo',
+          args: [recipient],
+          source,
+        });
+        proAvailable = false;
+      }
+      expect(requested).toEqual(['api.blockscout.com', 'api.blockscout.com', 'sourcify.dev']);
+    } finally {
+      restore();
+      config.verification = originalVerification;
+    }
+  });
+
   for (const [index, source] of ['Etherscan', 'Blockscout', 'Sourcify', 'none'].entries()) {
     test(`decodes through ${source} and stops at the first verified ABI`, async () => {
       const address = uniqueAddress(7100 + index);

@@ -102,6 +102,12 @@ keep their primary provider. Missing verification, provider errors, or invalid r
 the next provider to run. Successful ABIs are cached, including their provider for call technical
 details. Existing ABI-only caches display no provider until refreshed.
 
+Set `BLOCKSCOUT_API_KEY` to a free [Blockscout PRO API key](https://dev.blockscout.com/)
+to use the authenticated Arc endpoint. Arc's public endpoint may return a Cloudflare challenge.
+The key is sent only to `api.blockscout.com` in an authorization header. Other chains keep their
+public Blockscout endpoints; PRO chain coverage and free-plan availability vary.
+For Governance Checks in GitHub Actions, configure the `BLOCKSCOUT_API_KEY` repository secret.
+
 This fallback serves call and event decoding, including proxy implementations. It does not
 supply storage-slot labels or change the separate verification-status and contract-name checks.
 If no ABI is available, the existing signature/Tenderly decoding and raw-data display remain.

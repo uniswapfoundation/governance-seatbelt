@@ -57,7 +57,15 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
       await this.delay(1000); // 1000ms delay to be more conservative with rate limiting
 
       try {
-        const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+        const apiKey =
+          new URL(url).origin === 'https://api.blockscout.com'
+            ? process.env.BLOCKSCOUT_API_KEY
+            : undefined;
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(10000),
+          headers: apiKey ? { authorization: `Bearer ${apiKey}` } : undefined,
+          redirect: 'error',
+        });
         if (response.status === 404) return null;
 
         if (response.ok) {
@@ -83,7 +91,6 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
         }
         this.error(
           `Error ${operation} for ${address} on chain ${chainId} (attempt ${retryCount + 1}/${maxRetries}):`,
-          error,
         );
         retryCount++;
 
