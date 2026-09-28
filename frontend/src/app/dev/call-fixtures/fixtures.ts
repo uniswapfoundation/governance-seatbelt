@@ -52,8 +52,8 @@ const namedCall = `configureCrossChainPermissionsAndRateLimitsForRemoteGovernanc
 const payloadCall = `sendMessage(${JSON.stringify(recipients)}, ${JSON.stringify([hugeBytes, '0x'])}, Unicode: 東京, Zürich; commas, parentheses (kept intact))`;
 const info = [
   `Advisory: no exact trace match for target ${proxy}; decoded calldata via abi fallback.`,
-  `\`${receiver}\` calls \`${namedCall}\` on VeryLongProxyContractNameForCrossChainGovernanceConfiguration at \`${proxy}\` (decoded from implementation ABI at \`${implementation}\`)`,
-  `\`${receiver}\` calls \`${payloadCall}\` on VeryLongProxyContractNameForCrossChainGovernanceConfiguration at \`${proxy}\` (decoded from ABI)`,
+  `\`${receiver}\` calls \`${namedCall}\` on VeryLongProxyContractNameForCrossChainGovernanceConfiguration at \`${proxy}\` (decoded from implementation ABI at \`${implementation}\` via Blockscout)`,
+  `\`${receiver}\` calls \`${payloadCall}\` on VeryLongProxyContractNameForCrossChainGovernanceConfiguration at \`${proxy}\` (decoded from ABI via Sourcify)`,
   `\`${receiver}\` calls \`${payloadCall}\` on \`${unnamedTarget}\` (decoded from ABI)`,
   `On contract \`${implementation}\`, call \`${unknownCalldata}\` (not decoded)`,
   `\`${receiver}\` transfers 0.000000000000000001 ETH to \`${unnamedTarget}\` (formatted)`,

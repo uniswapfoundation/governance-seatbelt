@@ -25,7 +25,11 @@ if (!existsSync(CONTRACT_NAME_CACHE_DIR)) {
 }
 
 // In-memory cache
-const abiCache: Record<string, Abi> = {};
+interface AbiCacheEntry {
+  abi: Abi;
+  source?: string;
+}
+const abiCache: Record<string, AbiCacheEntry> = {};
 
 export type VerificationSource = 'sourcify' | 'block-explorer' | 'none';
 export type VerificationBackendCacheKey = 'etherscan-v2' | 'blockscout' | 'tempo' | 'sourcify-only';
@@ -68,19 +72,33 @@ export class CacheManager {
 
   static getAbiFromMemory(chainId: number, address: string): Abi | undefined {
     const cacheKey = CacheManager.getAbiCacheKey(chainId, address);
-    return abiCache[cacheKey];
+    return abiCache[cacheKey]?.abi;
   }
 
-  static setAbiInMemory(chainId: number, address: string, abi: Abi): void {
+  static getAbiSource(chainId: number, address: string): string | undefined {
+    return abiCache[CacheManager.getAbiCacheKey(chainId, address)]?.source;
+  }
+
+  static setAbiInMemory(chainId: number, address: string, abi: Abi, source?: string): void {
     const cacheKey = CacheManager.getAbiCacheKey(chainId, address);
-    abiCache[cacheKey] = abi;
+    abiCache[cacheKey] = { abi, source };
   }
 
   static getAbiFromFile(chainId: number, address: string): Abi | null {
     const cachePath = CacheManager.getAbiCacheFilePath(chainId, address);
     if (existsSync(cachePath)) {
       try {
-        return JSON.parse(readFileSync(cachePath, 'utf8'));
+        const cached = JSON.parse(readFileSync(cachePath, 'utf8'));
+        // Older caches contain only the ABI; their provider is unknown.
+        const entry = Array.isArray(cached) ? { abi: cached } : cached;
+        if (!entry || !Array.isArray(entry.abi)) return null;
+        CacheManager.setAbiInMemory(
+          chainId,
+          address,
+          entry.abi,
+          typeof entry.source === 'string' ? entry.source : undefined,
+        );
+        return entry.abi;
       } catch {
         return null;
       }
@@ -88,9 +106,9 @@ export class CacheManager {
     return null;
   }
 
-  static setAbiInFile(chainId: number, address: string, abi: Abi): void {
+  static setAbiInFile(chainId: number, address: string, abi: Abi, source?: string): void {
     const cachePath = CacheManager.getAbiCacheFilePath(chainId, address);
-    writeFileSync(cachePath, JSON.stringify(abi, null, 2));
+    writeFileSync(cachePath, JSON.stringify({ abi, source }, null, 2));
   }
 
   static getVerificationFromMemory(chainId: number, address: string): boolean | undefined {

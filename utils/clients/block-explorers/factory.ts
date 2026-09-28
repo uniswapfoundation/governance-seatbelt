@@ -6,7 +6,7 @@ import {
   getChainConfig,
   resolveVerificationConfig,
 } from '../client';
-import { type SourcifyMatch, getSourcifyMatch } from '../sourcify';
+import { SourcifyClient, type SourcifyMatch, getSourcifyMatch } from '../sourcify';
 import { BlockscoutExplorer } from './blockscout';
 import { CacheManager } from './cache';
 import { EtherscanExplorer } from './etherscan';
@@ -103,18 +103,39 @@ export class BlockExplorerFactory {
     return null;
   }
 
-  /**
-   * Fetch contract ABI from the appropriate block explorer
-   */
+  /** Fetch a cached ABI, then the configured explorer, Blockscout, and Sourcify. */
   static async fetchContractAbi(address: string, chainId: number): Promise<Abi | null> {
     try {
+      const config = getChainConfig(chainId);
+      const cached =
+        CacheManager.getAbiFromMemory(chainId, address) ??
+        CacheManager.getAbiFromFile(chainId, address);
+      if (cached) return cached;
+
       const explorer = BlockExplorerFactory.getExplorer(chainId);
-      if (!explorer) {
-        return null;
+      const providers = explorer ? [explorer] : [];
+      if (config.blockscoutApiUrl && explorer?.getName() !== 'Blockscout') {
+        providers.push(
+          new BlockscoutExplorer(new URL(config.blockscoutApiUrl).origin, config.blockscoutApiUrl),
+        );
       }
-      return await explorer.fetchContractAbi(address, chainId);
-    } catch (error) {
-      console.warn(`Failed to fetch ABI for ${address} on chain ${chainId}:`, error);
+      for (const provider of providers) {
+        try {
+          const abi = await provider.fetchContractAbi(address, chainId);
+          if (abi) return abi;
+        } catch {
+          console.warn(`${provider.getName()} ABI unavailable for ${address} on chain ${chainId}`);
+        }
+      }
+
+      const abi = await SourcifyClient.fetchContractAbi(address, chainId);
+      if (abi) {
+        CacheManager.setAbiInMemory(chainId, address, abi, 'Sourcify');
+        CacheManager.setAbiInFile(chainId, address, abi, 'Sourcify');
+      }
+      return abi;
+    } catch {
+      console.warn(`ABI unavailable for ${address} on chain ${chainId}`);
       return null;
     }
   }
@@ -280,7 +301,7 @@ export class BlockExplorerFactory {
     address: string,
     calldata: string,
     chainId: number,
-  ): Promise<{ name: string; args: unknown[] } | null> {
+  ): Promise<{ name: string; args: unknown[]; source?: string } | null> {
     try {
       const abi = await BlockExplorerFactory.fetchContractAbi(address, chainId);
       if (!abi) {
@@ -298,6 +319,7 @@ export class BlockExplorerFactory {
 
         return {
           name: decoded.functionName,
+          source: CacheManager.getAbiSource(chainId, address),
           args: Array.isArray(decoded.args) ? decoded.args : [decoded.args],
         };
       } catch {

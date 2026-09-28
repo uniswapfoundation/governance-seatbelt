@@ -626,8 +626,9 @@ async function prettifyCalldata(
 
     if (decoded) {
       const abiSource = implementation ? `implementation ABI at \`${implementation}\`` : 'ABI';
+      const provider = decoded.source ? ` via ${decoded.source}` : '';
       return {
-        description: `\`${call.from}\` calls \`${decoded.name}(${formatArgs(decoded.args)})\` on ${contractIdentifier} (decoded from ${abiSource})`,
+        description: `\`${call.from}\` calls \`${decoded.name}(${formatArgs(decoded.args)})\` on ${contractIdentifier} (decoded from ${abiSource}${provider})`,
         decodeSource: 'abi',
       };
     }

@@ -48,8 +48,8 @@ export class TempoExplorer extends BaseBlockExplorer {
     options?: { abi?: Abi | null; name?: string | null },
   ): void {
     if (options?.abi) {
-      CacheManager.setAbiInMemory(chainId, address, options.abi);
-      CacheManager.setAbiInFile(chainId, address, options.abi);
+      CacheManager.setAbiInMemory(chainId, address, options.abi, this.getName());
+      CacheManager.setAbiInFile(chainId, address, options.abi, this.getName());
     }
 
     const name = options?.name?.trim();

@@ -2,7 +2,7 @@ import type { Abi } from 'viem';
 import { getAddress } from 'viem';
 import { SchemaValidationError, parseWithSchema, z } from '../validation/zod';
 
-function isAbi(value: unknown): value is Abi {
+export function isAbi(value: unknown): value is Abi {
   return (
     Array.isArray(value) &&
     value.every(

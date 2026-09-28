@@ -115,7 +115,6 @@ export abstract class BaseBlockExplorer implements BlockExplorer {
     const fileCachedAbi = CacheManager.getAbiFromFile(chainId, address);
     if (fileCachedAbi) {
       this.log(`Using file-cached ABI for ${normalizedAddress}`);
-      CacheManager.setAbiInMemory(chainId, address, fileCachedAbi);
       return fileCachedAbi;
     }
 

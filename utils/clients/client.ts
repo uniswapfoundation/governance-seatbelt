@@ -51,6 +51,8 @@ export interface ChainConfig {
     apiKey?: string;
     degradedReason?: string;
   };
+  /** Optional Blockscout API v2 URL for ABI fallback. */
+  blockscoutApiUrl?: string;
   rpcUrl: string;
 }
 
@@ -149,6 +151,7 @@ type ClientRegistry = {
 export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   [arc.id]: {
     chainId: arc.id,
+    blockscoutApiUrl: 'https://explorer.arc.io/api/v2',
     blockExplorer: { baseUrl: 'https://arc.etherscan.io' },
     verification: {
       backend: VerificationBackend.EtherscanV2,
@@ -159,6 +162,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   },
   [mainnet.id]: {
     chainId: mainnet.id,
+    blockscoutApiUrl: 'https://eth.blockscout.com/api/v2',
     blockExplorer: {
       baseUrl: mainnet.blockExplorers?.default.url || 'https://etherscan.io',
     },
@@ -171,6 +175,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   },
   [arbitrum.id]: {
     chainId: arbitrum.id,
+    blockscoutApiUrl: 'https://arbitrum.blockscout.com/api/v2',
     blockExplorer: {
       baseUrl: arbitrum.blockExplorers?.default.url || 'https://arbiscan.io',
     },
@@ -194,6 +199,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   },
   [optimism.id]: {
     chainId: optimism.id,
+    blockscoutApiUrl: 'https://optimism.blockscout.com/api/v2',
     blockExplorer: {
       baseUrl: optimism.blockExplorers?.default.url || 'https://optimistic.etherscan.io',
     },
@@ -206,6 +212,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   },
   [base.id]: {
     chainId: base.id,
+    blockscoutApiUrl: 'https://base.blockscout.com/api/v2',
     blockExplorer: {
       baseUrl: base.blockExplorers?.default.url || 'https://basescan.org',
     },
@@ -218,6 +225,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   },
   [unichain.id]: {
     chainId: unichain.id,
+    blockscoutApiUrl: 'https://unichain.blockscout.com/api/v2',
     blockExplorer: {
       baseUrl: unichain.blockExplorers?.default.url || 'https://uniscan.xyz',
     },

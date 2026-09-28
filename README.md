@@ -95,9 +95,20 @@ Some notes on the outputs of reports:
 
 ## Caching
 
+ABI lookup uses the chain's configured explorer first (normally Etherscan), then Blockscout
+where a fallback endpoint is configured, then Sourcify. Blockscout fallback is configured for
+Ethereum, Optimism, Arbitrum, Base, Unichain, and Arc; chains already using Blockscout or Tempo
+keep their primary provider. Missing verification, provider errors, or invalid responses allow
+the next provider to run. Successful ABIs are cached, including their provider for call technical
+details. Existing ABI-only caches display no provider until refreshed.
+
+This fallback serves call and event decoding, including proxy implementations. It does not
+supply storage-slot labels or change the separate verification-status and contract-name checks.
+If no ABI is available, the existing signature/Tenderly decoding and raw-data display remain.
+
 Seatbelt writes a local `cache/` directory to reduce repeated calls to external services (block explorers, Sourcify, etc.). This is used both locally and in CI (the Governance Checks workflow caches `cache/` between runs).
 
-- `cache/abis/`: ABI JSON fetched from the configured block explorer
+- `cache/abis/`: ABI JSON and its provider; older ABI-only cache files remain readable
 - `cache/verification/`: contract verification status (Sourcify / block explorer)
 - `cache/contract-names/`: contract names fetched from the block explorer (used when Tenderly metadata is missing)
 
