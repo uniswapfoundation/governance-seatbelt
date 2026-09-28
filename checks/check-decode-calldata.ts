@@ -456,12 +456,12 @@ function findMatchingCallWithFallback(
  * Follow proxy delegation, including implementations changed earlier in the simulation.
  * Ordinary calls with identical calldata are not proxy implementations.
  */
-function returnCallOrMatchingSubcall(calldata: string, call: DecodedCall): DecodedCall {
+function followDelegateCalls(calldata: string, call: DecodedCall): DecodedCall {
   const delegated = call.calls?.find(
     (child) =>
       child.input === calldata && (child.call_type ?? child.type)?.toUpperCase() === 'DELEGATECALL',
   );
-  return delegated ? returnCallOrMatchingSubcall(calldata, delegated) : call;
+  return delegated ? followDelegateCalls(calldata, delegated) : call;
 }
 
 /**
@@ -583,7 +583,7 @@ async function prettifyCalldata(
   blockNumber: bigint,
 ): Promise<CalldataDescriptionResult> {
   const chainId = deps.chainConfig.chainId;
-  const implementationCall = returnCallOrMatchingSubcall(call.input, call);
+  const implementationCall = followDelegateCalls(call.input, call);
   // Handle ETH transfers (empty calldata with value)
   if (call.input === '0x' && call.value && BigInt(call.value) > 0n) {
     const ethAmount = formatUnits(BigInt(call.value), 18);
@@ -625,16 +625,11 @@ async function prettifyCalldata(
     }
 
     if (decoded) {
-      let description = `\`${call.from}\` calls \`${decoded.name}(`;
-      const formattedArgs = formatArgs(decoded.args);
-      if (formattedArgs) {
-        description += formattedArgs;
-      }
-
-      description += implementation
-        ? `)\` on ${contractIdentifier} (decoded from implementation ABI at \`${implementation}\`)`
-        : `)\` on ${contractIdentifier} (decoded from ABI)`;
-      return { description, decodeSource: 'abi' };
+      const abiSource = implementation ? `implementation ABI at \`${implementation}\`` : 'ABI';
+      return {
+        description: `\`${call.from}\` calls \`${decoded.name}(${formatArgs(decoded.args)})\` on ${contractIdentifier} (decoded from ${abiSource})`,
+        decodeSource: 'abi',
+      };
     }
 
     abiDecodeError = `Failed to decode function with selector ${selector} for contract ${target} using block explorer ABI`;
@@ -668,11 +663,10 @@ async function prettifyCalldata(
           return { description: transportDescription, decodeSource: 'signature' };
         }
 
-        let description = `\`${call.from}\` calls \`${fnName}(`;
-        const formattedArgs = formatArgs(args);
-        if (formattedArgs) description += formattedArgs;
-        description += `)\` on ${contractIdentifier} (decoded from signature)`;
-        return { description, decodeSource: 'signature' };
+        return {
+          description: `\`${call.from}\` calls \`${fnName}(${formatArgs(args)})\` on ${contractIdentifier} (decoded from signature)`,
+          decodeSource: 'signature',
+        };
       } catch {
         // Try next known candidate for this selector.
       }

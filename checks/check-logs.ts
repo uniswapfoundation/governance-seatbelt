@@ -109,11 +109,11 @@ export const checkLogs: ProposalCheck = {
         ? await getLogDecodingAbi(contract, address, deps.chainConfig?.chainId)
         : null;
 
-      const decoded = logs.map(
+      const decodedLogs = logs.map(
         (log) => formatTenderlyDecodedLog(log) ?? formatAbiDecodedLog(log, abi),
       );
       let implementationAbi: Abi | null = null;
-      if (decoded.includes(null) && deps.chainConfig?.chainId && deps.publicClient) {
+      if (decodedLogs.includes(null) && deps.chainConfig?.chainId && deps.publicClient) {
         try {
           const proxy = await detectProxy(
             getAddress(address),
@@ -133,7 +133,7 @@ export const checkLogs: ProposalCheck = {
 
       for (const [index, log] of logs.entries()) {
         const description =
-          decoded[index] ?? formatAbiDecodedLog(log, implementationAbi) ?? formatRawLog(log);
+          decodedLogs[index] ?? formatAbiDecodedLog(log, implementationAbi) ?? formatRawLog(log);
         info.push(`    \`${description}\``);
       }
     }
