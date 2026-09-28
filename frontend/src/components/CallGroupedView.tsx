@@ -866,7 +866,10 @@ export function CallGroupedView({
                         {decoded?.kind === 'call' && decoded.source && (
                           <DetailField label="Decoded using">
                             {decoded.implementation
-                              ? 'Implementation contract’s ABI'
+                              ? decoded.source.replace(
+                                  /implementation ABI at `0x[a-fA-F0-9]{40}`/,
+                                  'Implementation contract’s ABI',
+                                )
                               : decoded.source}
                           </DetailField>
                         )}

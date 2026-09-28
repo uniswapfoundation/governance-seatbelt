@@ -1,3 +1,4 @@
+import type { Abi } from 'viem';
 import { VerifierLookupClient, type VerifierLookupResponse } from './verifier-lookup';
 
 /**
@@ -48,6 +49,14 @@ export class SourcifyClient {
       return { verified: true, status: data.match };
     }
     return { verified: false, status: 'no_match' };
+  }
+
+  static async fetchContractAbi(address: string, chainId: number): Promise<Abi | null> {
+    const lookup = await SourcifyClient.client.lookup(address, chainId, { fields: ['abi'] });
+    if (lookup.status !== 'ok' || !lookup.data) return null;
+    return SourcifyClient.parseLookupResponse(lookup.data).verified
+      ? (lookup.data.abi ?? null)
+      : null;
   }
 
   static clearCache(): void {

@@ -1,5 +1,6 @@
 import { type Abi, getAddress } from 'viem';
 import { SchemaValidationError, parseWithSchema, z } from '../../validation/zod';
+import { isAbi } from '../verifier-lookup';
 import { CacheManager } from './cache';
 import { BaseBlockExplorer, type VerificationOptions } from './index';
 
@@ -16,7 +17,7 @@ const blockscoutContractSchema: z.ZodType<BlockscoutContractResponse> = z
   .object({
     is_verified: z.boolean(),
     is_partially_verified: z.boolean().optional(),
-    abi: z.custom<Abi>().nullable(),
+    abi: z.custom<Abi>(isAbi, { message: 'Invalid ABI payload' }).nullable(),
     status: z.string().optional(),
     name: z.string().optional(),
     source_code: z.string().nullable().optional(),
@@ -56,7 +57,8 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
       await this.delay(1000); // 1000ms delay to be more conservative with rate limiting
 
       try {
-        const response = await fetch(url);
+        const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+        if (response.status === 404) return null;
 
         if (response.ok) {
           const rawData = await response.json();
@@ -120,14 +122,14 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
         'Blockscout fetch ABI response',
       );
 
-      if (!data || !data.abi) {
+      if (!data || !(data.is_verified || data.is_partially_verified) || !data.abi) {
         this.warn(`No ABI found for ${normalizedAddress} on chain ${chainId}`);
         return null;
       }
 
       // Cache the result both in memory and on disk
-      CacheManager.setAbiInMemory(chainId, address, data.abi);
-      CacheManager.setAbiInFile(chainId, address, data.abi);
+      CacheManager.setAbiInMemory(chainId, address, data.abi, this.getName());
+      CacheManager.setAbiInFile(chainId, address, data.abi, this.getName());
       this.log(`Cached new ABI for ${normalizedAddress} on chain ${chainId}`);
 
       return data.abi;

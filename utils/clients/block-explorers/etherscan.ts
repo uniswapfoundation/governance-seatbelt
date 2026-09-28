@@ -1,5 +1,6 @@
 import { type Abi, getAddress } from 'viem';
 import { SchemaValidationError, parseWithSchema, z } from '../../validation/zod';
+import { isAbi } from '../verifier-lookup';
 import { CacheManager } from './cache';
 import { BaseBlockExplorer, type VerificationOptions } from './index';
 
@@ -68,6 +69,8 @@ export class EtherscanExplorer extends BaseBlockExplorer {
         return cachedAbi;
       }
 
+      if (!this.apiKey) return null;
+
       this.log(
         `Fetching new ABI for ${normalizedAddress} from Etherscan V2 API (Chain ${chainId})`,
       );
@@ -85,9 +88,13 @@ export class EtherscanExplorer extends BaseBlockExplorer {
           // Use Etherscan V2 API with chainid parameter for unified multichain support
           const url = `https://api.etherscan.io/v2/api?chainid=${chainId}&module=contract&action=getabi&address=${normalizedAddress}&apikey=${this.apiKey}`;
 
-          const response = await fetch(url);
+          const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
           const rawData = await response.json();
           data = parseWithSchema(etherscanAbiResponseSchema, rawData, 'Etherscan getabi response');
+
+          if (data.status === '0' && data.result === 'Contract source code not verified') {
+            return null;
+          }
 
           if (data.status === '1' && data.result && typeof data.result === 'string') {
             break; // Success, exit the retry loop
@@ -107,7 +114,6 @@ export class EtherscanExplorer extends BaseBlockExplorer {
           }
           this.error(
             `Error fetching ABI for ${normalizedAddress} on chain ${chainId} (attempt ${retryCount + 1}/${maxRetries}):`,
-            error,
           );
           retryCount++;
 
@@ -143,18 +149,18 @@ export class EtherscanExplorer extends BaseBlockExplorer {
           }
         }
 
-        // Validate that it's an array
-        if (!Array.isArray(abiJson)) {
-          this.warn(`Invalid ABI format for ${normalizedAddress}: not an array`);
+        // Validate the ABI before caching it
+        if (!isAbi(abiJson)) {
+          this.warn(`Invalid ABI format for ${normalizedAddress}: invalid entries`);
           return null;
         }
 
         // Cache the result both in memory and on disk
-        CacheManager.setAbiInMemory(chainId, address, abiJson as Abi);
-        CacheManager.setAbiInFile(chainId, address, abiJson as Abi);
+        CacheManager.setAbiInMemory(chainId, address, abiJson, this.getName());
+        CacheManager.setAbiInFile(chainId, address, abiJson, this.getName());
         this.log(`Cached new ABI for ${normalizedAddress} on chain ${chainId}`);
 
-        return abiJson as Abi;
+        return abiJson;
       } catch (error) {
         this.error(`Error parsing ABI for ${normalizedAddress}:`, error);
         return null;
@@ -163,7 +169,7 @@ export class EtherscanExplorer extends BaseBlockExplorer {
       if (error instanceof SchemaValidationError) {
         throw error;
       }
-      this.error(`Error fetching ABI for ${address} on chain ${chainId}:`, error);
+      this.error(`Error fetching ABI for ${address} on chain ${chainId}`);
       return null;
     }
   }
