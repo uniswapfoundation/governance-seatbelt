@@ -166,6 +166,7 @@ export const fixtureReport: StructuredSimulationReport = {
               selector: '0xf46901ed',
               signature: 'setFeeTo(address recipient)',
               args: [implementation],
+              source: 'ABI via Blockscout',
             },
           },
           {

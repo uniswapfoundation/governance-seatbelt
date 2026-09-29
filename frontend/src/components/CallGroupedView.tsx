@@ -1138,6 +1138,11 @@ function CrossChainCallsSection({
                                     />
                                   </DetailField>
                                 )}
+                                {visibleCall?.source && (
+                                  <DetailField label="Decoded using">
+                                    {visibleCall.source}
+                                  </DetailField>
+                                )}
                                 <DetailField label="Signature">
                                   <ValueWithCopy value={visibleSignature} />
                                 </DetailField>

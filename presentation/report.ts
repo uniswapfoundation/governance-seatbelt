@@ -26,6 +26,7 @@ import {
 import type {
   AllCheckResults,
   CoverageData,
+  CrossChainDecodedCall,
   CrossChainJobStepPreview,
   DerivedSimulationDependency,
   GenerateReportsParams,
@@ -45,6 +46,7 @@ import type {
   WriteSimulationResultsJsonParams,
 } from '../types';
 import { getChainName } from '../utils/chains/capabilities';
+import { CacheManager } from '../utils/clients/block-explorers/cache';
 import { BlockExplorerFactory } from '../utils/clients/block-explorers/factory';
 import { getBlockExplorerBaseUrlForChain, publicClient } from '../utils/clients/client';
 import { lookupFunctionSignatureBySelector } from '../utils/clients/function-signature-registry';
@@ -134,21 +136,26 @@ async function decodeContractCall(
   target: string,
   calldata: string,
   chainId: number,
-): Promise<{ selector: Hex; signature?: string } | null> {
+): Promise<CrossChainDecodedCall | null> {
   if (!calldata || calldata.length < 10) return null;
 
   const selector = calldata.slice(0, 10).toLowerCase() as Hex;
   const knownSignature = KNOWN_FUNCTION_SELECTORS[selector];
-  if (knownSignature) return { selector, signature: knownSignature };
+  if (knownSignature) {
+    return { selector, signature: knownSignature, source: 'Known function signature' };
+  }
 
   const abi = await fetchContractAbiCached(target, chainId);
   let signature: string | undefined;
+  let source: string | undefined;
   if (abi) {
     for (const item of abi) {
       if (item.type !== 'function') continue;
       try {
         if (toFunctionSelector(item) === selector) {
           signature = formatAbiFunctionSignature(item);
+          const provider = CacheManager.getAbiSource(chainId, target);
+          source = provider ? `ABI via ${provider}` : 'ABI';
           break;
         }
       } catch {
@@ -159,10 +166,13 @@ async function decodeContractCall(
 
   if (!signature) {
     const fallbackSignature = await lookupFunctionSignatureBySelector(selector);
-    if (fallbackSignature) signature = fallbackSignature;
+    if (fallbackSignature) {
+      signature = fallbackSignature;
+      source = 'Function signature via 4byte.directory';
+    }
   }
 
-  return { selector, signature };
+  return { selector, signature, source };
 }
 
 async function decodeForwardedContractCall(
@@ -172,7 +182,7 @@ async function decodeForwardedContractCall(
 ): Promise<{
   targetAddress: `0x${string}`;
   targetLabel?: string;
-  call?: { selector: Hex; signature?: string };
+  call?: CrossChainDecodedCall;
 } | null> {
   if (!isHex(calldata)) return null;
 
@@ -310,9 +320,7 @@ async function buildCrossChainPreview(
             l2Value: call.l2Value,
             l2InputData: call.l2InputData,
             targetLabel,
-            call: decoded
-              ? { selector: decoded.selector, signature: decoded.signature }
-              : undefined,
+            call: decoded ?? undefined,
             forwardedTargetAddress: forwarded?.targetAddress,
             forwardedTargetLabel: forwarded?.targetLabel,
             forwardedCall: forwarded?.call,

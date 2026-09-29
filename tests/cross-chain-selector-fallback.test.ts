@@ -195,13 +195,16 @@ describe('cross-chain selector fallback decode', () => {
 
       const structuredReport = JSON.parse(readFileSync(structuredReportPath, 'utf8')) as {
         crossChain?: {
-          jobs?: Array<{ steps?: Array<{ call?: { signature?: string } }> }>;
+          jobs?: Array<{ steps?: Array<{ call?: { signature?: string; source?: string } }> }>;
         };
       };
       const markdown = readFileSync(markdownPath, 'utf8');
 
       const signature = structuredReport.crossChain?.jobs?.[0]?.steps?.[0]?.call?.signature;
       expect(signature).toBe('setOwner(address)');
+      expect(structuredReport.crossChain?.jobs?.[0]?.steps?.[0]?.call?.source).toBe(
+        'Function signature via 4byte.directory',
+      );
       expect(markdown).toContain('Call: `setOwner(address)`');
       expect(markdown).not.toContain('Call: `0x13af4035`');
     } finally {
@@ -221,11 +224,10 @@ describe('cross-chain selector fallback decode', () => {
     process.env.TENDERLY_PROJECT_SLUG ??= 'test';
 
     const { generateAndSaveReports } = await import('../presentation/report');
-    const { BlockExplorerFactory } = await import('../utils/clients/block-explorers/factory');
+    const { CacheManager } = await import('../utils/clients/block-explorers/cache');
 
     const outputDir = mkdtempSync(join(tmpdir(), 'seatbelt-cross-chain-abi-priority-'));
     const originalFetch = globalThis.fetch;
-    const originalFetchContractAbi = BlockExplorerFactory.fetchContractAbi;
     const { proposal, blocks, checks, destinationSimulation } = buildFixture(
       '0x00000000000000000000000000000000000000ac',
     );
@@ -234,8 +236,12 @@ describe('cross-chain selector fallback decode', () => {
     clearFunctionSignatureRegistryCache();
 
     const abi = parseAbi(['function setOwner(address _owner)']);
-    BlockExplorerFactory.fetchContractAbi = async () =>
-      abi as Awaited<ReturnType<typeof BlockExplorerFactory.fetchContractAbi>>;
+    CacheManager.setAbiInMemory(
+      196,
+      destinationSimulation.job.calls[0].l2TargetAddress,
+      abi,
+      'Blockscout',
+    );
 
     globalThis.fetch = (async (input: RequestInfo | URL, _init?: RequestInit) => {
       const urlString =
@@ -260,7 +266,7 @@ describe('cross-chain selector fallback decode', () => {
 
       const structuredReport = JSON.parse(readFileSync(structuredReportPath, 'utf8')) as {
         crossChain?: {
-          jobs?: Array<{ steps?: Array<{ call?: { signature?: string } }> }>;
+          jobs?: Array<{ steps?: Array<{ call?: { signature?: string; source?: string } }> }>;
         };
       };
       const markdown = readFileSync(markdownPath, 'utf8');
@@ -268,11 +274,14 @@ describe('cross-chain selector fallback decode', () => {
       expect(structuredReport.crossChain?.jobs?.[0]?.steps?.[0]?.call?.signature).toBe(
         'setOwner(address)',
       );
+      expect(structuredReport.crossChain?.jobs?.[0]?.steps?.[0]?.call?.source).toBe(
+        'ABI via Blockscout',
+      );
       expect(markdown).toContain('Call: `setOwner(address)`');
       expect(fourByteFetchCalls).toBe(0);
     } finally {
       globalThis.fetch = originalFetch;
-      BlockExplorerFactory.fetchContractAbi = originalFetchContractAbi;
+      CacheManager.clearMemory();
       clearFunctionSignatureRegistryCache();
       rmSync(outputDir, { recursive: true, force: true });
     }
