@@ -149,8 +149,8 @@ describe('frontend write actions (deterministic wiring)', () => {
         { isConnected: true, isPending: false, isPendingConfirmation: false },
       ),
     ).toEqual({
-      title: 'Proposal Execution',
-      description: 'Transaction Parameters',
+      title: 'Proposal calls',
+      description: 'Calls included in this proposal.',
       readyText: 'Ready to execute',
       statusIconName: 'check',
       statusIconClassName: 'h-4 w-4 mr-2 text-green-500',
@@ -166,8 +166,8 @@ describe('frontend write actions (deterministic wiring)', () => {
         { isConnected: false, isPending: false, isPendingConfirmation: false },
       ),
     ).toEqual({
-      title: 'Proposal Creation',
-      description: 'Transaction Parameters',
+      title: 'Proposal calls',
+      description: 'Calls included in this proposal.',
       readyText: 'Ready to propose',
       statusIconName: 'check',
       statusIconClassName: 'h-4 w-4 mr-2 text-green-500',

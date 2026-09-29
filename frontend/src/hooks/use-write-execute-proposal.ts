@@ -1,9 +1,9 @@
-import { DEFAULT_GOVERNOR_ADDRESS, GOVERNOR_ABI } from '@/config';
+import { DEFAULT_GOVERNOR_ADDRESS, GOVERNOR_ABI, wagmiConfig } from '@/config';
 import { parseWeb3Error } from '@/lib/errors';
 import { buildExecuteArgsFromSimulationData } from '@/lib/write-actions';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
+import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from 'wagmi';
 import { useSimulationResults } from './use-simulation-results';
 
 const HIGH_GAS_LIMIT = BigInt(10000000); // 10M gas limit for complex governance operations
@@ -13,12 +13,14 @@ const TOAST_ID = 'execute-tx'; // Consistent toast ID for updates
  * Hook for executing a queued proposal
  */
 export function useWriteExecuteProposal() {
-  const publicClient = usePublicClient();
-  const { chain } = useAccount();
+  const chain = wagmiConfig.chains[0];
+  const publicClient = usePublicClient({ chainId: chain.id });
+  const { chainId: walletChainId } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
   const { data: simulationData } = useSimulationResults();
   const { writeContractAsync, isPending: isPendingConfirmation } = useWriteContract();
 
-  // Get block explorer URL from connected chain, fallback to Etherscan
+  // Use the same network for submission and receipt links.
   const getExplorerTxUrl = (hash: string) => {
     const baseUrl = chain?.blockExplorers?.default?.url || 'https://etherscan.io';
     return `${baseUrl}/tx/${hash}`;
@@ -33,10 +35,15 @@ export function useWriteExecuteProposal() {
 
       // Clear any existing toasts and show initial state
       toast.dismiss();
+      if (walletChainId !== chain.id) {
+        toast.loading(`Switch to ${chain.name} in your wallet...`, { id: TOAST_ID });
+        await switchChainAsync({ chainId: chain.id });
+      }
       toast.loading('Waiting for wallet signature...', { id: TOAST_ID });
 
       const hash = await writeContractAsync({
         address: DEFAULT_GOVERNOR_ADDRESS,
+        chainId: chain.id,
         abi: GOVERNOR_ABI,
         functionName: 'execute',
         args,
