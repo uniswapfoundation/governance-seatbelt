@@ -6,6 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Toaster } from '@/components/ui/sonner';
+import { DEFAULT_GOVERNOR_ADDRESS, wagmiConfig } from '@/config';
 import { useHrefWithArtifact } from '@/hooks/use-artifact-navigation';
 import { useSimulationResults } from '@/hooks/use-simulation-results';
 import { useWriteExecuteProposal } from '@/hooks/use-write-execute-proposal';
@@ -18,10 +19,17 @@ import {
   getVisibleTrustState,
 } from '@/lib/report-provenance';
 import { resolveProposalAction } from '@/lib/write-actions';
-import { AlertTriangleIcon, ArrowLeftIcon, InfoIcon, ShieldCheckIcon } from 'lucide-react';
+import {
+  AlertTriangleIcon,
+  ArrowLeftIcon,
+  CopyIcon,
+  InfoIcon,
+  ShieldCheckIcon,
+} from 'lucide-react';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
+import { toast } from 'sonner';
 import { useAccount } from 'wagmi';
 
 function ErrorFallback({ error }: { error: Error }) {
@@ -222,7 +230,69 @@ function ActionSection({ isConnected }: { isConnected: boolean }) {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-6">
+          {(actionResolution.kind === 'propose' || actionResolution.kind === 'execute') && (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  <h2>Before you sign</h2>
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Compare these details with your wallet. Your transaction goes to the governor; the
+                  proposal’s calls are listed below.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <dl className="grid gap-4 text-sm sm:grid-cols-[8rem_minmax(0,1fr)]">
+                  <dt className="text-muted-foreground">Network</dt>
+                  <dd>
+                    {wagmiConfig.chains[0].name} (chain ID {wagmiConfig.chains[0].id})
+                  </dd>
+                  <dt className="text-muted-foreground">To (governor)</dt>
+                  <dd className="flex items-center gap-2 min-w-0">
+                    <code className="break-all select-all">{DEFAULT_GOVERNOR_ADDRESS}</code>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 shrink-0 text-muted-foreground"
+                      aria-label="Copy governor address"
+                      title="Copy governor address"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(DEFAULT_GOVERNOR_ADDRESS);
+                          toast.success('Governor address copied');
+                        } catch {
+                          toast.error('Could not copy. Select the address to copy it.');
+                        }
+                      }}
+                    >
+                      <CopyIcon aria-hidden="true" className="size-4" />
+                    </Button>
+                  </dd>
+                  <dt className="text-muted-foreground">Action</dt>
+                  <dd>
+                    {actionResolution.kind === 'propose' ? (
+                      <>
+                        Create proposal (<code>propose</code>)
+                      </>
+                    ) : (
+                      <>
+                        Execute proposal{' '}
+                        <code>
+                          {report.structuredReport?.metadata?.proposalId ?? 'ID unavailable'}
+                        </code>{' '}
+                        (<code>execute</code>)
+                      </>
+                    )}
+                  </dd>
+                </dl>
+                <p className="border-t pt-4 text-sm text-muted-foreground">
+                  Review the report too. These details do not verify the Ledger signing hash or
+                  prove that the proposal is safe.
+                </p>
+              </CardContent>
+            </Card>
+          )}
           <ProposalCard
             proposal={proposalData}
             action={actionResolution}

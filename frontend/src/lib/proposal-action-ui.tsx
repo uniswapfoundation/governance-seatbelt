@@ -68,8 +68,8 @@ const PROPOSAL_ACTION_UI: Record<ProposalActionUiKey, ProposalActionUi> = {
       buttonText: 'Review & Propose',
     },
     card: {
-      title: 'Proposal Creation',
-      description: 'Transaction Parameters',
+      title: 'Proposal calls',
+      description: 'Calls included in this proposal.',
       readyText: 'Ready to propose',
       actionLabel: 'Propose',
       statusIconName: 'check',
@@ -93,8 +93,8 @@ const PROPOSAL_ACTION_UI: Record<ProposalActionUiKey, ProposalActionUi> = {
       buttonText: 'Review & Execute',
     },
     card: {
-      title: 'Proposal Execution',
-      description: 'Transaction Parameters',
+      title: 'Proposal calls',
+      description: 'Calls included in this proposal.',
       readyText: 'Ready to execute',
       actionLabel: 'Execute',
       statusIconName: 'check',
