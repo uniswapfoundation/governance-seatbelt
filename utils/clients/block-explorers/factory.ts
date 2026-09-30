@@ -103,22 +103,27 @@ export class BlockExplorerFactory {
     return null;
   }
 
+  static getExplorers(chainId: number): BlockExplorer[] {
+    const config = getChainConfig(chainId);
+    const explorer = BlockExplorerFactory.getExplorer(chainId);
+    const providers = explorer ? [explorer] : [];
+    if (config.blockscoutApiUrl && explorer?.getName() !== 'Blockscout') {
+      providers.push(
+        new BlockscoutExplorer(new URL(config.blockscoutApiUrl).origin, config.blockscoutApiUrl),
+      );
+    }
+    return providers;
+  }
+
   /** Fetch a cached ABI, then the configured explorer, Blockscout, and Sourcify. */
   static async fetchContractAbi(address: string, chainId: number): Promise<Abi | null> {
     try {
-      const config = getChainConfig(chainId);
       const cached =
         CacheManager.getAbiFromMemory(chainId, address) ??
         CacheManager.getAbiFromFile(chainId, address);
       if (cached) return cached;
 
-      const explorer = BlockExplorerFactory.getExplorer(chainId);
-      const providers = explorer ? [explorer] : [];
-      if (config.blockscoutApiUrl && explorer?.getName() !== 'Blockscout') {
-        providers.push(
-          new BlockscoutExplorer(new URL(config.blockscoutApiUrl).origin, config.blockscoutApiUrl),
-        );
-      }
+      const providers = BlockExplorerFactory.getExplorers(chainId);
       for (const provider of providers) {
         try {
           const abi = await provider.fetchContractAbi(address, chainId);

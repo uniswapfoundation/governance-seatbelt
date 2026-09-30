@@ -40,6 +40,12 @@ export interface SimulationCheck {
 }
 
 export interface SimulationStateChange {
+  storageDetails?: {
+    oldValue: string;
+    newValue: string;
+    source: string;
+    compilerVersion: string;
+  };
   contract: string;
   contractAddress?: string;
   key: string;

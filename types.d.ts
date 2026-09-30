@@ -201,6 +201,7 @@ export type CheckResult = {
   data?: any;
   skipped?: { reason: string };
   permissionsDiff?: PermissionsDiffItem[];
+  storageChanges?: SimulationStateChange[];
 };
 
 export type PermissionsDiffItem =
@@ -736,6 +737,12 @@ export interface SimulationCheck {
 }
 
 export interface SimulationStateChange {
+  storageDetails?: {
+    oldValue: string;
+    newValue: string;
+    source: string;
+    compilerVersion: string;
+  };
   contract: string;
   contractAddress?: string;
   key: string;

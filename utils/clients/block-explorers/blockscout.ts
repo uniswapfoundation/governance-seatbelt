@@ -3,6 +3,7 @@ import { SchemaValidationError, parseWithSchema, z } from '../../validation/zod'
 import { isAbi } from '../verifier-lookup';
 import { CacheManager } from './cache';
 import { BaseBlockExplorer, type VerificationOptions } from './index';
+import { type SoliditySource, soliditySourceSchema } from './source';
 
 interface BlockscoutContractResponse {
   status?: string;
@@ -104,6 +105,46 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
       `Failed to ${operation} for ${address} on chain ${chainId} after ${maxRetries} attempts`,
     );
     return null;
+  }
+
+  async fetchContractSource(address: string, chainId: number): Promise<SoliditySource | null> {
+    const schema = z.object({
+      is_fully_verified: z.boolean(),
+      is_partially_verified: z.boolean().optional(),
+      language: z.string(),
+      source_code: z.string(),
+      file_path: z.string(),
+      name: z.string(),
+      compiler_version: z.string(),
+      compiler_settings: z.record(z.string(), z.unknown()),
+      additional_sources: z.array(z.object({ file_path: z.string(), source_code: z.string() })),
+    });
+    const data = await this.fetchWithRetry(
+      `${this.apiUrl}/smart-contracts/${getAddress(address)}`,
+      'fetch source',
+      chainId,
+      address,
+      schema,
+    );
+    if (
+      !data ||
+      (!data.is_fully_verified && !data.is_partially_verified) ||
+      data.language !== 'solidity'
+    )
+      return null;
+    return soliditySourceSchema.parse({
+      compilerVersion: data.compiler_version,
+      fileName: data.file_path,
+      contractName: data.name,
+      input: {
+        language: 'Solidity',
+        sources: Object.fromEntries([
+          [data.file_path, { content: data.source_code }],
+          ...data.additional_sources.map((s) => [s.file_path, { content: s.source_code }]),
+        ]),
+        settings: data.compiler_settings,
+      },
+    });
   }
 
   async fetchContractAbi(address: string, chainId: number): Promise<Abi | null> {

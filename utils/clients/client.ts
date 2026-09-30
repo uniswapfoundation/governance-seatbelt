@@ -51,7 +51,7 @@ export interface ChainConfig {
     apiKey?: string;
     degradedReason?: string;
   };
-  /** Optional Blockscout API v2 URL for ABI fallback. */
+  /** Optional Blockscout API v2 URL for ABI and verified-source fallback. */
   blockscoutApiUrl?: string;
   rpcUrl: string;
 }

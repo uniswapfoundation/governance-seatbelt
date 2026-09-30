@@ -655,6 +655,8 @@ function extractStateChanges(checks: AllCheckResults): SimulationStateChange[] {
   for (const checkId in checks) {
     const { result } = checks[checkId];
 
+    stateChanges.push(...(result.storageChanges ?? []));
+
     // Track the current contract name and address
     let currentContract = '';
     let currentContractAddress = '';

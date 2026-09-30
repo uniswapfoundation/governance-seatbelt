@@ -3,6 +3,7 @@ import { SchemaValidationError, parseWithSchema, z } from '../../validation/zod'
 import { isAbi } from '../verifier-lookup';
 import { CacheManager } from './cache';
 import { BaseBlockExplorer, type VerificationOptions } from './index';
+import { type SoliditySource, soliditySourceSchema } from './source';
 
 interface EtherscanAbiResponse {
   status: string;
@@ -19,6 +20,12 @@ interface EtherscanSourceCodeResponse {
 interface EtherscanSourceCodeResultItem {
   SourceCode?: string;
   ContractName?: string;
+  CompilerVersion?: string;
+  ContractFileName?: string;
+  OptimizationUsed?: string;
+  Runs?: string;
+  EVMVersion?: string;
+  Library?: string;
 }
 
 const etherscanAbiResponseSchema: z.ZodType<EtherscanAbiResponse> = z
@@ -39,6 +46,12 @@ const etherscanSourceCodeResponseSchema: z.ZodType<EtherscanSourceCodeResponse> 
           .object({
             SourceCode: z.string().optional(),
             ContractName: z.string().optional(),
+            CompilerVersion: z.string().optional(),
+            ContractFileName: z.string().optional(),
+            OptimizationUsed: z.string().optional(),
+            Runs: z.string().optional(),
+            EVMVersion: z.string().optional(),
+            Library: z.string().optional(),
           })
           .passthrough(),
       ),
@@ -208,7 +221,7 @@ export class EtherscanExplorer extends BaseBlockExplorer {
       try {
         const url = `https://api.etherscan.io/v2/api?chainid=${chainId}&module=contract&action=getsourcecode&address=${normalizedAddress}&apikey=${this.apiKey}`;
 
-        const response = await fetch(url);
+        const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
         const rawData = await response.json();
         const data = parseWithSchema(
           etherscanSourceCodeResponseSchema,
@@ -266,6 +279,38 @@ export class EtherscanExplorer extends BaseBlockExplorer {
     throw new Error(
       `Etherscan getsourcecode failed for ${normalizedAddress} on chain ${chainId} after ${maxRetries} attempts: ${lastError ?? 'Unknown error'}`,
     );
+  }
+
+  async fetchContractSource(address: string, chainId: number): Promise<SoliditySource | null> {
+    if (!this.apiKey) return null;
+    const entry = await this.fetchSourceCodeEntry(getAddress(address), chainId);
+    const source = entry.SourceCode?.trim();
+    if (!source) return null;
+    let input: unknown;
+    if (source.startsWith('{')) {
+      const parsed = JSON.parse(source.startsWith('{{') ? source.slice(1, -1) : source);
+      input = parsed.sources ? parsed : { language: 'Solidity', sources: parsed, settings: {} };
+    } else {
+      // Flattened verification with linked libraries needs settings we cannot reconstruct safely.
+      if (entry.Library) return null;
+      input = {
+        language: 'Solidity',
+        sources: { [entry.ContractFileName || `${entry.ContractName}.sol`]: { content: source } },
+        settings: {
+          optimizer: { enabled: entry.OptimizationUsed === '1', runs: Number(entry.Runs || 200) },
+          ...(entry.EVMVersion && entry.EVMVersion !== 'Default'
+            ? { evmVersion: entry.EVMVersion }
+            : {}),
+        },
+      };
+    }
+    const parsed = soliditySourceSchema.safeParse({
+      compilerVersion: entry.CompilerVersion,
+      contractName: entry.ContractName,
+      fileName: entry.ContractFileName || undefined,
+      input,
+    });
+    return parsed.success ? parsed.data : null;
   }
 
   private async fetchVerificationStatus(
