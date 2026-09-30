@@ -29,6 +29,7 @@
     "dist",
     "build",
     ".git",
+    "cache",
     "reports",
     "*.json",
     "*.md",

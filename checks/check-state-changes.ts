@@ -1,6 +1,7 @@
 import { getAddress } from 'viem';
-import type { ProposalCheck, StateDiff } from '../types';
+import type { ProposalCheck, SimulationStateChange, StateDiff } from '../types';
 import { getContractName } from '../utils/clients/tenderly';
+import { decodeStorageWrite, getVerifiedStorageLayout } from '../utils/storage-layout';
 
 /**
  * Reports all state changes from the proposal
@@ -10,6 +11,7 @@ export const checkStateChanges: ProposalCheck = {
   async checkProposal(_, sim, deps) {
     const info: string[] = [];
     const warnings: string[] = [];
+    const storageChanges: SimulationStateChange[] = [];
     const warningsSeen = new Set<string>();
     // Check if the transaction reverted, and if so return revert reason
     if (!sim.transaction.status) {
@@ -85,7 +87,35 @@ export const checkStateChanges: ProposalCheck = {
     // ETH balance changes are now handled by the checkEthBalanceChanges module
     for (const [address, diffs] of Object.entries(stateDiffs)) {
       const contract = sim.contracts.find((c) => getAddress(c.address) === address);
-      info.push(await getContractName(contract ?? { address }, deps.chainConfig?.chainId));
+      const identifier = await getContractName(contract ?? { address }, deps.chainConfig?.chainId);
+      info.push(identifier);
+      let layout: Awaited<ReturnType<typeof getVerifiedStorageLayout>> = null;
+      if (
+        diffs.some(
+          (diff) => !diff.soltype && diff.raw.some((w) => /^0x[0-9a-fA-F]{64}$/.test(w.key)),
+        )
+      ) {
+        try {
+          const runtime =
+            contract?.deployed_bytecode ??
+            (await deps.publicClient?.getCode({
+              address,
+              blockNumber: BigInt(sim.transaction.block_number),
+            }));
+          if (runtime && /^0x[0-9a-fA-F]+$/.test(runtime)) {
+            layout = await getVerifiedStorageLayout(
+              address,
+              deps.chainConfig.chainId,
+              runtime as `0x${string}`,
+            );
+          }
+        } catch {
+          // Missing code or layout must not prevent reporting the raw writes.
+          console.warn(
+            `Storage layout unavailable for ${address} on chain ${deps.chainConfig?.chainId}`,
+          );
+        }
+      }
 
       // Track processed state changes to deduplicate
       const processedChanges = new Set<string>();
@@ -100,14 +130,26 @@ export const checkStateChanges: ProposalCheck = {
       // (i.e. tuples) don't print as [object Object]
       for (const diff of diffs) {
         if (!diff.soltype) {
-          // In this branch, state change is not decoded, so return raw data of each storage write
-          // (all other branches have decoded state changes)
+          // Fill missing Tenderly labels from a verified layout; otherwise retain raw writes.
           for (const w of diff.raw) {
             const oldVal = formatRawValue(w.original);
             const newVal = formatRawValue(w.dirty);
             const changeKey = `${w.key}:${oldVal}:${newVal}`;
             if (!processedChanges.has(changeKey)) {
-              info.push(`    Slot \`${w.key}\` changed from \`${oldVal}\` to \`${newVal}\``);
+              const decoded = layout
+                ? decodeStorageWrite(w, identifier.split(' at `')[0], layout)
+                : [];
+              if (decoded.length) {
+                storageChanges.push(...decoded);
+                for (const change of decoded) {
+                  info.push(
+                    `    \`${change.label}\`: \`${change.oldValue}\` → \`${change.newValue}\` (verified layout via ${change.storageDetails!.source})`,
+                  );
+                }
+                info.push(`      Raw slot \`${w.key}\`: \`${oldVal}\` → \`${newVal}\``);
+              } else {
+                info.push(`    Slot \`${w.key}\` changed from \`${oldVal}\` to \`${newVal}\``);
+              }
               processedChanges.add(changeKey);
             }
           }
@@ -168,6 +210,6 @@ export const checkStateChanges: ProposalCheck = {
       }
     }
 
-    return { info, warnings, errors: [] };
+    return { info, warnings, errors: [], ...(storageChanges.length ? { storageChanges } : {}) };
   },
 };

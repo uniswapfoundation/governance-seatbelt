@@ -1,5 +1,6 @@
 import type { Abi } from 'viem';
 import { CacheManager } from './cache';
+import type { SoliditySource } from './source';
 
 /**
  * Base interface for block explorer implementations
@@ -13,6 +14,7 @@ export interface VerificationOptions {
 }
 
 export interface BlockExplorer {
+  fetchContractSource?(address: string, chainId: number): Promise<SoliditySource | null>;
   /**
    * Fetch the ABI for a contract
    * @param address The contract address

@@ -1,11 +1,12 @@
+import { AddressChip } from '@/components/AddressChip';
 import type {
   SimulationStateChange,
   StructuredSimulationReport,
 } from '@/hooks/use-simulation-results';
-import { ExternalLinkIcon, InfoIcon } from 'lucide-react';
+import { InfoIcon } from 'lucide-react';
 import { SimulationPlaceholderBadge } from './SimulationPlaceholderBadge';
 import { StateChangeItem } from './StateChangeItem';
-import { buildAddressLink, isPlaceholderAddress } from './explorer';
+import { isPlaceholderAddress } from './explorer';
 
 interface StateChangesProps {
   stateChanges: SimulationStateChange[];
@@ -38,10 +39,10 @@ export function StateChanges({ stateChanges, metadata }: StateChangesProps) {
   );
 
   const contractCount = Object.keys(groupedChanges).length;
-  const slotCount = stateChanges.length;
+  const changeCount = stateChanges.length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center gap-4 text-sm text-muted-foreground pb-2 border-b border-muted">
         <span>
           <strong className="text-foreground">{contractCount}</strong>{' '}
@@ -49,55 +50,51 @@ export function StateChanges({ stateChanges, metadata }: StateChangesProps) {
         </span>
         <span>•</span>
         <span>
-          <strong className="text-foreground">{slotCount}</strong>{' '}
-          {slotCount === 1 ? 'storage slot' : 'storage slots'} changed
+          <strong className="text-foreground">{changeCount}</strong>{' '}
+          {changeCount === 1 ? 'change' : 'changes'}
         </span>
       </div>
 
-      {Object.entries(groupedChanges).map(([contractKey, changes]) => {
-        const [contractName, contractAddress] = contractKey.split('|');
-        return (
-          <div key={contractKey} className="space-y-3">
-            <div className="flex items-center gap-2 mb-2">
-              <h3 className="text-lg font-semibold">
-                {contractName === 'balances'
-                  ? 'Token Balances'
-                  : contractName === 'storage'
-                    ? 'Contract Storage'
-                    : contractName === 'code'
-                      ? 'Contract Code'
-                      : contractName}
+      <div className="divide-y divide-border">
+        {Object.entries(groupedChanges).map(([contractKey, changes]) => {
+          const [contractName, contractAddress] = contractKey.split('|');
+          return (
+            <section key={contractKey} className="py-5 first:pt-0 last:pb-0">
+              <div className="flex flex-wrap items-center gap-2 bg-muted/50 px-3 py-2">
+                <h3 className="text-base font-semibold break-all">
+                  {contractName === 'balances'
+                    ? 'Token Balances'
+                    : contractName === 'storage'
+                      ? 'Contract Storage'
+                      : contractName === 'code'
+                        ? 'Contract Code'
+                        : contractName}
+                </h3>
                 {contractAddress && (
-                  <span className="ml-2 text-sm font-normal inline-flex items-center gap-2">
-                    at{' '}
-                    <a
-                      href={buildAddressLink(contractAddress, effectiveMetadata)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-xs bg-muted-foreground/10 px-1 py-0.5 rounded hover:underline inline-flex items-center"
-                    >
-                      {contractAddress}
-                      <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                    </a>
+                  <>
+                    <AddressChip
+                      address={contractAddress}
+                      blockExplorerUrl={effectiveMetadata.blockExplorerBaseUrl}
+                    />
                     {isPlaceholderAddress(contractAddress, effectiveMetadata) && (
                       <SimulationPlaceholderBadge />
                     )}
-                  </span>
+                  </>
                 )}
-              </h3>
-            </div>
-            <div className="space-y-3 pl-2">
-              {changes.map((change, index) => (
-                <StateChangeItem
-                  key={`state-${change.contract}-${change.key}-${index}`}
-                  stateChange={change}
-                  metadata={effectiveMetadata}
-                />
-              ))}
-            </div>
-          </div>
-        );
-      })}
+              </div>
+              <div className="divide-y divide-border/50 px-3">
+                {changes.map((change, index) => (
+                  <StateChangeItem
+                    key={`state-${change.contract}-${change.key}-${index}`}
+                    stateChange={change}
+                    metadata={effectiveMetadata}
+                  />
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
     </div>
   );
 }

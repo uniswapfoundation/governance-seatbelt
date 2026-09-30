@@ -1,13 +1,13 @@
 'use client';
 
+import { AddressChip } from '@/components/AddressChip';
+import { Badge } from '@/components/ui/badge';
 import type {
   SimulationStateChange,
   StructuredSimulationReport,
 } from '@/hooks/use-simulation-results';
-import { ChevronDownIcon, ChevronUpIcon, ExternalLinkIcon } from 'lucide-react';
-import { useState } from 'react';
 import { SimulationPlaceholderBadge } from './SimulationPlaceholderBadge';
-import { buildAddressLink, isPlaceholderAddress } from './explorer';
+import { getAddressLabel, isPlaceholderAddress } from './explorer';
 
 export function StateChangeItem({
   stateChange,
@@ -16,272 +16,112 @@ export function StateChangeItem({
   stateChange: SimulationStateChange;
   metadata?: StructuredSimulationReport['metadata'];
 }) {
-  const [isExpanded, setIsExpanded] = useState(true);
   const effectiveMetadata = metadata || { proposalId: '', proposer: '' as `0x${string}` };
-
-  const toggleExpanded = () => {
-    setIsExpanded(!isExpanded);
-  };
-
-  const cleanValue = (value: string): string => {
-    if (value.startsWith('"') && value.endsWith('"')) {
-      return value.slice(1, -1);
-    }
-    return value;
-  };
-
-  const oldValueCleaned = cleanValue(stateChange.oldValue);
-  const newValueCleaned = cleanValue(stateChange.newValue);
-
-  const isHex32 = (value: string) => /^0x[0-9a-fA-F]{64}$/.test(value);
-  const isAddress = (value: string) => /^0x[0-9a-fA-F]{40}$/.test(value);
-  const isDecimalInteger = (value: string) => /^-?\d+$/.test(value);
-
-  const isUniswapV3Slot0Change =
+  const cleanValue = (value: string) => value.replace(/^"(.*)"$/, '$1');
+  const oldValue = cleanValue(stateChange.oldValue);
+  const newValue = cleanValue(stateChange.newValue);
+  const raw = stateChange.storageDetails;
+  const isRawSlot = /^0x[0-9a-fA-F]{64}$/.test(stateChange.key);
+  const slotName = isRawSlot
+    ? BigInt(stateChange.key) < 2n ** 64n
+      ? `Slot ${BigInt(stateChange.key)}`
+      : `Slot ${stateChange.key.slice(0, 10)}…${stateChange.key.slice(-6)}`
+    : stateChange.key;
+  const isV3Slot0 =
     stateChange.contract.toLowerCase().includes('uniswapv3pool') &&
-    isHex32(oldValueCleaned) &&
-    isHex32(newValueCleaned) &&
-    /^0x0{64}$/i.test(stateChange.key);
-
-  const isNumericChange = isDecimalInteger(oldValueCleaned) && isDecimalInteger(newValueCleaned);
-  const isAddressChange = isAddress(oldValueCleaned) && isAddress(newValueCleaned);
-  const isBooleanChange =
-    (oldValueCleaned === 'true' || oldValueCleaned === 'false') &&
-    (newValueCleaned === 'true' || newValueCleaned === 'false');
-
-  const getDifference = () => {
-    if (isUniswapV3Slot0Change) {
-      try {
-        const oldSlot0 = BigInt(oldValueCleaned);
-        const newSlot0 = BigInt(newValueCleaned);
-
-        const feeProtocolOld = Number((oldSlot0 >> 232n) & 0xffn);
-        const feeProtocolNew = Number((newSlot0 >> 232n) & 0xffn);
-
-        const feeProtocol0Old = feeProtocolOld & 0x0f;
-        const feeProtocol1Old = feeProtocolOld >> 4;
-        const feeProtocol0New = feeProtocolNew & 0x0f;
-        const feeProtocol1New = feeProtocolNew >> 4;
-
-        const unlockedOld = ((oldSlot0 >> 240n) & 0xffn) === 1n;
-        const unlockedNew = ((newSlot0 >> 240n) & 0xffn) === 1n;
-
-        return (
-          <div className="bg-muted p-3 rounded-md mt-4 space-y-2">
-            <div className="text-sm flex items-center justify-between">
-              <span className="text-muted-foreground">Decoded (Uniswap V3 slot0)</span>
-            </div>
-            <div className="text-xs font-mono">
-              feeProtocol (raw): {feeProtocolOld} → {feeProtocolNew}
-            </div>
-            <div className="text-xs font-mono">
-              feeProtocol (token0, token1): ({feeProtocol0Old}, {feeProtocol1Old}) → (
-              {feeProtocol0New}, {feeProtocol1New})
-            </div>
-            <div className="text-xs font-mono">
-              unlocked: {String(unlockedOld)} → {String(unlockedNew)}
-            </div>
-          </div>
-        );
-      } catch {
-        // fall through to generic rendering
-      }
-    }
-
-    if (isNumericChange) {
-      try {
-        const oldNum = BigInt(oldValueCleaned);
-        const newNum = BigInt(newValueCleaned);
-        const diff = newNum - oldNum;
-
-        const isPositive = diff > BigInt(0);
-        const isNegative = diff < BigInt(0);
-        const absDiff = isNegative ? -diff : diff;
-
-        const formattedDiff = absDiff.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-
-        let percentageDisplay = '';
-
-        if (oldNum !== BigInt(0)) {
-          try {
-            const oldNumDigits = oldNum.toString().length;
-            const diffDigits = diff.toString().length;
-
-            if (oldNumDigits > 15 || diffDigits > 15) {
-              const oldNumPrefix = Number(oldNum.toString().substring(0, 5));
-              const diffPrefix = Number(diff.toString().substring(0, 5));
-
-              const percentChange = Math.abs((diffPrefix / oldNumPrefix) * 100);
-
-              if (percentChange > 0.1 && percentChange < 10000) {
-                percentageDisplay = `${isPositive ? '+' : '-'}${Math.round(percentChange)}%`;
-              }
-            } else {
-              const percentChange = Math.abs(Number((diff * BigInt(100)) / oldNum));
-              if (percentChange > 0 && percentChange < 10000) {
-                percentageDisplay = `${isPositive ? '+' : '-'}${percentChange}%`;
-              }
-            }
-          } catch {
-            // ignore
+    /^0x0{64}$/i.test(stateChange.key) &&
+    [oldValue, newValue].every((value) => /^0x[0-9a-fA-F]{64}$/.test(value));
+  const numericDelta =
+    /^-?\d+$/.test(oldValue) && /^-?\d+$/.test(newValue)
+      ? BigInt(newValue) - BigInt(oldValue)
+      : null;
+  const renderValue = (value: string) =>
+    /^0x[0-9a-fA-F]{40}$/.test(value) ? (
+      <span className="inline-flex items-center gap-2 flex-wrap">
+        <AddressChip
+          address={value}
+          label={
+            value.toLowerCase() === '0x0000000000000000000000000000000000000000'
+              ? 'Zero address'
+              : (getAddressLabel(value, effectiveMetadata) ?? undefined)
           }
-        }
-
-        return (
-          <div className="bg-muted p-3 rounded-md mt-4">
-            <div className="text-sm flex items-center justify-between">
-              <span className="text-muted-foreground">Change</span>
-              <div className="flex flex-col items-end">
-                <span
-                  className={`font-bold ${isPositive ? 'text-green-600' : isNegative ? 'text-red-600' : ''}`}
-                >
-                  {isPositive ? '+' : isNegative ? '-' : ''}
-                  {formattedDiff}
-                </span>
-                {percentageDisplay && (
-                  <span
-                    className={`text-xs ${isPositive ? 'text-green-600' : isNegative ? 'text-red-600' : ''}`}
-                  >
-                    {percentageDisplay}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      } catch (error) {
-        console.error('Error calculating difference:', error);
-        return (
-          <div className="bg-muted p-3 rounded-md mt-4">
-            <div className="text-sm text-muted-foreground">Change</div>
-            <div className="font-medium text-xs">Value changed</div>
-          </div>
-        );
-      }
-    }
-
-    if (isBooleanChange) {
-      return (
-        <div className="bg-muted p-3 rounded-md mt-4">
-          <div className="text-sm flex items-center justify-between">
-            <span className="text-muted-foreground">Change</span>
-            <span
-              className={`font-bold ${newValueCleaned === 'true' ? 'text-green-600' : 'text-red-600'}`}
-            >
-              {oldValueCleaned} → {newValueCleaned}
-            </span>
-          </div>
-        </div>
-      );
-    }
-
-    if (isAddressChange) {
-      return (
-        <div className="bg-muted p-3 rounded-md mt-4">
-          <div className="text-sm text-muted-foreground">Address Change</div>
-          <div className="font-medium text-xs">
-            <div className="flex flex-col gap-2">
-              <span className="inline-flex items-center gap-2 flex-wrap">
-                From:{' '}
-                <code className="bg-muted-foreground/10 px-1 py-0.5 rounded">
-                  <a
-                    href={buildAddressLink(oldValueCleaned, effectiveMetadata)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:underline inline-flex items-center"
-                  >
-                    {oldValueCleaned}
-                    <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                  </a>
-                </code>
-                {isPlaceholderAddress(oldValueCleaned, effectiveMetadata) && (
-                  <SimulationPlaceholderBadge />
-                )}
-              </span>
-              <span className="inline-flex items-center gap-2 flex-wrap">
-                To:{' '}
-                <code className="bg-muted-foreground/10 px-1 py-0.5 rounded">
-                  <a
-                    href={buildAddressLink(newValueCleaned, effectiveMetadata)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:underline inline-flex items-center"
-                  >
-                    {newValueCleaned}
-                    <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                  </a>
-                </code>
-                {isPlaceholderAddress(newValueCleaned, effectiveMetadata) && (
-                  <SimulationPlaceholderBadge />
-                )}
-              </span>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (isHex32(oldValueCleaned) && isHex32(newValueCleaned)) {
-      return (
-        <div className="bg-muted p-3 rounded-md mt-4">
-          <div className="text-sm text-muted-foreground">Change</div>
-          <div className="font-medium text-xs">Storage slot value changed</div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="bg-muted p-3 rounded-md mt-4">
-        <div className="text-sm text-muted-foreground">Change</div>
-        <div className="font-medium text-xs">Value changed</div>
-      </div>
+          blockExplorerUrl={effectiveMetadata.blockExplorerBaseUrl}
+        />
+        {isPlaceholderAddress(value, effectiveMetadata) && <SimulationPlaceholderBadge />}
+      </span>
+    ) : (
+      <code className="text-xs break-all">{value}</code>
     );
-  };
 
   return (
-    <div className="border border-muted rounded-md overflow-hidden">
-      <button
-        type="button"
-        className="w-full p-4 text-left hover:bg-muted/50 transition-colors cursor-pointer flex justify-between items-start"
-        onClick={toggleExpanded}
-        aria-expanded={isExpanded}
-      >
-        <div className="flex items-start gap-2">
-          {isHex32(stateChange.key) ? (
-            <div className="text-xs bg-muted-foreground/10 px-2 py-1 rounded text-muted-foreground">
-              {isUniswapV3Slot0Change ? 'slot0' : 'Slot'}
-            </div>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-2">
-          <code className="text-xs bg-muted-foreground/20 px-2 py-1 rounded">
-            {stateChange.label ?? stateChange.key}
-          </code>
-          {isExpanded ? (
-            <ChevronUpIcon className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
-          )}
-        </div>
-      </button>
-      {isExpanded && (
-        <div className="p-5 pt-0 pl-11 text-sm border-t border-muted bg-muted/10">
-          {getDifference()}
-          <div className="mt-4 grid grid-cols-2 gap-4">
-            <div>
-              <span className="text-muted-foreground font-medium">Old Value: </span>
-              <div className="font-mono text-xs break-all mt-2 bg-muted p-3 rounded">
-                {stateChange.oldValue}
-              </div>
-            </div>
-            <div>
-              <span className="text-muted-foreground font-medium">New Value: </span>
-              <div className="font-mono text-xs break-all mt-2 bg-muted p-3 rounded">
-                {stateChange.newValue}
-              </div>
-            </div>
-          </div>
-        </div>
+    <div className="py-4 space-y-3">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <code className="font-semibold text-sm break-all">{stateChange.label ?? slotName}</code>
+        {stateChange.label && isRawSlot && (
+          <Badge variant="secondary" className="font-mono text-muted-foreground">
+            {slotName}
+          </Badge>
+        )}
+        {numericDelta !== null && (
+          <span className="text-xs text-muted-foreground">
+            Delta {numericDelta > 0n ? '+' : ''}
+            {numericDelta.toString()}
+          </span>
+        )}
+      </div>
+      <dl className="grid grid-cols-[auto_1fr] items-start gap-x-4 gap-y-2 text-sm">
+        <dt className="text-muted-foreground">Before</dt>
+        <dd className="min-w-0">{renderValue(oldValue)}</dd>
+        <dt className="text-muted-foreground">After</dt>
+        <dd className="min-w-0">{renderValue(newValue)}</dd>
+      </dl>
+      {(raw || isRawSlot) && (
+        <details className="text-xs">
+          <summary className="cursor-pointer text-muted-foreground">Technical details</summary>
+          <dl className="mt-3 grid grid-cols-[6rem_minmax(0,1fr)] sm:grid-cols-[7rem_minmax(0,1fr)] items-start gap-x-4 gap-y-3">
+            {raw && (
+              <>
+                <dt className="text-muted-foreground">Label source</dt>
+                <dd className="space-y-1">
+                  <p>{raw.source}</p>
+                  <p className="text-muted-foreground">
+                    We rebuilt the verified source and matched the deployed code to identify this
+                    field.
+                  </p>
+                </dd>
+                <dt className="text-muted-foreground">Compiler version</dt>
+                <dd className="font-mono break-all">{raw.compilerVersion}</dd>
+              </>
+            )}
+            <dt className="text-muted-foreground">Storage slot</dt>
+            <dd className="font-mono break-all">{stateChange.key}</dd>
+            {raw && (
+              <>
+                <dt className="text-muted-foreground">Raw before</dt>
+                <dd className="font-mono break-all">{raw.oldValue}</dd>
+                <dt className="text-muted-foreground">Raw after</dt>
+                <dd className="font-mono break-all">{raw.newValue}</dd>
+              </>
+            )}
+            {isV3Slot0 && (
+              <>
+                <dt className="text-muted-foreground">Decoded Uniswap V3 slot0</dt>
+                <dd className="space-y-1 font-mono">
+                  <div>
+                    feeProtocol (token0, token1): ({Number((BigInt(oldValue) >> 232n) & 0xfn)},{' '}
+                    {Number((BigInt(oldValue) >> 236n) & 0xfn)}) → (
+                    {Number((BigInt(newValue) >> 232n) & 0xfn)},{' '}
+                    {Number((BigInt(newValue) >> 236n) & 0xfn)})
+                  </div>
+                  <div>
+                    unlocked: {String(((BigInt(oldValue) >> 240n) & 0xffn) === 1n)} →{' '}
+                    {String(((BigInt(newValue) >> 240n) & 0xffn) === 1n)}
+                  </div>
+                </dd>
+              </>
+            )}
+          </dl>
+        </details>
       )}
     </div>
   );
