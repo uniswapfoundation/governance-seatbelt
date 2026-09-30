@@ -59,6 +59,14 @@ function tokenKey(change: TenderlyAssetChange) {
 export const checkTreasuryMovement: ProposalCheck = {
   name: 'Treasury movement check',
   async checkProposal(_, sim, deps) {
+    if (sim.transaction.transaction_info.asset_changes == null) {
+      return {
+        info: [],
+        warnings: ['Asset transfer enrichment is unavailable from the simulation provider.'],
+        errors: [],
+        skipped: { reason: 'Provider did not return asset changes' },
+      };
+    }
     const info: string[] = [];
     const warnings: string[] = [];
     const errors: string[] = [];

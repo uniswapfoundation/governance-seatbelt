@@ -8,20 +8,19 @@ import { DEFAULT_SIMULATION_ADDRESS, getContractNameFromTenderly } from '../util
 export const checkEthBalanceChanges: ProposalCheck = {
   name: 'Reports all ETH balance changes from the proposal',
   async checkProposal(proposal, sim, deps) {
+    if (sim.transaction.transaction_info.asset_changes == null) {
+      return {
+        info: [],
+        warnings: ['Asset transfer enrichment is unavailable from the simulation provider.'],
+        errors: [],
+        skipped: { reason: 'Provider did not return asset changes' },
+      };
+    }
     const info: string[] = [];
     const warnings: string[] = [];
     const errors: string[] = [];
 
     const blockExplorerUrl = deps.chainConfig.blockExplorer.baseUrl;
-
-    if (!sim.transaction.transaction_info.asset_changes) {
-      // No asset changes data available - check ran but found nothing to report
-      return {
-        info: ['No ETH balance changes detected in this proposal.'],
-        warnings,
-        errors,
-      };
-    }
 
     // Filter for ETH transfers
     const ethTransfers = sim.transaction.transaction_info.asset_changes.filter(
