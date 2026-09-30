@@ -60,6 +60,7 @@
     "remark": "^14.0.2",
     "remark-rehype": "^10.1.0",
     "remark-toc": "^8.0.1",
+    "solc": "^0.8.30",
     "viem": "2.55.2",
     "zod": "4.3.5"
   },
@@ -68,8 +69,7 @@
     "@secretlint/secretlint-rule-preset-recommend": "11.2.5",
     "@types/bun": "1.2.4",
     "husky": "9.1.7",
-    "secretlint": "11.2.5",
-    "solc": "^0.8.30"
+    "secretlint": "11.2.5"
   },
   "module": "index.ts",
   "peerDependencies": {

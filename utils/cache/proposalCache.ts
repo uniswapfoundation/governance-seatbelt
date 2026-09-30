@@ -2,10 +2,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getAddress } from 'viem';
 import type { SimulationBlock, SimulationData } from '../../types';
+import { getSimulationProvider } from '../simulation-provider';
 import type { CachedBlock, NeedsSimulationParams, ProposalCacheEntry } from './types';
 
 // Cache directory path
-const CACHE_DIR = join(process.cwd(), 'cache');
+const CACHE_DIR =
+  getSimulationProvider() === 'rpc'
+    ? join(process.cwd(), 'cache', 'rpc')
+    : join(process.cwd(), 'cache');
 
 // Ensure cache directory exists
 if (!existsSync(CACHE_DIR)) {

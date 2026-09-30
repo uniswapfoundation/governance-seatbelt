@@ -32,6 +32,30 @@ SIM_NAME=robinhood-fee-activation bun start
 
 Reports are saved to `reports/` folder.
 
+### Optional RPC simulation
+
+Set `SIMULATION_PROVIDER=rpc` to simulate new and proposed proposals through the configured
+chain RPCs instead of Tenderly. Each endpoint must support historical `debug_traceCall`,
+`callTracer` with logs, `prestateTracer`, and state/block overrides. QuickNode's public demos
+were verified for Ethereum and Arc; other networks require their own validation.
+
+Storage overrides are encoded locally from verified Solidity source and the exact compiler's
+storage layout. This requires Etherscan source access and downloads the matching compiler
+from Solidity's official distribution into `cache/solc/`. Proxy implementation and packed
+storage reads use the simulation's base block. Unsupported layouts fail explicitly.
+
+RPC simulation results use a separate `cache/rpc/` directory. Reports retain call/event
+decoding, raw storage changes, and the existing checks. Asset-transfer enrichment is absent,
+so ETH-balance and treasury-movement checks report skipped coverage. There is no Tenderly
+debugger link. Already-executed proposal replay and contract-source overrides are unsupported.
+
+To exercise a successful governance draft, revert handling, and coverage reporting against
+a real configured Ethereum endpoint:
+
+```bash
+SIMULATION_PROVIDER=rpc RUN_RPC_INTEGRATION_TESTS=1 bun test tests/rpc-simulation.live.test.ts
+```
+
 ### 2a. Run the opt-in live BNB legacy Wormhole validation
 
 ```bash
