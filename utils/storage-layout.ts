@@ -10,21 +10,24 @@ import { BlockExplorerFactory } from './clients/block-explorers/factory';
 import type { SoliditySource } from './clients/block-explorers/source';
 import { z } from './validation/zod';
 
-const layoutSchema = z.object({
-  storage: z.array(
-    z.object({
-      label: z.string(),
-      slot: z.string().regex(/^\d+$/),
-      offset: z.number().int().min(0).max(31),
-      type: z.string(),
-    }),
-  ),
+const storageEntrySchema = z.object({
+  label: z.string(),
+  slot: z.string().regex(/^\d+$/),
+  offset: z.number().int().min(0).max(31),
+  type: z.string(),
+});
+export const layoutSchema = z.object({
+  storage: z.array(storageEntrySchema),
   types: z.record(
     z.string(),
     z.object({
       encoding: z.string(),
       label: z.string(),
       numberOfBytes: z.string(),
+      key: z.string().optional(),
+      value: z.string().optional(),
+      base: z.string().optional(),
+      members: z.array(storageEntrySchema).optional(),
     }),
   ),
 });
@@ -69,7 +72,7 @@ async function downloadCompiler(version: string): Promise<string> {
   return path;
 }
 
-async function compile(source: SoliditySource): Promise<unknown> {
+export async function compileStorageSource(source: SoliditySource): Promise<unknown> {
   let pending = compilers.get(source.compilerVersion);
   if (!pending) {
     pending = downloadCompiler(source.compilerVersion);
@@ -178,7 +181,7 @@ export async function getVerifiedStorageLayout(
         if (!source) continue;
         const output = z
           .record(z.string(), z.record(z.string(), z.unknown()))
-          .parse(await compile(source));
+          .parse(await compileStorageSource(source));
         const candidates = source.fileName
           ? [output[source.fileName]?.[source.contractName]]
           : Object.values(output).map((file) => file[source.contractName]);

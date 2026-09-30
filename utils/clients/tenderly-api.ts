@@ -8,7 +8,11 @@ import {
   getTenderlyEncodeUrl,
   getTenderlySimUrl,
 } from '../constants';
+import { getSimulationProvider } from '../simulation-provider';
 import { parseWithSchema, z } from '../validation/zod';
+import { getClientForChain } from './client';
+import { sendRpcSimulation } from './rpc-simulation';
+import { encodeRpcState } from './rpc-storage';
 
 const fetchUrl = mftch;
 
@@ -177,6 +181,8 @@ export function getTenderlySaveFlags(defaultSaveIfFails: boolean): {
 }
 
 export async function getLatestBlock(chainId: number): Promise<number> {
+  if (getSimulationProvider() === 'rpc')
+    return Number(await getClientForChain(chainId).getBlockNumber());
   try {
     const url = `${TENDERLY_BASE_URL}/network/${chainId.toString()}/block-number`;
     const fetchOptions = <Partial<FETCH_OPT>>{
@@ -296,7 +302,9 @@ async function sendEncodeChunk(payload: StateOverridesPayload): Promise<StorageE
 
 export async function sendEncodeRequest(
   payload: StateOverridesPayload,
+  blockNumber?: number,
 ): Promise<StorageEncodingResponse> {
+  if (getSimulationProvider() === 'rpc') return encodeRpcState(payload, blockNumber);
   try {
     const chunks = chunkStateOverrides(payload);
     if (chunks.length <= 1) {
@@ -327,6 +335,7 @@ export async function sendSimulation(
   payload: TenderlyPayload,
   delay = 1000,
 ): Promise<TenderlySimulation> {
+  if (getSimulationProvider() === 'rpc') return sendRpcSimulation(payload);
   const fetchOptions = <Partial<FETCH_OPT>>{
     method: 'POST',
     data: payload,
