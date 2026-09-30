@@ -1,6 +1,3 @@
-import { access, mkdir, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
-import path from 'node:path';
 import {
   type Address,
   type Hex,
@@ -16,55 +13,14 @@ import {
 import { parseAbi } from 'viem';
 import type { StorageEncodingResponse } from '../../types';
 import { detectProxy } from '../contracts/proxy';
+import { compileStorageSource, layoutSchema } from '../storage-layout';
+import { z } from '../validation/zod';
+import { BlockExplorerFactory } from './block-explorers/factory';
 import { getClientForChain } from './client';
 import type { StateOverridesPayload } from './tenderly-api';
 
-interface StorageEntry {
-  label: string;
-  slot: string;
-  offset: number;
-  type: string;
-}
-interface StorageType {
-  label: string;
-  encoding: string;
-  numberOfBytes: string;
-  key?: string;
-  value?: string;
-  base?: string;
-  members?: StorageEntry[];
-}
-interface Layout {
-  storage: StorageEntry[];
-  types: Record<string, StorageType>;
-}
-interface Compiler {
-  compile(input: string): string;
-  version(): string;
-}
-const require = createRequire(import.meta.url);
-const solc = require('solc') as { setupMethods(module: unknown): Compiler };
-const compilers = new Map<string, Promise<Compiler>>();
+type Layout = z.infer<typeof layoutSchema>;
 const layouts = new Map<string, Layout>();
-
-async function loadCompiler(version: string): Promise<Compiler> {
-  const directory = path.join(process.cwd(), 'cache', 'solc');
-  const file = path.join(directory, `${version}.cjs`);
-  try {
-    await access(file);
-  } catch {
-    const response = await fetch(`https://binaries.soliditylang.org/bin/soljson-${version}.js`, {
-      signal: AbortSignal.timeout(60_000),
-    });
-    if (!response.ok) throw new Error('Verified compiler unavailable');
-    await mkdir(directory, { recursive: true });
-    await writeFile(file, await response.text());
-  }
-  const compiler = solc.setupMethods(require(file));
-  if (!compiler.version().startsWith(version.slice(1)))
-    throw new Error('Verified compiler version mismatch');
-  return compiler;
-}
 
 async function getStorageLayout(
   address: Address,
@@ -89,63 +45,26 @@ async function getStorageLayout(
       /* A direct contract need not expose implementation(). */
     }
   }
-  const key = `${chainId}:${sourceAddress.toLowerCase()}`;
+  const key = `${chainId}:${sourceAddress}`;
   const cached = layouts.get(key);
   if (cached) return cached;
-  const url = new URL('https://api.etherscan.io/v2/api');
-  url.search = new URLSearchParams({
-    chainid: String(chainId),
-    module: 'contract',
-    action: 'getsourcecode',
-    address: sourceAddress,
-    apikey: process.env.ETHERSCAN_API_KEY ?? '',
-  }).toString();
-  let entry: {
-    SourceCode: string;
-    CompilerVersion: string;
-    ContractName: string;
-    OptimizationUsed: string;
-    Runs: string;
-  };
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
-    const body = await response.json();
-    if (!response.ok || body.status !== '1' || !body.result?.[0]?.SourceCode) throw new Error();
-    entry = body.result[0];
-  } catch {
-    throw new Error(`Verified storage source unavailable for ${sourceAddress} on chain ${chainId}`);
+  for (const provider of BlockExplorerFactory.getExplorers(chainId)) {
+    const source = await provider.fetchContractSource?.(sourceAddress, chainId);
+    if (!source) continue;
+    const output = z
+      .record(z.string(), z.record(z.string(), z.unknown()))
+      .parse(await compileStorageSource(source));
+    const candidates = source.fileName
+      ? [output[source.fileName]?.[source.contractName]]
+      : Object.values(output).map((file) => file[source.contractName]);
+    for (const candidate of candidates) {
+      const parsed = z.object({ storageLayout: layoutSchema }).safeParse(candidate);
+      if (!parsed.success || !parsed.data.storageLayout.storage.length) continue;
+      layouts.set(key, parsed.data.storageLayout);
+      return parsed.data.storageLayout;
+    }
   }
-  const version = entry.CompilerVersion;
-  if (!/^v\d+\.\d+\.\d+\+commit\.[a-f0-9]+$/.test(version))
-    throw new Error('Unsupported verified compiler version');
-  if (!compilers.has(version)) {
-    compilers.set(version, loadCompiler(version));
-  }
-  let source = entry.SourceCode;
-  if (source.startsWith('{{')) source = source.slice(1, -1);
-  const input = source.startsWith('{')
-    ? JSON.parse(source)
-    : {
-        language: 'Solidity',
-        sources: { 'source.sol': { content: source } },
-        settings: {
-          optimizer: { enabled: entry.OptimizationUsed === '1', runs: Number(entry.Runs) },
-        },
-      };
-  input.settings = { ...input.settings, outputSelection: { '*': { '*': ['storageLayout'] } } };
-  const output = JSON.parse((await compilers.get(version)!).compile(JSON.stringify(input)));
-  if (output.errors?.some((error: { severity: string }) => error.severity === 'error'))
-    throw new Error('Verified storage source did not compile');
-  const candidates = Object.values(output.contracts ?? {}) as Record<
-    string,
-    { storageLayout: Layout }
-  >[];
-  const layout = candidates
-    .map((contracts) => contracts[entry.ContractName]?.storageLayout)
-    .find(Boolean);
-  if (!layout?.storage.length) throw new Error('Verified compiler did not supply a storage layout');
-  layouts.set(key, layout);
-  return layout;
+  throw new Error('Verified-source storage layout unavailable');
 }
 
 /** Encode only fields present in verified Solidity storage layouts. Unsupported types fail closed. */

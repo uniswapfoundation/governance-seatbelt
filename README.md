@@ -41,7 +41,7 @@ were verified for Ethereum and Arc; other networks require their own validation.
 
 Storage overrides are encoded locally from verified Solidity source and the exact compiler's
 storage layout. This requires Etherscan source access and downloads the matching compiler
-from Solidity's official distribution into `cache/solc/`. Proxy implementation and packed
+from Solidity's official distribution into `cache/compilers/`. Proxy implementation and packed
 storage reads use the simulation's base block. Unsupported layouts fail explicitly.
 
 RPC simulation results use a separate `cache/rpc/` directory. Reports retain call/event

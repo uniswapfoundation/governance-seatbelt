@@ -56,7 +56,6 @@
       "frontend/.next/",
       "dist",
       "build",
-      "cache",
       ".git",
       "cache",
       "reports",
