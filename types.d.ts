@@ -389,6 +389,7 @@ export type TenderlyPayload = {
 // certainly not entirely accurate (and they have some interesting type names)
 
 export interface TenderlySimulation {
+  provider?: 'tenderly' | 'rpc';
   transaction: Transaction;
   simulation: Simulation;
   contracts: TenderlyContract[];
@@ -421,7 +422,10 @@ interface BalanceChange {
   transfers: number[];
 }
 
-interface TenderlyContract {
+type TenderlyContract = Pick<LegacyTenderlyContract, 'address' | 'contract_name'> &
+  Partial<LegacyTenderlyContract>;
+
+interface LegacyTenderlyContract {
   id: string;
   contract_id: string;
   balance: string;
@@ -560,7 +564,22 @@ interface GeneratedAccessList {
   storage_keys: string[];
 }
 
-interface Simulation {
+type Simulation = Pick<
+  LegacySimulation,
+  | 'id'
+  | 'network_id'
+  | 'block_number'
+  | 'from'
+  | 'to'
+  | 'input'
+  | 'gas'
+  | 'gas_price'
+  | 'value'
+  | 'status'
+> &
+  Partial<LegacySimulation>;
+
+interface LegacySimulation {
   id: string;
   project_id: string;
   owner_id: string;
@@ -580,7 +599,21 @@ interface Simulation {
   created_at: Date;
 }
 
-interface Transaction {
+type Transaction = Pick<
+  LegacyTransaction,
+  | 'block_number'
+  | 'from'
+  | 'to'
+  | 'input'
+  | 'value'
+  | 'status'
+  | 'addresses'
+  | 'network_id'
+  | 'transaction_info'
+> &
+  Partial<LegacyTransaction>;
+
+interface LegacyTransaction {
   hash: From;
   block_hash: string;
   block_number: number;
@@ -609,7 +642,13 @@ interface Transaction {
   decoded_input: null;
 }
 
-interface TransactionInfo {
+type TransactionInfo = Pick<
+  LegacyTransactionInfo,
+  'call_trace' | 'logs' | 'state_diff' | 'asset_changes' | 'balance_changes'
+> &
+  Partial<LegacyTransactionInfo>;
+
+interface LegacyTransactionInfo {
   contract_id: string;
   block_number: number;
   transaction_id: From;

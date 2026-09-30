@@ -55,6 +55,7 @@ import { formatProposalId } from '../utils/contracts/governor';
 import { toBlockExplorerBlockUrl, toExplorerAddressMarkdownLink } from '../utils/explorer-links';
 import { extractAddressesFromReport, resolveLabelsForAddresses } from '../utils/labels';
 import { generateProposalSummary } from '../utils/proposal-summary';
+import { getSimulationProvider } from '../utils/simulation-provider';
 
 // --- Cross-chain decoding helpers ---
 
@@ -412,6 +413,7 @@ function getRepoInfo(): { repoCommit?: string; repoUrl?: string } {
  * Get Tenderly simulation URL if available
  */
 function getTenderlyUrl(simulationId?: string): string | undefined {
+  if (getSimulationProvider() === 'rpc' || simulationId?.startsWith('rpc-')) return undefined;
   if (!simulationId || !process.env.TENDERLY_USER || !process.env.TENDERLY_PROJECT_SLUG) {
     return undefined;
   }

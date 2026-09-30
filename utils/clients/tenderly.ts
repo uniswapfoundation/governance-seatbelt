@@ -39,6 +39,7 @@ import {
 } from '../contracts/governor';
 import type { TenderlySimulationExecutionOptions } from '../cross-chain/tenderly-execution-engine';
 import { mergeStateObjects } from '../derived-state';
+import { getSimulationProvider } from '../simulation-provider';
 export type { TenderlySimulationExecutionOptions as SimulationExecutionOptions } from '../cross-chain/tenderly-execution-engine';
 export { handleCrossChainSimulations } from '../cross-chain/tenderly-execution-engine';
 import { CacheManager } from './block-explorers/cache';
@@ -219,7 +220,7 @@ export async function simulateNew(
     },
   };
 
-  const storageObj = await sendEncodeRequest(stateOverrides);
+  const storageObj = await sendEncodeRequest(stateOverrides, Number(latestBlock.number));
 
   // --- Simulate it ---
   // We need the following state conditions to be true to successfully simulate a proposal:
@@ -418,7 +419,7 @@ async function simulateProposed(
       },
     },
   };
-  const storageObj = await sendEncodeRequest(stateOverrides);
+  const storageObj = await sendEncodeRequest(stateOverrides, Number(latestBlock.number));
 
   // --- Simulate it ---
   // Note: The Tenderly API is sensitive to the input types, so all formatting below (e.g. stripping
@@ -497,6 +498,8 @@ async function simulateExecuted(
   config: SimulationConfigExecuted,
   options?: TenderlySimulationExecutionOptions,
 ): Promise<SimulationResult> {
+  if (getSimulationProvider() === 'rpc')
+    throw new Error('Executed proposal replay is not supported by RPC simulation');
   const { governorAddress, governorType, proposalId } = config;
   const proposalIdBigInt = typeof proposalId === 'bigint' ? proposalId : BigInt(proposalId);
 
