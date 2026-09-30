@@ -24,6 +24,10 @@ const layoutSchema = z.object({
       encoding: z.string(),
       label: z.string(),
       numberOfBytes: z.string(),
+      key: z.string().optional(),
+      value: z.string().optional(),
+      base: z.string().optional(),
+      members: z.array(fieldSchema).optional(),
     }),
   ),
 });
@@ -150,7 +154,7 @@ export async function getVerifiedStorageLayout(
   const cached = layouts.get(key);
   if (cached) return cached;
   const pending = (async () => {
-    const path = resolve('cache/storage-layouts', `${chainId}-${getAddress(address)}-${hash}.json`);
+    const path = resolve('cache/storage-layouts-v2', `${chainId}-${getAddress(address)}-${hash}.json`);
     try {
       return verifiedLayoutSchema.parse(JSON.parse(await readFile(path, 'utf8')));
     } catch {
@@ -167,7 +171,7 @@ export async function getVerifiedStorageLayout(
           source: provider.getName(),
           compilerVersion: source.compilerVersion,
         });
-        await mkdir(resolve('cache/storage-layouts'), { recursive: true });
+        await mkdir(resolve('cache/storage-layouts-v2'), { recursive: true });
         await writeFile(path, JSON.stringify(result));
         return result;
       } catch {
