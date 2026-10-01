@@ -29,7 +29,7 @@ const layoutSchema = z.object({
 });
 const verifiedLayoutSchema = z.object({
   layout: layoutSchema,
-  linkedLibraries: z.array(z.string().regex(/^0x[0-9a-f]{40}$/)),
+  linkedLibraryAddresses: z.array(z.string().regex(/^0x[0-9a-f]{40}$/)),
   mappings: z.array(
     z.object({
       selector: z.string().regex(/^[0-9a-f]{8}$/),
@@ -113,7 +113,7 @@ async function compile(source: SoliditySource, runtime: Hex): Promise<unknown> {
     const child = execFile(
       process.execPath,
       [
-        fileURLToPath(new URL('./storage-layout-compiler.cjs', import.meta.url)),
+        fileURLToPath(new URL('./storage-layout-compiler.js', import.meta.url)),
         compiler,
         source.compilerVersion.replace(/^v/, ''),
       ],
