@@ -10,6 +10,7 @@ export interface CallTrace {
   to?: string;
   input: string;
   calls?: CallTrace[];
+  call_type?: string;
   type?: string;
   value?: string;
   error_reason?: string;
