@@ -7,6 +7,18 @@ import {
   getVerifiedStorageLayout,
 } from '../utils/storage-layout';
 
+/** Ignore opcode/internal-function frames while retaining their nested contract calls. */
+function contractCalls(trace: CallTrace): CallTrace[] {
+  if (trace.error_reason) return [];
+  const callType = (trace.call_type ?? trace.type ?? '').toUpperCase();
+  if (
+    !callType ||
+    ['CALL', 'STATICCALL', 'DELEGATECALL', 'CALLCODE', 'CREATE', 'CREATE2'].includes(callType)
+  )
+    return [trace];
+  return (trace.calls ?? []).flatMap(contractCalls);
+}
+
 /** Delegate calls execute implementation code in the caller's storage context. */
 function storageCalls(
   trace: CallTrace,
@@ -16,11 +28,10 @@ function storageCalls(
   const callType = (trace.call_type ?? trace.type ?? '').toUpperCase();
   const isDelegateCall = ['DELEGATECALL', 'CALLCODE'].includes(callType);
   const storageAddress = isDelegateCall ? inheritedStorageAddress : trace.to;
-  const children = trace.calls ?? [];
+  const children = (trace.calls ?? []).flatMap(contractCalls);
   // Proxy forwarding passes the original calldata; library calls use their own selector.
   const forwardsCalldata = children.some(
     (call) =>
-      !call.error_reason &&
       call.input === trace.input &&
       ['DELEGATECALL', 'CALLCODE'].includes((call.call_type ?? call.type ?? '').toUpperCase()),
   );

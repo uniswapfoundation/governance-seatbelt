@@ -53,6 +53,11 @@ function mergeCheckResult(current: CheckResult, next: CheckResult): CheckResult 
   ]);
   const permissionsDiff = permissionsDiffMerged.length > 0 ? permissionsDiffMerged : undefined;
 
+  const storageChanges = dedupeJsonValues([
+    ...(current.storageChanges ?? []),
+    ...(next.storageChanges ?? []),
+  ]);
+
   let data = current.data ?? next.data;
   if (current.data !== undefined && next.data !== undefined) {
     if (Array.isArray(current.data) && Array.isArray(next.data)) {
@@ -69,6 +74,7 @@ function mergeCheckResult(current: CheckResult, next: CheckResult): CheckResult 
     ...(data !== undefined ? { data } : {}),
     ...(skipped ? { skipped } : {}),
     ...(permissionsDiff ? { permissionsDiff } : {}),
+    ...(storageChanges.length ? { storageChanges } : {}),
   };
 }
 
