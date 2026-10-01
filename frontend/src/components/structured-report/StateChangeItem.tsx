@@ -82,13 +82,7 @@ export function StateChangeItem({
             {raw && (
               <>
                 <dt className="text-muted-foreground">Label source</dt>
-                <dd className="space-y-1">
-                  <p>{raw.source}</p>
-                  <p className="text-muted-foreground">
-                    We rebuilt the verified source and matched the deployed code to identify this
-                    field.
-                  </p>
-                </dd>
+                <dd>{raw.source}</dd>
                 <dt className="text-muted-foreground">Compiler version</dt>
                 <dd className="font-mono break-all">{raw.compilerVersion}</dd>
               </>

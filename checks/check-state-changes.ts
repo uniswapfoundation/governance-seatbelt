@@ -1,7 +1,37 @@
 import { getAddress } from 'viem';
-import type { ProposalCheck, SimulationStateChange, StateDiff } from '../types';
+import type { CallTrace, ProposalCheck, SimulationStateChange, StateDiff } from '../types';
 import { getContractName } from '../utils/clients/tenderly';
-import { decodeStorageWrite, getVerifiedStorageLayout } from '../utils/storage-layout';
+import {
+  decodeMappingWrite,
+  decodeStorageWrite,
+  getVerifiedStorageLayout,
+} from '../utils/storage-layout';
+
+/** Delegate calls execute implementation code in the caller's storage context. */
+function storageCalls(
+  trace: CallTrace,
+  storageAddress?: string,
+): { address: string; code: string; input: string }[] {
+  if (trace.error_reason) return [];
+  const delegate = ['DELEGATECALL', 'CALLCODE'].includes(
+    (trace.call_type ?? trace.type ?? '').toUpperCase(),
+  );
+  const address = delegate ? storageAddress : trace.to;
+  const children = trace.calls ?? [];
+  const forwards = children.some((call) =>
+    ['DELEGATECALL', 'CALLCODE'].includes((call.call_type ?? call.type ?? '').toUpperCase()),
+  );
+  const own =
+    address &&
+    trace.to &&
+    !forwards &&
+    !['STATICCALL', 'CREATE', 'CREATE2'].includes(
+      (trace.call_type ?? trace.type ?? '').toUpperCase(),
+    )
+      ? [{ address: getAddress(address), code: getAddress(trace.to), input: trace.input }]
+      : [];
+  return [...own, ...children.flatMap((call) => storageCalls(call, address))];
+}
 
 /**
  * Reports all state changes from the proposal
@@ -83,28 +113,34 @@ export const checkStateChanges: ProposalCheck = {
     if (!Object.keys(stateDiffs).length)
       return { info: ['No state changes'], warnings: [], errors: [] };
 
+    const executedCalls = storageCalls(sim.transaction.transaction_info.call_trace);
+
     // Parse state changes at each address
     // ETH balance changes are now handled by the checkEthBalanceChanges module
     for (const [address, diffs] of Object.entries(stateDiffs)) {
       const contract = sim.contracts.find((c) => getAddress(c.address) === address);
       const identifier = await getContractName(contract ?? { address }, deps.chainConfig?.chainId);
       info.push(identifier);
+      const calls = executedCalls.filter((call) => call.address === address);
+      const codeAddresses = new Set(calls.map((call) => call.code));
+      const codeAddress = codeAddresses.size === 1 ? calls[0].code : address;
       let layout: Awaited<ReturnType<typeof getVerifiedStorageLayout>> = null;
       if (
+        codeAddresses.size <= 1 &&
         diffs.some(
           (diff) => !diff.soltype && diff.raw.some((w) => /^0x[0-9a-fA-F]{64}$/.test(w.key)),
         )
       ) {
         try {
           const runtime =
-            contract?.deployed_bytecode ??
+            sim.contracts.find((c) => getAddress(c.address) === codeAddress)?.deployed_bytecode ??
             (await deps.publicClient?.getCode({
-              address,
+              address: codeAddress,
               blockNumber: BigInt(sim.transaction.block_number),
             }));
           if (runtime && /^0x[0-9a-fA-F]+$/.test(runtime)) {
             layout = await getVerifiedStorageLayout(
-              address,
+              codeAddress,
               deps.chainConfig.chainId,
               runtime as `0x${string}`,
             );
@@ -136,9 +172,17 @@ export const checkStateChanges: ProposalCheck = {
             const newVal = formatRawValue(w.dirty);
             const changeKey = `${w.key}:${oldVal}:${newVal}`;
             if (!processedChanges.has(changeKey)) {
-              const decoded = layout
+              let decoded = layout
                 ? decodeStorageWrite(w, identifier.split(' at `')[0], layout)
                 : [];
+              if (layout && !decoded.length) {
+                decoded = decodeMappingWrite(
+                  w,
+                  identifier.split(' at `')[0],
+                  layout,
+                  calls.map((call) => call.input),
+                );
+              }
               if (decoded.length) {
                 storageChanges.push(...decoded);
                 for (const change of decoded) {

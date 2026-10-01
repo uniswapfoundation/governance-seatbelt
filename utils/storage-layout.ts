@@ -4,21 +4,20 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { type Hex, getAddress, keccak256 } from 'viem';
+import { type Hex, decodeAbiParameters, encodeAbiParameters, getAddress, keccak256 } from 'viem';
 import type { RawElement, SimulationStateChange } from '../types';
 import { BlockExplorerFactory } from './clients/block-explorers/factory';
 import type { SoliditySource } from './clients/block-explorers/source';
 import { z } from './validation/zod';
 
+const fieldSchema = z.object({
+  label: z.string(),
+  slot: z.string().regex(/^\d+$/),
+  offset: z.number().int().min(0).max(31),
+  type: z.string(),
+});
 const layoutSchema = z.object({
-  storage: z.array(
-    z.object({
-      label: z.string(),
-      slot: z.string().regex(/^\d+$/),
-      offset: z.number().int().min(0).max(31),
-      type: z.string(),
-    }),
-  ),
+  storage: z.array(fieldSchema),
   types: z.record(
     z.string(),
     z.object({
@@ -30,6 +29,22 @@ const layoutSchema = z.object({
 });
 const verifiedLayoutSchema = z.object({
   layout: layoutSchema,
+  mappings: z.array(
+    z.object({
+      selector: z.string().regex(/^[0-9a-f]{8}$/),
+      inputTypes: z.array(z.string().regex(/^(uint\d+|bytes32|address)$/)),
+      keyIndex: z.number().int().min(0),
+      valueIndex: z.number().int().min(0),
+      baseSlot: z.string().regex(/^\d+$/),
+      name: z.string(),
+      field: fieldSchema,
+      type: z.object({
+        encoding: z.literal('inplace'),
+        label: z.string(),
+        numberOfBytes: z.string(),
+      }),
+    }),
+  ),
   source: z.string(),
   compilerVersion: z.string(),
 });
@@ -69,7 +84,7 @@ async function downloadCompiler(version: string): Promise<string> {
   return path;
 }
 
-async function compile(source: SoliditySource): Promise<unknown> {
+async function compile(source: SoliditySource, runtime: Hex): Promise<unknown> {
   let pending = compilers.get(source.compilerVersion);
   if (!pending) {
     pending = downloadCompiler(source.compilerVersion);
@@ -82,10 +97,12 @@ async function compile(source: SoliditySource): Promise<unknown> {
       ...source.input.settings,
       outputSelection: {
         '*': {
+          '': ['ast'],
           '*': [
             'storageLayout',
             'evm.deployedBytecode.object',
             'evm.deployedBytecode.immutableReferences',
+            'evm.deployedBytecode.linkReferences',
           ],
         },
       },
@@ -110,33 +127,15 @@ async function compile(source: SoliditySource): Promise<unknown> {
       },
     );
     child.stdin?.on('error', () => reject(new Error('Compiler input failed')));
-    child.stdin?.end(JSON.stringify(input));
+    child.stdin?.end(
+      JSON.stringify({
+        input,
+        runtime,
+        contractName: source.contractName,
+        fileName: source.fileName,
+      }),
+    );
   });
-}
-
-/** Constructor-set immutables do not occupy storage; every other runtime byte must match. */
-function matchesRuntime(
-  compiled: string,
-  runtime: string,
-  immutableReferences: Record<string, { start: number; length: number }[]>,
-): boolean {
-  if (compiled.length !== runtime.length) return false;
-  const ranges = Object.values(immutableReferences)
-    .flat()
-    .sort((a, b) => a.start - b.start);
-  let end = 0;
-  for (const range of ranges) {
-    const start = range.start * 2;
-    const nextEnd = (range.start + range.length) * 2;
-    if (
-      start < end ||
-      nextEnd > compiled.length ||
-      compiled.slice(end, start) !== runtime.slice(end, start)
-    )
-      return false;
-    end = nextEnd;
-  }
-  return compiled.slice(end) === runtime.slice(end);
 }
 
 /** Only use layouts whose code matches at the simulation block, apart from declared immutables. */
@@ -156,52 +155,20 @@ export async function getVerifiedStorageLayout(
     } catch {
       /* cache miss */
     }
-    const contractSchema = z.object({
-      storageLayout: layoutSchema,
-      evm: z.object({
-        deployedBytecode: z.object({
-          object: z.string(),
-          immutableReferences: z
-            .record(
-              z.string(),
-              z.array(
-                z.object({ start: z.number().int().min(0), length: z.number().int().min(1) }),
-              ),
-            )
-            .default({}),
-        }),
-      }),
-    });
     for (const provider of BlockExplorerFactory.getExplorers(chainId)) {
       try {
         const source = await provider.fetchContractSource?.(address, chainId);
         if (!source) continue;
-        const output = z
-          .record(z.string(), z.record(z.string(), z.unknown()))
-          .parse(await compile(source));
-        const candidates = source.fileName
-          ? [output[source.fileName]?.[source.contractName]]
-          : Object.values(output).map((file) => file[source.contractName]);
-        for (const candidate of candidates) {
-          const parsed = contractSchema.safeParse(candidate);
-          if (
-            !parsed.success ||
-            !matchesRuntime(
-              parsed.data.evm.deployedBytecode.object.toLowerCase(),
-              runtime.slice(2).toLowerCase(),
-              parsed.data.evm.deployedBytecode.immutableReferences,
-            )
-          )
-            continue;
-          const result = {
-            layout: parsed.data.storageLayout,
-            source: provider.getName(),
-            compilerVersion: source.compilerVersion,
-          };
-          await mkdir(resolve('cache/storage-layouts'), { recursive: true });
-          await writeFile(path, JSON.stringify(result));
-          return result;
-        }
+        const compiled = await compile(source, runtime);
+        if (!compiled) continue;
+        const result = verifiedLayoutSchema.parse({
+          ...(compiled as object),
+          source: provider.getName(),
+          compilerVersion: source.compilerVersion,
+        });
+        await mkdir(resolve('cache/storage-layouts'), { recursive: true });
+        await writeFile(path, JSON.stringify(result));
+        return result;
       } catch {
         console.warn(
           `Storage layout unavailable via ${provider.getName()} for ${address} on chain ${chainId}`,
@@ -214,7 +181,7 @@ export async function getVerifiedStorageLayout(
   return pending;
 }
 
-/** Decode only elementary fields; mappings, arrays and structs retain raw writes. */
+/** Decode elementary fields only when every changed bit belongs to a known field. */
 export function decodeStorageWrite(
   write: RawElement,
   contract: string,
@@ -267,4 +234,50 @@ export function decodeStorageWrite(
     });
   }
   return ((BigInt(write.original) ^ BigInt(write.dirty)) & ~decodedMask) === 0n ? changes : [];
+}
+
+/** Bind compiler-derived mapping fields to executed calldata and the actual slot/value written. */
+export function decodeMappingWrite(
+  write: RawElement,
+  contract: string,
+  verified: VerifiedLayout,
+  inputs: string[],
+): SimulationStateChange[] {
+  const fields: z.infer<typeof fieldSchema>[] = [];
+  const types: VerifiedLayout['layout']['types'] = {};
+  for (const input of inputs) {
+    for (const assignment of verified.mappings) {
+      if (input.slice(2, 10) !== assignment.selector) continue;
+      try {
+        const args = decodeAbiParameters(
+          assignment.inputTypes.map((type) => ({ type })),
+          `0x${input.slice(10)}`,
+        );
+        const key = args[assignment.keyIndex];
+        const value = BigInt(args[assignment.valueIndex] as string | bigint);
+        const hashed = keccak256(
+          encodeAbiParameters(
+            [{ type: assignment.inputTypes[assignment.keyIndex] }, { type: 'uint256' }],
+            [key, BigInt(assignment.baseSlot)],
+          ),
+        );
+        const slot = BigInt(hashed) + BigInt(assignment.field.slot);
+        const mask = (1n << BigInt(Number(assignment.type.numberOfBytes) * 8)) - 1n;
+        if (
+          slot !== BigInt(write.key) ||
+          value < 0n ||
+          value > mask ||
+          ((BigInt(write.dirty) >> BigInt(assignment.field.offset * 8)) & mask) !== value
+        )
+          continue;
+        const label = `${assignment.name}[${key}]${assignment.field.label ? `.${assignment.field.label}` : ''}`;
+        if (fields.some((field) => field.label === label)) continue;
+        fields.push({ ...assignment.field, slot: slot.toString(), type: label, label });
+        types[label] = assignment.type;
+      } catch {
+        // Invalid or unsupported calldata cannot establish a label.
+      }
+    }
+  }
+  return decodeStorageWrite(write, contract, { ...verified, layout: { storage: fields, types } });
 }

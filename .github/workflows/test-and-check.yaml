@@ -33,7 +33,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Run storage-label integration tests
-        run: bun test tests/storage-labels.integration.test.ts tests/state-change-extraction.test.ts tests/abi-provider-fallback.test.ts
+        run: bun test tests/storage-labels.integration.test.ts tests/mapping-storage.integration.test.ts tests/state-change-extraction.test.ts tests/abi-provider-fallback.test.ts
 
       - name: Run checks tests
         run: cd checks && bun test
