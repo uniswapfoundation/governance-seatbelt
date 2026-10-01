@@ -1,5 +1,5 @@
 // Recognize direct parameter assignments to namespaced mappings. Unsupported patterns stay raw.
-const { keccak256 } = require('viem');
+import { keccak256 } from 'viem';
 
 function nodes(value) {
   if (!value || typeof value !== 'object') return [];
@@ -171,7 +171,7 @@ function mappingAssignment(assignment, fn, mappings, changed) {
   };
 }
 
-module.exports = function mappingAssignments(input, output, contract, compiler) {
+export default function mappingAssignments(input, output, contract, compiler) {
   const ast = nodes(output.sources);
   const byId = new Map(ast.filter((node) => node.id !== undefined).map((node) => [node.id, node]));
   const activeContracts = new Set(contract.linearizedBaseContracts);
@@ -201,4 +201,4 @@ module.exports = function mappingAssignments(input, output, contract, compiler) 
     }
   }
   return assignments;
-};
+}

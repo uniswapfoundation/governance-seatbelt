@@ -10,31 +10,34 @@ import {
 /** Delegate calls execute implementation code in the caller's storage context. */
 function storageCalls(
   trace: CallTrace,
-  storageAddress?: string,
-): { address: string; code: string; input: string }[] {
+  inheritedStorageAddress?: string,
+): { storageAddress: string; codeAddress: string; input: string }[] {
   if (trace.error_reason) return [];
-  const delegate = ['DELEGATECALL', 'CALLCODE'].includes(
-    (trace.call_type ?? trace.type ?? '').toUpperCase(),
-  );
-  const address = delegate ? storageAddress : trace.to;
+  const callType = (trace.call_type ?? trace.type ?? '').toUpperCase();
+  const isDelegateCall = ['DELEGATECALL', 'CALLCODE'].includes(callType);
+  const storageAddress = isDelegateCall ? inheritedStorageAddress : trace.to;
   const children = trace.calls ?? [];
   // Proxy forwarding passes the original calldata; library calls use their own selector.
-  const forwards = children.some(
+  const forwardsCalldata = children.some(
     (call) =>
       !call.error_reason &&
       call.input === trace.input &&
       ['DELEGATECALL', 'CALLCODE'].includes((call.call_type ?? call.type ?? '').toUpperCase()),
   );
-  const own =
-    address &&
+  const currentCallEntries =
+    storageAddress &&
     trace.to &&
-    !forwards &&
-    !['STATICCALL', 'CREATE', 'CREATE2'].includes(
-      (trace.call_type ?? trace.type ?? '').toUpperCase(),
-    )
-      ? [{ address: getAddress(address), code: getAddress(trace.to), input: trace.input }]
+    !forwardsCalldata &&
+    !['STATICCALL', 'CREATE', 'CREATE2'].includes(callType)
+      ? [
+          {
+            storageAddress: getAddress(storageAddress),
+            codeAddress: getAddress(trace.to),
+            input: trace.input,
+          },
+        ]
       : [];
-  return [...own, ...children.flatMap((call) => storageCalls(call, address))];
+  return [...currentCallEntries, ...children.flatMap((call) => storageCalls(call, storageAddress))];
 }
 
 /**
@@ -125,8 +128,12 @@ export const checkStateChanges: ProposalCheck = {
       const contract = sim.contracts.find((c) => getAddress(c.address) === address);
       const identifier = await getContractName(contract ?? { address }, deps.chainConfig?.chainId);
       info.push(identifier);
-      const calls = executedCalls.filter((call) => call.address === address);
-      const codeAddress = calls[0]?.code ?? address;
+      const calls = executedCalls.filter((call) => call.storageAddress === address);
+      const codeAddress = calls[0]?.codeAddress ?? address;
+      const contractName = identifier.split(' at `')[0];
+      const implementationInputs = calls
+        .filter((call) => call.codeAddress === codeAddress)
+        .map((call) => call.input);
       let layout: Awaited<ReturnType<typeof getVerifiedStorageLayout>> = null;
       if (
         diffs.some(
@@ -152,8 +159,8 @@ export const checkStateChanges: ProposalCheck = {
               layout &&
               calls.some(
                 (call) =>
-                  call.code !== codeAddress &&
-                  !layout!.linkedLibraries.includes(call.code.toLowerCase()),
+                  call.codeAddress !== codeAddress &&
+                  !layout!.linkedLibraryAddresses.includes(call.codeAddress.toLowerCase()),
               )
             ) {
               layout = null;
@@ -186,20 +193,13 @@ export const checkStateChanges: ProposalCheck = {
             const newVal = formatRawValue(w.dirty);
             const changeKey = `${w.key}:${oldVal}:${newVal}`;
             if (!processedChanges.has(changeKey)) {
-              let decoded = layout
-                ? decodeStorageWrite(w, identifier.split(' at `')[0], layout)
-                : [];
-              if (layout && !decoded.length) {
-                decoded = decodeMappingWrite(
-                  w,
-                  identifier.split(' at `')[0],
-                  layout,
-                  calls.filter((call) => call.code === codeAddress).map((call) => call.input),
-                );
+              let decodedChanges = layout ? decodeStorageWrite(w, contractName, layout) : [];
+              if (layout && !decodedChanges.length) {
+                decodedChanges = decodeMappingWrite(w, contractName, layout, implementationInputs);
               }
-              if (decoded.length) {
-                storageChanges.push(...decoded);
-                for (const change of decoded) {
+              if (decodedChanges.length) {
+                storageChanges.push(...decodedChanges);
+                for (const change of decodedChanges) {
                   info.push(
                     `    \`${change.label}\`: \`${change.oldValue}\` → \`${change.newValue}\` (verified layout via ${change.storageDetails!.source})`,
                   );
