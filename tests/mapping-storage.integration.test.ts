@@ -21,7 +21,8 @@ import { foundry } from 'viem/chains';
 import { checkStateChanges } from '../checks/check-state-changes';
 import { createMockSimulation } from '../checks/tests/test-utils';
 import { generateAndSaveReports } from '../presentation/report';
-import type { CallTrace, ProposalData, ProposalEvent } from '../types';
+import type { CallTrace, GenerateReportsParams, ProposalData, ProposalEvent } from '../types';
+import { mergeAllCheckResults } from '../utils/check-results';
 import { BlockExplorerFactory } from '../utils/clients/block-explorers/factory';
 import { CHAIN_CONFIGS } from '../utils/clients/client';
 import { setMockFetch, toFetchUrl } from './helpers/verification-test-helpers';
@@ -40,6 +41,8 @@ async function freePort(): Promise<number> {
 // Execute the contracts locally to obtain code, nested calls and writes. Only explorer HTTP is
 // doubled: local deployments cannot be verified on an external explorer. Negative cases mutate
 // that captured input deliberately; they are not evidence of corresponding on-chain execution.
+// The internal-frame case wraps executed calls in the JUMPDEST format captured from Tenderly;
+// it adds no contract calls or writes.
 test.each(['postlinked', 'prelinked'])(
   'executed %s proxy and library calls reach reports; inconsistent input stays raw',
   async (linking) => {
@@ -242,6 +245,7 @@ test.each(['postlinked', 'prelinked'])(
       const allLabels = ['peers[71].peerAddress', 'peers[71].tokenDecimals', 'peers[71].limit'];
       const cases = [
         { name: 'executed calls', labels: allLabels },
+        { name: 'internal function frames', labels: allLabels },
         { name: 'bad source', labels: [] },
         { name: 'wrong key', labels: [] },
         { name: 'wrong value', labels: allLabels.slice(1) },
@@ -265,6 +269,34 @@ test.each(['postlinked', 'prelinked'])(
         const writes = sim.transaction.transaction_info.state_diff![0].raw;
         badSource = scenario.name === 'bad source';
         switch (scenario.name) {
+          case 'internal function frames':
+            sim.transaction.transaction_info.call_trace.calls = [
+              {
+                call_type: 'JUMPDEST',
+                from: sim.transaction.transaction_info.call_trace.from,
+                to: proxy,
+                input: '0x',
+                calls: [
+                  {
+                    call_type: 'JUMPDEST',
+                    from: sim.transaction.transaction_info.call_trace.from,
+                    to: proxy,
+                    input: '0x',
+                    calls: [setter],
+                  },
+                ],
+              },
+            ];
+            setter.calls = [
+              {
+                call_type: 'JUMPDEST',
+                from: setter.from,
+                to: implementation,
+                input: '0x',
+                calls: setter.calls,
+              },
+            ];
+            break;
           case 'bad source':
             setter.to = getAddress(toHex(9901n, { size: 20 }));
             sim.contracts[1].address = setter.to;
@@ -313,7 +345,7 @@ test.each(['postlinked', 'prelinked'])(
           timelock: { address: zeroAddress },
         } as ProposalData);
         expect(result.storageChanges?.map((change) => change.label) ?? []).toEqual(scenario.labels);
-        await generateAndSaveReports({
+        const reportParams = {
           governorType: 'bravo',
           blocks: {
             current: { number: receipt.blockNumber, timestamp: 1000n },
@@ -335,7 +367,27 @@ test.each(['postlinked', 'prelinked'])(
           governorAddress: zeroAddress,
           chainId: 5042,
           outputDir,
-        });
+        } satisfies GenerateReportsParams;
+        await generateAndSaveReports(reportParams);
+        if (scenario.name === 'internal function frames') {
+          const destinationChecks = mergeAllCheckResults(reportParams.checks, reportParams.checks);
+          const destinationDir = join(outputDir, 'destination');
+          await generateAndSaveReports({
+            ...reportParams,
+            chainId: 1,
+            checks: {},
+            destinationChecks: { 5042: destinationChecks },
+            outputDir: destinationDir,
+          });
+          const destinationReport = JSON.parse(
+            readFileSync(join(destinationDir, `${index + 1}.json`), 'utf8'),
+          );
+          expect(
+            destinationReport.chainReports
+              .find((chain: { chainId: number }) => chain.chainId === 5042)
+              .stateChanges.map((change: { label: string }) => change.label),
+          ).toEqual(allLabels);
+        }
         const report = JSON.parse(readFileSync(join(outputDir, `${index + 1}.json`), 'utf8'));
         expect(report.chainReports[0].stateChanges).toEqual(report.stateChanges);
         expect(
