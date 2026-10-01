@@ -29,6 +29,7 @@ const layoutSchema = z.object({
 });
 const verifiedLayoutSchema = z.object({
   layout: layoutSchema,
+  linkedLibraries: z.array(z.string().regex(/^0x[0-9a-f]{40}$/)),
   mappings: z.array(
     z.object({
       selector: z.string().regex(/^[0-9a-f]{8}$/),

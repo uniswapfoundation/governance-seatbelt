@@ -31,7 +31,15 @@ function verified(output) {
     const contract = output.sources[file].ast.nodes.find(
       (node) => node.nodeType === 'ContractDefinition' && node.name === contractName,
     );
+    const linkedLibraries = new Set(Object.values(input.settings.libraries).flatMap(Object.values));
+    for (const fileLinks of Object.values(candidate.evm.deployedBytecode.linkReferences ?? {})) {
+      for (const references of Object.values(fileLinks)) {
+        for (const { start, length } of references)
+          linkedLibraries.add(`0x${runtime.slice(2 + start * 2, 2 + (start + length) * 2)}`);
+      }
+    }
     return {
+      linkedLibraries: [...linkedLibraries].map((address) => address.toLowerCase()),
       layout: { ...candidate.storageLayout, types: candidate.storageLayout.types ?? {} },
       mappings: mappingAssignments(input, output, contract, compiler),
     };

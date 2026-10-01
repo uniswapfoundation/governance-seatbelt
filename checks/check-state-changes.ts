@@ -18,8 +18,12 @@ function storageCalls(
   );
   const address = delegate ? storageAddress : trace.to;
   const children = trace.calls ?? [];
-  const forwards = children.some((call) =>
-    ['DELEGATECALL', 'CALLCODE'].includes((call.call_type ?? call.type ?? '').toUpperCase()),
+  // Proxy forwarding passes the original calldata; library calls use their own selector.
+  const forwards = children.some(
+    (call) =>
+      !call.error_reason &&
+      call.input === trace.input &&
+      ['DELEGATECALL', 'CALLCODE'].includes((call.call_type ?? call.type ?? '').toUpperCase()),
   );
   const own =
     address &&
@@ -122,11 +126,9 @@ export const checkStateChanges: ProposalCheck = {
       const identifier = await getContractName(contract ?? { address }, deps.chainConfig?.chainId);
       info.push(identifier);
       const calls = executedCalls.filter((call) => call.address === address);
-      const codeAddresses = new Set(calls.map((call) => call.code));
-      const codeAddress = codeAddresses.size === 1 ? calls[0].code : address;
+      const codeAddress = calls[0]?.code ?? address;
       let layout: Awaited<ReturnType<typeof getVerifiedStorageLayout>> = null;
       if (
-        codeAddresses.size <= 1 &&
         diffs.some(
           (diff) => !diff.soltype && diff.raw.some((w) => /^0x[0-9a-fA-F]{64}$/.test(w.key)),
         )
@@ -144,6 +146,18 @@ export const checkStateChanges: ProposalCheck = {
               deps.chainConfig.chainId,
               runtime as `0x${string}`,
             );
+            // Library delegate calls keep this implementation's storage layout. A different
+            // implementation in the same storage context is ambiguous, so leave its writes raw.
+            if (
+              layout &&
+              calls.some(
+                (call) =>
+                  call.code !== codeAddress &&
+                  !layout!.linkedLibraries.includes(call.code.toLowerCase()),
+              )
+            ) {
+              layout = null;
+            }
           }
         } catch {
           // Missing code or layout must not prevent reporting the raw writes.
@@ -180,7 +194,7 @@ export const checkStateChanges: ProposalCheck = {
                   w,
                   identifier.split(' at `')[0],
                   layout,
-                  calls.map((call) => call.input),
+                  calls.filter((call) => call.code === codeAddress).map((call) => call.input),
                 );
               }
               if (decoded.length) {
