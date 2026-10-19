@@ -53,6 +53,8 @@ test('RPC-only execution preserves transfers, linked state, rollback, and histor
       storageCleared: true,
       exactReplay: true,
       ozDraft: true,
+      pinnedFees: true,
+      callerFundingPreservesTreasury: true,
       noBroadcastFromSimulation: true,
     });
   } finally {

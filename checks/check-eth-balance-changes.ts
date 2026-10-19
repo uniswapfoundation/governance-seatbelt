@@ -3,10 +3,10 @@ import type { AssetChange, BalanceChange, ProposalCheck, TenderlyContract } from
 import { DEFAULT_SIMULATION_ADDRESS, getContractNameFromTenderly } from '../utils/clients/tenderly';
 
 /**
- * Reports all ETH balance changes from the proposal
+ * Reports detected native asset transfers from the proposal
  */
 export const checkEthBalanceChanges: ProposalCheck = {
-  name: 'Reports all ETH balance changes from the proposal',
+  name: 'Reports detected native asset transfers from the proposal',
   async checkProposal(proposal, sim, deps) {
     if (sim.transaction.transaction_info.asset_changes == null) {
       return {
@@ -30,7 +30,7 @@ export const checkEthBalanceChanges: ProposalCheck = {
     if (ethTransfers.length === 0) {
       // Check ran successfully - no ETH transfers to report
       return {
-        info: ['No ETH balance changes detected in this proposal.'],
+        info: ['No native asset transfers detected in this proposal.'],
         warnings,
         errors,
       };

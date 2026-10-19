@@ -100,7 +100,7 @@ export async function getRpcAssetChanges(
     add(`0x${log.topics[1].slice(-40)}`, `0x${log.topics[2].slice(-40)}`, BigInt(log.data), token);
   }
   warnings.push(
-    'Token movements are derived from Transfer events; rebasing and nonstandard balance changes are not fully covered.',
+    'Incomplete asset coverage: native transfers come from call traces and ERC-20 transfers from Transfer events. Rebasing, nonstandard token balance changes, and gas fees are not included. No detected transfers does not prove balances are unchanged. USD values and USD-based risk thresholds are unavailable.',
   );
   return { changes, warnings };
 }

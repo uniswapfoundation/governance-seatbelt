@@ -74,11 +74,26 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
     payload.block_number ??
     Number(BigInt(await simulationRpc<Hex>(chainId, 'eth_blockNumber', [])));
   const baseBlock = toHex(blockNumber);
-  const block = await simulationRpc<{ timestamp: Hex; baseFeePerGas?: Hex }>(
-    chainId,
-    'eth_getBlockByNumber',
-    [baseBlock, false],
-  );
+  const block = await simulationRpc<{
+    timestamp: Hex;
+    baseFeePerGas?: Hex | null;
+    transactions: Hex[];
+  }>(chainId, 'eth_getBlockByNumber', [baseBlock, false]);
+  // Synthetic calls use the pinned block's fee, never a quote from today's chain head.
+  let gasPrice = payload.gas_price;
+  if (gasPrice === undefined && !payload.transaction_hash) {
+    if (block.baseFeePerGas != null) {
+      gasPrice = BigInt(block.baseFeePerGas).toString();
+    } else {
+      const transaction = block.transactions[0];
+      if (!transaction)
+        throw new Error('Pinned legacy block has no transaction to infer gas price');
+      const mined = await simulationRpc<{ gasPrice: Hex }>(chainId, 'eth_getTransactionByHash', [
+        transaction,
+      ]);
+      gasPrice = BigInt(mined.gasPrice).toString();
+    }
+  }
   const states = Object.fromEntries(
     Object.entries(payload.state_objects ?? {}).map(([address, state]) => [
       getAddress(address),
@@ -90,16 +105,33 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
       },
     ]),
   );
+  // Celo debits the whole gas allowance before execution. Sponsoring exactly that
+  // allowance preserves the real bridge caller's EVM-visible balance.
+  const sponsorGas =
+    !payload.transaction_hash && (payload.fund_synthetic_sender || chainId === 42220);
+  if (sponsorGas) {
+    const sender = getAddress(payload.from);
+    const state = states[sender] ?? {};
+    const balance = BigInt(
+      state.balance ?? (await simulationRpc<Hex>(chainId, 'eth_getBalance', [sender, baseBlock])),
+    );
+    if (balance < BigInt(payload.value ?? 0)) {
+      throw new Error('Executor has insufficient balance for call value');
+    }
+    states[sender] = {
+      ...state,
+      balance: toHex(balance + BigInt(payload.gas) * BigInt(gasPrice ?? 0)),
+    };
+  }
   const call = {
     from: payload.from,
     to: payload.to,
     input: payload.input,
     gas: toHex(payload.gas),
-    gasPrice: toHex(BigInt(payload.gas_price ?? 0)),
+    gasPrice: toHex(BigInt(gasPrice ?? 0)),
     value: toHex(BigInt(payload.value ?? 0)),
   };
   const blockOverrides = {
-    baseFeePerGas: BigInt(payload.gas_price ?? 0) === 0n ? '0x0' : (block.baseFeePerGas ?? '0x0'),
     ...(payload.block_header?.number ? { number: payload.block_header.number } : {}),
     ...(payload.block_header?.timestamp ? { time: payload.block_header.timestamp } : {}),
   };
@@ -196,6 +228,14 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
       });
     }
   }
+  // Gas is sponsored: carried balances must reflect only proposal value flows.
+  // Remove unused sponsor funds refunded after Ethereum/Celo's upfront gas debit.
+  if (sponsorGas && (chainId === 1 || chainId === 42220)) {
+    const sender = getAddress(payload.from);
+    const refund = (BigInt(payload.gas) - BigInt(trace.gasUsed)) * BigInt(gasPrice ?? 0);
+    const balance = BigInt(postState[sender]?.balance ?? states[sender].balance!);
+    postState[sender] = { ...postState[sender], balance: (balance - refund).toString() };
+  }
   const assets = await getRpcAssetChanges(trace, logs, chainId, BigInt(blockNumber));
   const id = `rpc-${randomUUID()}`;
   return {
@@ -210,7 +250,7 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
       to: payload.to,
       input: payload.input,
       gas: payload.gas,
-      gas_price: payload.gas_price ?? '0',
+      gas_price: gasPrice ?? '0',
       value: payload.value ?? '0',
       status: !trace.error,
     },

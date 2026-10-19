@@ -47,11 +47,11 @@ Storage overrides are encoded locally from verified Solidity source and compiler
 layouts. This requires explorer source access and downloads the exact compiler from Solidity's
 official distribution into `cache/compilers/`. For encoding, a recognized Solidity source hash may differ after explorer flattening; executable code and compiler version must still match. Report labels retain strict metadata verification in a separate cache. Unsupported layouts fail explicitly. OZ draft coverage is the 4.7-style timer layout, tested with 4.7.3; other layouts require separate support.
 
-RPC results are cached separately in `cache/rpc-v2/`. Reports retain calls, events, storage changes,
+RPC results are cached separately in `cache/rpc-v3/`. Reports retain calls, events, storage changes,
 and safety checks. Reverts produce failed reports; reverted call effects are excluded. Native transfers come from committed call traces; standard ERC20 transfers
-come from events. Reports warn that rebasing and nonstandard token changes are not fully covered.
+come from events. Asset checks always warn that this is incomplete balance accounting: rebasing and nonstandard token changes and gas fees are excluded. No detected transfers does not prove balances are unchanged; USD-based risk thresholds are unavailable.
 Unavailable token metadata is shown as raw units. USD prices and Tenderly debugger links are
-unavailable. Contract-source overrides are unsupported. Drafts and destination calls currently use zero gas price and base fee, so fee-dependent contract behavior is not production-equivalent. Existing bridge simulations retain
+unavailable. Contract-source overrides are unsupported. Drafts and destination calls preserve the pinned block base fee. Their default gas price equals that base fee (zero priority tip); legacy blocks use the first transaction's gas price and require an explicit price if the block is empty. Explicit gas prices are respected without changing the block base fee. The synthetic governor executor and designated Wormhole receiver executor receive a gas allowance. Celo callers also receive exactly the gas budget because its client debits that amount before execution, preserving their EVM-visible balance. On Ethereum and Celo, unused gas allowances are removed from carried state; artificial-executor balances on other chains are not normalized. Other real bridge caller and target balances are not overridden. An allowance cannot supply missing transaction value. Wormhole receiver simulations reject nonzero message value until bridge funding is modeled. Future inclusion fees are not predicted. Existing bridge simulations retain
 their authorization and delivery assumptions; an execution success does not prove bridge delivery.
 
 Run local execution coverage or opt into a configured Ethereum endpoint:

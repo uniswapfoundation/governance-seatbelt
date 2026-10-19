@@ -374,6 +374,8 @@ export type TenderlyPayload = {
   input: string;
   gas: number;
   gas_price?: string;
+  /** Fund only an artificial executor; never enable for a real treasury or bridge caller. */
+  fund_synthetic_sender?: boolean;
   value?: string;
   simulation_type?: 'full' | 'quick';
   save?: boolean;
