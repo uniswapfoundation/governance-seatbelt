@@ -423,7 +423,7 @@ export function resolveVerificationConfig(config: ChainConfig): ResolvedVerifica
 
 function rpcTransport(url: string, chainId: number): Transport {
   if (url) {
-    const transport = http(url)({ retryCount: 0 });
+    const transport = http(url)({});
     return custom(
       {
         async request(args) {

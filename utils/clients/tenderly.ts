@@ -553,24 +553,32 @@ async function simulateExecuted(
       eta,
     );
 
-    const executeEvents = await publicClient.getContractEvents({
-      address: timelock.address,
-      abi: timelockAbi,
-      eventName: 'ExecuteTransaction',
-      args: { txHash: txHashes[0] as `0x${string}` },
-      fromBlock: startBlock,
-      toBlock: latestBlock.number,
-    });
+    let executionHash: Hex | undefined;
+    for (let fromBlock = startBlock; fromBlock <= latestBlock.number; fromBlock += 10000n) {
+      const toBlock =
+        fromBlock + 9999n < latestBlock.number ? fromBlock + 9999n : latestBlock.number;
+      const events = await publicClient.getContractEvents({
+        address: timelock.address,
+        abi: timelockAbi,
+        eventName: 'ExecuteTransaction',
+        args: { txHash: txHashes[0] as Hex },
+        fromBlock,
+        toBlock,
+      });
+      if (events[0]) {
+        executionHash = events[0].transactionHash;
+        break;
+      }
+    }
 
-    const executeEvent = executeEvents[0];
-    if (!executeEvent) {
+    if (!executionHash) {
       throw new Error(
         `Could not find timelock ExecuteTransaction event for proposal ${proposalIdBigInt} (txHash: ${txHashes[0]})`,
       );
     }
 
     // Prepare replay payload. Since this proposal was already executed, we directly use that transaction data
-    const tx = await publicClient.getTransaction({ hash: executeEvent.transactionHash });
+    const tx = await publicClient.getTransaction({ hash: executionHash });
     const simulationPayload: TenderlyPayload = {
       network_id: String(tx.chainId) as TenderlyPayload['network_id'],
       block_number: Number(tx.blockNumber),
