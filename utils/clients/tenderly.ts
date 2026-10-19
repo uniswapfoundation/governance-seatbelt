@@ -301,30 +301,27 @@ async function simulateProposed(
   const chainId = await publicClient.getChainId();
   const blockNumberToUse = (await getLatestBlock(chainId)) - 3; // Use a recently confirmed state snapshot.
   const latestBlock = await publicClient.getBlock({ blockNumber: BigInt(blockNumberToUse) });
-  const blockRange = [0n, latestBlock.number];
   const governor = getGovernor(governorType, governorAddress);
   const timelock = await getTimelock(governorType, governorAddress);
   const proposal = await getProposal(governorType, governorAddress, proposalIdBigInt);
-  const abi = governorType === 'bravo' ? GOVERNOR_ABI : GOVERNOR_OZ_ABI;
-
-  const proposalCreatedEvents = await publicClient.getContractEvents({
-    address: governorAddress,
-    abi,
-    eventName: 'ProposalCreated',
-    fromBlock: blockRange[0],
-    toBlock: blockRange[1],
-  });
-
-  const proposalCreatedEvent = proposalCreatedEvents.filter((e) => {
-    const args = e.args;
-    if (governorType === 'bravo' && 'id' in args) {
-      return args.id === proposalIdBigInt;
-    }
-    if (governorType === 'oz' && 'proposalId' in args) {
-      return args.proposalId === proposalIdBigInt;
-    }
-    return false;
-  })[0];
+  const proposalCreatedEvent =
+    governorType === 'bravo'
+      ? await findProposalCreatedEventNearBlock({
+          governorType,
+          governorAddress,
+          proposalId: proposalIdBigInt,
+          approxBlock: proposal.startBlock ?? 0n,
+          latestBlock: latestBlock.number,
+        })
+      : (
+          await publicClient.getContractEvents({
+            address: governorAddress,
+            abi: GOVERNOR_OZ_ABI,
+            eventName: 'ProposalCreated',
+            fromBlock: 0n,
+            toBlock: latestBlock.number,
+          })
+        ).find((event) => event.args.proposalId === proposalIdBigInt);
   if (!proposalCreatedEvent)
     throw new Error(`Proposal creation log for #${proposalIdBigInt} not found in governor logs`);
   const { targets, signatures: sigs, calldatas, description, values } = proposalCreatedEvent.args;
@@ -938,12 +935,14 @@ async function findProposalCreatedEventNearBlock(params: {
   const { governorType, governorAddress, proposalId, approxBlock, latestBlock } = params;
 
   const abi = governorType === 'bravo' ? GOVERNOR_ABI : GOVERNOR_OZ_ABI;
-  const windows = [2_000n, 10_000n, 50_000n, 200_000n, 1_000_000n];
+  const searchBlock = approxBlock < latestBlock ? approxBlock : latestBlock;
+  const ranges = [2_000n, 10_000n, 50_000n, 200_000n, 1_000_000n].map((window) => ({
+    fromBlock: searchBlock > window ? searchBlock - window : 0n,
+    toBlock: searchBlock + window < latestBlock ? searchBlock + window : latestBlock,
+  }));
+  ranges.push({ fromBlock: 0n, toBlock: latestBlock });
 
-  for (const window of windows) {
-    const fromBlock = approxBlock > window ? approxBlock - window : 0n;
-    const toBlock = approxBlock + window < latestBlock ? approxBlock + window : latestBlock;
-
+  for (const { fromBlock, toBlock } of ranges) {
     const events = await publicClient.getContractEvents({
       address: governorAddress,
       abi,
