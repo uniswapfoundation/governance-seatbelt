@@ -23,6 +23,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
+      - name: Require QuickNode configuration
+        env:
+          QUICKNODE_RPC_URL: ${{ secrets.QUICKNODE_RPC_URL }}
+        run: |
+          if [ -z "$QUICKNODE_RPC_URL" ]; then
+            echo "::error::Configure the ci environment QUICKNODE_RPC_URL secret before running governance checks."
+            exit 1
+          fi
+
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
