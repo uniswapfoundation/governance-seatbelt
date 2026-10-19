@@ -14,7 +14,7 @@ bun run setup
 
 # Copy and configure environment variables
 cp .env.example .env
-# Edit .env with your Tenderly credentials and RPC URLs
+# Edit .env with your RPC and explorer credentials and RPC URLs
 ```
 
 ### 2. Run a test simulation
@@ -32,28 +32,33 @@ SIM_NAME=robinhood-fee-activation bun start
 
 Reports are saved to `reports/` folder.
 
-### Optional RPC simulation
+### QuickNode simulation
 
-Set `SIMULATION_PROVIDER=rpc` to simulate new and proposed proposals through the configured
-chain RPCs instead of Tenderly. Each endpoint must support historical `debug_traceCall`,
-`callTracer` with logs, `prestateTracer`, and state/block overrides. QuickNode's public demos
-were verified for Ethereum and Arc; other networks require their own validation.
+Seatbelt uses the configured chain RPCs for all simulations, including executed-transaction
+replay. Set `QUICKNODE_RPC_URL` for Ethereum and each destination's `*_RPC_URL` from
+`.env.example`. Ethereum requires `QUICKNODE_RPC_URL`; legacy provider variables are not used. There is no Tenderly
+fallback or public-node fallback. A missing endpoint fails that chain explicitly.
 
-Storage overrides are encoded locally from verified Solidity source and the exact compiler's
-storage layout. This requires Etherscan source access and downloads the matching compiler
-from Solidity's official distribution into `cache/compilers/`. Proxy implementation and packed
-storage reads use the simulation's base block. Unsupported layouts fail explicitly.
+Each endpoint must support historical `debug_traceCall`, `debug_traceTransaction`, `callTracer`
+with logs, `prestateTracer`, and state/block overrides. Chain availability and these methods
+must be checked on your QuickNode account before enabling a destination.
 
-RPC simulation results use a separate `cache/rpc/` directory. Reports retain call/event
-decoding, raw storage changes, and the existing checks. Asset-transfer enrichment is absent,
-so ETH-balance and treasury-movement checks report skipped coverage. There is no Tenderly
-debugger link. Already-executed proposal replay and contract-source overrides are unsupported.
+Storage overrides are encoded locally from verified Solidity source and compiler storage
+layouts. This requires explorer source access and downloads the exact compiler from Solidity's
+official distribution into `cache/compilers/`. For encoding, a recognized Solidity source hash may differ after explorer flattening; executable code and compiler version must still match. Report labels retain strict metadata verification in a separate cache. Unsupported layouts fail explicitly. OZ draft coverage is the 4.7-style timer layout, tested with 4.7.3; other layouts require separate support.
 
-To exercise a successful governance draft, revert handling, and coverage reporting against
-a real configured Ethereum endpoint:
+RPC results are cached separately in `cache/rpc-v2/`. Reports retain calls, events, storage changes,
+and safety checks. Reverts produce failed reports; reverted call effects are excluded. Native transfers come from committed call traces; standard ERC20 transfers
+come from events. Reports warn that rebasing and nonstandard token changes are not fully covered.
+Unavailable token metadata is shown as raw units. USD prices and Tenderly debugger links are
+unavailable. Contract-source overrides are unsupported. Drafts and destination calls currently use zero gas price and base fee, so fee-dependent contract behavior is not production-equivalent. Existing bridge simulations retain
+their authorization and delivery assumptions; an execution success does not prove bridge delivery.
+
+Run local execution coverage or opt into a configured Ethereum endpoint:
 
 ```bash
-SIMULATION_PROVIDER=rpc RUN_RPC_INTEGRATION_TESTS=1 bun test tests/rpc-simulation.live.test.ts
+bun test tests/rpc-simulation.integration.test.ts
+RUN_RPC_INTEGRATION_TESTS=1 bun test tests/rpc-simulation.live.test.ts
 ```
 
 ### 2a. Run the opt-in live BNB legacy Wormhole validation
@@ -178,7 +183,7 @@ To run the frontend with simulation results:
 1. Provide simulation results (choose one):
 
    ```sh
-   # Option A (recommended): run a real simulation (requires Tenderly + RPCs)
+   # Option A (recommended): run a real simulation (requires QuickNode RPCs and explorer credentials)
    SIM_NAME=uni-transfer bun run sim
    ```
 
@@ -259,26 +264,11 @@ First, create a file called `.env` with the following environment variables:
 ETHERSCAN_API_KEY=yourEtherscanApiKey
 
 # URL to your Ethereum mainnet RPC (required).
-MAINNET_RPC_URL=yourMainnetRpcUrl
+QUICKNODE_RPC_URL=yourMainnetRpcUrl
 
 # URL to your Arbitrum mainnet RPC (required for cross-chain).
 ARBITRUM_RPC_URL=yourArbitrumRpcUrl
 ROBINHOOD_RPC_URL=yourRobinhoodRpcUrl
-
-# Tenderly access token.
-# Access token is obtained from the Tenderly UI via Account > Authorization > Generate Access Token.
-TENDERLY_ACCESS_TOKEN=yourAccessToken
-
-# Tenderly user name.
-# User name can be found in the URL of your project: https://dashboard.tenderly.co/<userName>/<project_slug>/transactions
-# This is `me` for personal accounts.
-TENDERLY_USER=userName
-
-# Tenderly project slug.
-# Project slug can be found in the URL of your project: https://dashboard.tenderly.co/<userName>/<project_slug>/transactions.
-# The name of your tenderly project may not always be your project slug,
-# and the project slug can sometimes just be `project`.
-TENDERLY_PROJECT_SLUG=projectName
 
 # Define the DAO name and the address of its governor.
 DAO_NAME=Uniswap

@@ -339,6 +339,7 @@ export type StorageEncodingResponse = {
 };
 
 type StateObject = {
+  nonce?: number;
   balance?: string;
   code?: string;
   storage?: Record<string, string>;
@@ -367,6 +368,7 @@ export type TenderlyPayload = {
   network_id: '1' | '3' | '4' | '5' | '42' | '4663' | '42161';
   block_number?: number;
   transaction_index?: number;
+  transaction_hash?: Hex;
   from: string;
   to: string;
   input: string;
@@ -391,6 +393,8 @@ export type TenderlyPayload = {
 
 export interface TenderlySimulation {
   provider?: 'tenderly' | 'rpc';
+  postState?: Record<string, StateObject>;
+  assetWarnings?: string[];
   transaction: Transaction;
   simulation: Simulation;
   contracts: TenderlyContract[];

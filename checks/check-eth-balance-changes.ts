@@ -17,7 +17,7 @@ export const checkEthBalanceChanges: ProposalCheck = {
       };
     }
     const info: string[] = [];
-    const warnings: string[] = [];
+    const warnings: string[] = [...(sim.assetWarnings ?? [])];
     const errors: string[] = [];
 
     const blockExplorerUrl = deps.chainConfig.blockExplorer.baseUrl;

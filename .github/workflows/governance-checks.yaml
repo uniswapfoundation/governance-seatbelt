@@ -89,13 +89,26 @@ jobs:
           ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
           BLOCKSCOUT_API_KEY: ${{ secrets.BLOCKSCOUT_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RPC_URL: ${{ secrets.RPC_URL }}
-          MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
+          QUICKNODE_RPC_URL: ${{ secrets.QUICKNODE_RPC_URL }}
+          ARC_RPC_URL: ${{ secrets.ARC_RPC_URL }}
+          ROBINHOOD_RPC_URL: ${{ secrets.ROBINHOOD_RPC_URL }}
+          OPTIMISM_RPC_URL: ${{ secrets.OPTIMISM_RPC_URL }}
+          BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
+          UNICHAIN_RPC_URL: ${{ secrets.UNICHAIN_RPC_URL }}
+          INK_RPC_URL: ${{ secrets.INK_RPC_URL }}
+          SONEIUM_RPC_URL: ${{ secrets.SONEIUM_RPC_URL }}
+          BOB_RPC_URL: ${{ secrets.BOB_RPC_URL }}
+          BSC_RPC_URL: ${{ secrets.BSC_RPC_URL }}
+          CELO_RPC_URL: ${{ secrets.CELO_RPC_URL }}
+          POLYGON_RPC_URL: ${{ secrets.POLYGON_RPC_URL }}
+          AVALANCHE_RPC_URL: ${{ secrets.AVALANCHE_RPC_URL }}
+          MONAD_RPC_URL: ${{ secrets.MONAD_RPC_URL }}
+          MEGAETH_RPC_URL: ${{ secrets.MEGAETH_RPC_URL }}
+          WORLDCHAIN_RPC_URL: ${{ secrets.WORLDCHAIN_RPC_URL }}
+          ZORA_RPC_URL: ${{ secrets.ZORA_RPC_URL }}
+          XLAYER_RPC_URL: ${{ secrets.XLAYER_RPC_URL }}
           ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL }}
           TEMPO_RPC_URL: ${{ secrets.TEMPO_RPC_URL }}
-          TENDERLY_ACCESS_TOKEN: ${{ secrets.TENDERLY_ACCESS_TOKEN }}
-          TENDERLY_USER: ${{ secrets.TENDERLY_USER }}
-          TENDERLY_PROJECT_SLUG: ${{ secrets.TENDERLY_PROJECT_SLUG }}
           DAO_NAME: "Uniswap"
           GOVERNOR_ADDRESS: "0x408ED6354d4973f66138C91495F2f2FCbd8724C3"
 

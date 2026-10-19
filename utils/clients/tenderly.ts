@@ -35,11 +35,9 @@ import {
   getTimelock,
   getVotingToken,
   hashOperationBatchOz,
-  hashOperationOz,
 } from '../contracts/governor';
 import type { TenderlySimulationExecutionOptions } from '../cross-chain/tenderly-execution-engine';
 import { mergeStateObjects } from '../derived-state';
-import { getSimulationProvider } from '../simulation-provider';
 export type { TenderlySimulationExecutionOptions as SimulationExecutionOptions } from '../cross-chain/tenderly-execution-engine';
 export { handleCrossChainSimulations } from '../cross-chain/tenderly-execution-engine';
 import { CacheManager } from './block-explorers/cache';
@@ -48,7 +46,6 @@ import { getChainConfig, publicClient } from './client';
 import {
   type StateOverridesPayload,
   getLatestBlock,
-  getTenderlySaveFlags,
   sendEncodeRequest,
   sendSimulation,
 } from './tenderly-api';
@@ -69,7 +66,6 @@ interface GovernorOverrideParams {
   values?: readonly bigint[];
   signatures?: readonly string[];
   calldatas?: readonly `0x${string}`[];
-  description?: string;
   proposal?: ProposalEvent;
 }
 
@@ -85,7 +81,6 @@ interface SimulationPayloadParams {
   simTimestamp: bigint;
   storageObj: StorageEncodingResponse;
   executeInputs: unknown[];
-  saveIfFails?: boolean;
 }
 
 // --- Simulation methods ---
@@ -123,7 +118,7 @@ export async function simulateNew(
 
   // --- Get details about the proposal we're simulating ---
   const chainId = await publicClient.getChainId();
-  const blockNumberToUse = (await getLatestBlock(chainId)) - 3; // subtracting a few blocks to ensure tenderly has the block
+  const blockNumberToUse = (await getLatestBlock(chainId)) - 3; // Use a recently confirmed state snapshot.
   const latestBlock = await publicClient.getBlock({ blockNumber: BigInt(blockNumberToUse) });
   const governor = getGovernor(governorType, governorAddress);
   const timelock = await getTimelock(governorType, governorAddress);
@@ -178,10 +173,11 @@ export async function simulateNew(
 
   // Generate the state object needed to mark the transactions as queued in the Timelock's storage
   const timelockStorageObj: Record<string, string> = {};
-  for (const hash of txHashes) {
-    timelockStorageObj[`queuedTransactions[${hash}]`] = 'true';
+  if (governorType === 'bravo') {
+    for (const hash of txHashes) timelockStorageObj[`queuedTransactions[${hash}]`] = 'true';
   }
 
+  let operationId: bigint | undefined;
   if (governorType === 'oz') {
     const id = hashOperationBatchOz(
       [...targets],
@@ -191,9 +187,10 @@ export async function simulateNew(
       keccak256(toBytes(description)),
     );
     timelockStorageObj[`_timestamps[${toHex(id)}]`] = simTimestamp.toString();
+    operationId = id;
   }
 
-  // Use the Tenderly API to get the encoded state overrides for governor storage
+  // Encode governor storage overrides locally from verified source
   const governorStateOverrides = buildGovernorStateOverrides({
     governorType,
     proposalId,
@@ -204,9 +201,11 @@ export async function simulateNew(
     values,
     signatures,
     calldatas,
-    description,
     proposal,
   });
+
+  if (operationId !== undefined)
+    governorStateOverrides[`_timelockIds[${proposalId}]`] = toHex(operationId, { size: 32 });
 
   const stateOverrides: StateOverridesPayload = {
     networkID: '1',
@@ -248,7 +247,6 @@ export async function simulateNew(
     simTimestamp,
     storageObj,
     executeInputs,
-    saveIfFails: true,
   });
 
   const seededMainnetState = mergeStateObjects(
@@ -301,7 +299,7 @@ async function simulateProposed(
 
   // --- Get details about the proposal we're simulating ---
   const chainId = await publicClient.getChainId();
-  const blockNumberToUse = (await getLatestBlock(chainId)) - 3; // subtracting a few blocks to ensure tenderly has the block
+  const blockNumberToUse = (await getLatestBlock(chainId)) - 3; // Use a recently confirmed state snapshot.
   const latestBlock = await publicClient.getBlock({ blockNumber: BigInt(blockNumberToUse) });
   const blockRange = [0n, latestBlock.number];
   const governor = getGovernor(governorType, governorAddress);
@@ -384,10 +382,11 @@ async function simulateProposed(
 
   // Generate the state object needed to mark the transactions as queued in the Timelock's storage
   const timelockStorageObj: Record<string, string> = {};
-  for (const hash of txHashes) {
-    timelockStorageObj[`queuedTransactions[${hash}]`] = 'true';
+  if (governorType === 'bravo') {
+    for (const hash of txHashes) timelockStorageObj[`queuedTransactions[${hash}]`] = 'true';
   }
 
+  let operationId: bigint | undefined;
   if (governorType === 'oz') {
     const id = hashOperationBatchOz(
       [...targets],
@@ -397,6 +396,7 @@ async function simulateProposed(
       keccak256(toBytes(description)),
     );
     timelockStorageObj[`_timestamps[${toHex(id)}]`] = simTimestamp.toString();
+    operationId = id;
   }
 
   const governorStateOverrides = buildGovernorStateOverrides({
@@ -407,6 +407,9 @@ async function simulateProposed(
     simBlock,
     // No targets/values/signatures/calldatas for existing proposals
   });
+
+  if (operationId !== undefined)
+    governorStateOverrides[`_timelockIds[${proposalId}]`] = toHex(operationId, { size: 32 });
 
   const stateOverrides: StateOverridesPayload = {
     networkID: '1',
@@ -422,9 +425,6 @@ async function simulateProposed(
   const storageObj = await sendEncodeRequest(stateOverrides, Number(latestBlock.number));
 
   // --- Simulate it ---
-  // Note: The Tenderly API is sensitive to the input types, so all formatting below (e.g. stripping
-  // leading zeroes, padding with zeros, strings vs. hex, etc.) are all intentional decisions to
-  // ensure Tenderly properly parses the simulation payload
   const descriptionHash = keccak256(toBytes(description));
   const executeInputs =
     governorType === 'bravo' ? [proposalId] : [targets, values, calldatas, descriptionHash];
@@ -439,7 +439,6 @@ async function simulateProposed(
     simTimestamp,
     storageObj,
     executeInputs,
-    saveIfFails: true, // Different for proposed
   });
 
   simulationPayload.state_objects = mergeStateObjects(
@@ -498,8 +497,6 @@ async function simulateExecuted(
   config: SimulationConfigExecuted,
   options?: TenderlySimulationExecutionOptions,
 ): Promise<SimulationResult> {
-  if (getSimulationProvider() === 'rpc')
-    throw new Error('Executed proposal replay is not supported by RPC simulation');
   const { governorAddress, governorType, proposalId } = config;
   const proposalIdBigInt = typeof proposalId === 'bigint' ? proposalId : BigInt(proposalId);
 
@@ -561,7 +558,7 @@ async function simulateExecuted(
       abi: timelockAbi,
       eventName: 'ExecuteTransaction',
       args: { txHash: txHashes[0] as `0x${string}` },
-      fromBlock: 0n,
+      fromBlock: startBlock,
       toBlock: latestBlock.number,
     });
 
@@ -572,11 +569,12 @@ async function simulateExecuted(
       );
     }
 
-    // Prepare tenderly payload. Since this proposal was already executed, we directly use that transaction data
+    // Prepare replay payload. Since this proposal was already executed, we directly use that transaction data
     const tx = await publicClient.getTransaction({ hash: executeEvent.transactionHash });
     const simulationPayload: TenderlyPayload = {
       network_id: String(tx.chainId) as TenderlyPayload['network_id'],
       block_number: Number(tx.blockNumber),
+      transaction_hash: tx.hash,
       from: tx.from,
       to: tx.to ?? '',
       input: tx.input,
@@ -679,20 +677,20 @@ async function simulateExecuted(
     throw new Error(`Proposal executed log for #${proposalIdBigInt} not found in governor logs`);
 
   // --- Simulate it ---
-  // Prepare tenderly payload. Since this proposal was already executed, we directly use that transaction data
+  // Prepare replay payload. Since this proposal was already executed, we directly use that transaction data
   const tx = await publicClient.getTransaction({ hash: proposalExecutedEvent.transactionHash });
-  const { save: saveSimulation, saveIfFails: saveSimulationIfFails } = getTenderlySaveFlags(true);
   const simulationPayload: TenderlyPayload = {
     network_id: String(tx.chainId) as TenderlyPayload['network_id'],
     block_number: Number(tx.blockNumber),
+    transaction_hash: tx.hash,
     from: tx.from,
     to: tx.to ?? '',
     input: tx.input,
     gas: Number(tx.gas),
     gas_price: tx.gasPrice?.toString(),
     value: tx.value.toString(),
-    save_if_fails: saveSimulationIfFails, // Save failed sims when enabled.
-    save: saveSimulation, // Save successful sims when enabled.
+    save_if_fails: false,
+    save: false,
     generate_access_list: true,
   };
   simulationPayload.state_objects = mergeStateObjects(
@@ -793,7 +791,7 @@ function handleETHValueRequirements(
 }
 
 /**
- * @notice Builds a Tenderly simulation payload with common configuration
+ * @notice Builds a simulation payload with common configuration
  * @param params Configuration parameters for the simulation payload
  */
 function buildSimulationPayload(params: SimulationPayloadParams): TenderlyPayload {
@@ -806,11 +804,8 @@ function buildSimulationPayload(params: SimulationPayloadParams): TenderlyPayloa
     simTimestamp,
     storageObj,
     executeInputs,
-    saveIfFails = false,
   } = params;
 
-  const { save: saveSimulation, saveIfFails: saveSimulationIfFails } =
-    getTenderlySaveFlags(saveIfFails);
   const normalizedFrom = getAddress(from);
   const normalizedTimelockAddress = getAddress(timelock.address);
   const normalizedGovernorAddress = getAddress(governor.address);
@@ -829,8 +824,8 @@ function buildSimulationPayload(params: SimulationPayloadParams): TenderlyPayloa
     gas: BLOCK_GAS_LIMIT,
     gas_price: '0',
     value: '0', // Will be updated by handleETHValueRequirements if needed
-    save_if_fails: saveSimulationIfFails, // Save failed sims when enabled.
-    save: saveSimulation, // Save successful sims when enabled.
+    save_if_fails: false,
+    save: false,
     generate_access_list: true, // not required, but useful as a sanity check to ensure consistency in the simulation response
     block_header: {
       // this data represents what block.number and block.timestamp should return in the EVM during the simulation
@@ -868,7 +863,6 @@ function buildGovernorStateOverrides(params: GovernorOverrideParams): Record<str
     values,
     signatures,
     calldatas,
-    description,
     proposal,
   } = params;
 
@@ -911,6 +905,7 @@ function buildGovernorStateOverrides(params: GovernorOverrideParams): Record<str
     const proposalCoreKey = `_proposals[${proposalId.toString()}]`;
     const proposalVotesKey = `_proposalVotes[${proposalId.toString()}]`;
     const overrides: Record<string, string> = {
+      [`${proposalCoreKey}.voteStart._deadline`]: (simBlock - 2n).toString(),
       [`${proposalCoreKey}.voteEnd._deadline`]: (simBlock - 1n).toString(),
       [`${proposalCoreKey}.canceled`]: 'false',
       [`${proposalCoreKey}.executed`]: 'false',
@@ -918,14 +913,6 @@ function buildGovernorStateOverrides(params: GovernorOverrideParams): Record<str
       [`${proposalVotesKey}.againstVotes`]: '0',
       [`${proposalVotesKey}.abstainVotes`]: '0',
     };
-
-    // Add operation hashes for new proposals
-    if (targets && values && calldatas && description) {
-      targets.forEach((target, i) => {
-        const id = hashOperationOz(target, values[i], calldatas[i], zeroHash, zeroHash);
-        overrides[`_timestamps[${id}]`] = '2'; // must be > 1.
-      });
-    }
 
     return overrides;
   }

@@ -216,7 +216,6 @@ mock.module('../../utils/clients/tenderly-api', () => ({
   getLatestBlock: async () => {
     throw new Error('Unexpected getLatestBlock call');
   },
-  getTenderlySaveFlags: () => ({ save: true, saveIfFails: true }),
   sendEncodeRequest: async () => {
     throw new Error('Unexpected sendEncodeRequest call');
   },

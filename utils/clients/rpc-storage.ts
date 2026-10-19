@@ -44,8 +44,13 @@ async function getStorageLayout(
   }
   const runtime = await client.getCode({ address: sourceAddress, blockNumber });
   if (!runtime || runtime === '0x') throw new Error('Storage implementation code unavailable');
-  const verified = await getVerifiedStorageLayout(sourceAddress, chainId, runtime);
-  if (!verified) throw new Error('Verified-source storage layout unavailable');
+  // Explorer-verified source may have a different metadata hash after flattening.
+  // The encoder still requires identical executable code and compiler metadata.
+  const verified = await getVerifiedStorageLayout(sourceAddress, chainId, runtime, true);
+  if (!verified)
+    throw new Error(
+      `Verified-source storage layout unavailable for ${sourceAddress} on chain ${chainId}`,
+    );
   return verified.layout;
 }
 

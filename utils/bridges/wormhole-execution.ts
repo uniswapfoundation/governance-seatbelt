@@ -77,7 +77,7 @@ function parseLegacyWormholeReceiverSequenceStorage(
   }
 }
 
-async function findBlockNumberAtOrBeforeTimestamp(
+export async function findBlockNumberAtOrBeforeTimestamp(
   chainId: number,
   sourceTimestamp: bigint,
 ): Promise<bigint> {
@@ -160,10 +160,9 @@ async function resolveWormholeReceiverRuntimeState(
   }
 
   const client = getClientForChain(job.destinationChainId);
-  const runtimeStateBlockNumber = await findBlockNumberAtOrBeforeTimestamp(
-    job.destinationChainId,
-    sourceTimestamp,
-  );
+  const runtimeStateBlockNumber =
+    context.blockNumber ??
+    (await findBlockNumberAtOrBeforeTimestamp(job.destinationChainId, sourceTimestamp));
   const runtimeState =
     laneCapabilities.kind === 'legacy'
       ? ({

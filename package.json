@@ -52,7 +52,6 @@
     "@octokit/action": "^3.15.2",
     "ethers": "^5.4.6",
     "md-to-pdf": "^5.1.0",
-    "micro-ftch": "^0.3.1",
     "npm": "^10.3.0",
     "rehype-sanitize": "^5.0.1",
     "rehype-slug": "^5.0.1",
@@ -66,6 +65,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
+    "@openzeppelin/contracts": "4.7.3",
     "@secretlint/secretlint-rule-preset-recommend": "11.2.5",
     "@types/bun": "1.2.4",
     "husky": "9.1.7",

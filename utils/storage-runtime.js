@@ -1,7 +1,24 @@
 // Post-compilation linking preserves metadata. Only compiler-declared links and immutables vary.
-export default function matchesRuntime(bytecode, runtime) {
+// Explorer-verified flattened source can lose the original metadata hash. For storage
+// encoding only, permit that hash to differ in these canonical Solidity CBOR trailers.
+// Every executable byte, compiler version, CBOR key, length and link rule still must match.
+function normalizeSourceHash(code) {
+  return code.replace(
+    /(a265627a7a72315820|a2646970667358221220)([0-9a-f]{64})(64736f6c6343[0-9a-f]{6})(0032|0033)$/,
+    (trailer, prefix, hash, compiler, length) => {
+      if (Number.parseInt(length, 16) * 2 + 4 !== trailer.length) return trailer;
+      return prefix + '0'.repeat(hash.length) + compiler + length;
+    },
+  );
+}
+
+export default function matchesRuntime(bytecode, runtime, allowSourceHashMismatch = false) {
   let compiledCode = bytecode.object.toLowerCase();
-  const deployedCode = runtime.slice(2).toLowerCase();
+  let deployedCode = runtime.slice(2).toLowerCase();
+  if (allowSourceHashMismatch) {
+    compiledCode = normalizeSourceHash(compiledCode);
+    deployedCode = normalizeSourceHash(deployedCode);
+  }
   if (compiledCode.length !== deployedCode.length) return false;
 
   // Keep each library's locations together: every occurrence must use the same address.

@@ -10,6 +10,7 @@ import { generateAndSaveReports } from '../presentation/report';
 import type { ProposalData, ProposalEvent } from '../types';
 import { BlockExplorerFactory } from '../utils/clients/block-explorers/factory';
 import { CHAIN_CONFIGS } from '../utils/clients/client';
+import { getVerifiedStorageLayout } from '../utils/storage-layout';
 import { setMockFetch, toFetchUrl } from './helpers/verification-test-helpers';
 
 // Double only external explorer HTTP responses so CI can exercise the real compiler,
@@ -96,7 +97,7 @@ test('verified layouts label packed fields; mismatches, unknown bits, missing so
       const address = `0x${(8800 + index).toString(16).padStart(40, '0')}`;
       const cachePath = join(
         process.cwd(),
-        'cache/storage-layouts',
+        'cache/storage-layouts-v2',
         `5042-${getAddress(address)}-${keccak256(code as `0x${string}`)}.json`,
       );
       cacheFiles.push(cachePath);
@@ -201,6 +202,36 @@ test('verified layouts label packed fields; mismatches, unknown bits, missing so
       'api.etherscan.io',
       'explorer.arc.io',
     ]);
+    // Compiling explorer-verified flattened source may change only its metadata hash.
+    // Encoding can use that layout, but it must not contaminate strict report evidence.
+    etherscanAvailable = true;
+    const metadataOnly = runtime.replace(
+      /(a2646970667358221220)[0-9a-f]{64}/,
+      `$1${'ab'.repeat(32)}`,
+    );
+    expect(metadataOnly).not.toBe(runtime);
+    const altered = [
+      metadataOnly,
+      `0x00${metadataOnly.slice(4)}`,
+      `${metadataOnly.slice(0, -6)}ff${metadataOnly.slice(-4)}`,
+      `${metadataOnly.slice(0, -4)}0001`,
+    ];
+    for (const [index, code] of altered.entries()) {
+      const address = getAddress(`0x${(8900 + index).toString(16).padStart(40, '0')}`);
+      for (const directory of ['storage-encoding-layouts', 'storage-layouts-v2']) {
+        const path = join(
+          process.cwd(),
+          'cache',
+          directory,
+          `5042-${address}-${keccak256(code as `0x${string}`)}.json`,
+        );
+        cacheFiles.push(path);
+        rmSync(path, { force: true });
+      }
+      const encoding = await getVerifiedStorageLayout(address, 5042, code as `0x${string}`, true);
+      expect(Boolean(encoding)).toBe(index === 0);
+      expect(await getVerifiedStorageLayout(address, 5042, code as `0x${string}`)).toBeNull();
+    }
   } finally {
     for (const path of cacheFiles) rmSync(path, { force: true });
     restore();
@@ -208,4 +239,4 @@ test('verified layouts label packed fields; mismatches, unknown bits, missing so
     BlockExplorerFactory.clear();
     rmSync(outputDir, { recursive: true, force: true });
   }
-}, 60000);
+}, 120000);

@@ -334,7 +334,7 @@ test.each(['postlinked', 'prelinked'])(
         }
         const cache = join(
           process.cwd(),
-          'cache/storage-layouts',
+          'cache/storage-layouts-v2',
           `5042-${getAddress(sim.contracts[1].address)}-${keccak256(runtime!)}.json`,
         );
         if (!cacheFiles.has(cache)) rmSync(cache, { force: true });

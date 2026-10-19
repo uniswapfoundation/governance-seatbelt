@@ -3,7 +3,6 @@ import {
   getChainName,
   getOpStackDestinationChainIds,
   supportsL2Checks,
-  supportsTenderlyDestinationSimulation,
 } from '../utils/chains/capabilities';
 
 describe('chain capabilities registry', () => {
@@ -24,26 +23,17 @@ describe('chain capabilities registry', () => {
     expect(getChainName(999999999)).toBe('Chain 999999999');
   });
 
-  test('keeps l2-check and tenderly-destination capability differences explicit', () => {
+  test('supports checks on configured destination chains', () => {
     expect(supportsL2Checks(7777777)).toBe(true);
-    expect(supportsTenderlyDestinationSimulation(7777777)).toBe(false);
 
     expect(supportsL2Checks(42161)).toBe(true);
-    expect(supportsTenderlyDestinationSimulation(42161)).toBe(true);
     expect(supportsL2Checks(4663)).toBe(true);
-    expect(supportsTenderlyDestinationSimulation(4663)).toBe(true);
     expect(supportsL2Checks(56)).toBe(true);
-    expect(supportsTenderlyDestinationSimulation(56)).toBe(true);
     expect(supportsL2Checks(137)).toBe(true);
-    expect(supportsTenderlyDestinationSimulation(137)).toBe(true);
     expect(supportsL2Checks(43114)).toBe(true);
-    expect(supportsTenderlyDestinationSimulation(43114)).toBe(true);
     expect(supportsL2Checks(143)).toBe(true);
-    expect(supportsTenderlyDestinationSimulation(143)).toBe(true);
     expect(supportsL2Checks(4217)).toBe(true);
-    expect(supportsTenderlyDestinationSimulation(4217)).toBe(true);
     expect(supportsL2Checks(4326)).toBe(true);
-    expect(supportsTenderlyDestinationSimulation(4326)).toBe(true);
   });
 
   test('exposes OP Stack destination ordering used for summaries', () => {
