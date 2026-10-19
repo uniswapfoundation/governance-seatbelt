@@ -719,9 +719,10 @@ async function main() {
       ? [cliOptions.proposalId]
       : await getProposalIds(governorType, governorAddress, latestBlock.number);
 
-    const states = await Promise.all(
-      proposalIds.map((id) => getGovernor(governorType, governorAddress).read.state([id])),
-    );
+    const states: number[] = [];
+    for (const id of proposalIds) {
+      states.push(await getGovernor(governorType, governorAddress).read.state([id]));
+    }
 
     const simProposals: { id: bigint; simType: SimulationConfigBase['type']; state: string }[] =
       proposalIds.map((id, i) => {
