@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import solc from 'solc';
-import { http, createPublicClient, createWalletClient, encodeFunctionData, parseEther } from 'viem';
+import {
+  http,
+  createPublicClient,
+  createWalletClient,
+  decodeEventLog,
+  encodeFunctionData,
+  parseEther,
+} from 'viem';
 import { mainnet } from 'viem/chains';
 
 // Local contracts have no external explorer record; only that HTTP boundary is unavailable.
@@ -31,7 +38,6 @@ try {
     to: receiver,
     input: '0x',
     gas: 1000000,
-    gas_price: '0',
     value: parseEther('1').toString(),
   };
   const funded = await sendSimulation(payload);
@@ -46,10 +52,11 @@ try {
     ...payload,
     from: receiver,
     to: nextReceiver,
+    value: parseEther('0.9').toString(),
     state_objects: state,
   });
   assert.equal(spent.transaction.status, true);
-  assert.equal(spent.postState?.[nextReceiver].balance, parseEther('1').toString());
+  assert.equal(spent.postState?.[nextReceiver].balance, parseEther('0.9').toString());
   assert.equal(await client.getBalance({ address: receiver }), 0n);
 
   const input = {
@@ -65,6 +72,10 @@ try {
       function transfer(address to, uint amount) external { balanceOf[msg.sender] -= amount; balanceOf[to] += amount; emit Transfer(msg.sender, to, amount); }
       receive() external payable {}
       function withdraw(address to) external { payable(to).transfer(address(this).balance); }
+      event Fees(uint baseFee, uint gasPrice, uint targetBalance, uint callerBalance);
+      function recordFees() external { emit Fees(block.basefee, tx.gasprice, address(this).balance, msg.sender.balance); }
+      function pay(address to) external { payable(to).transfer(1 ether); }
+      function refundCaller() external { payable(msg.sender).transfer(1); }
       function clear() external { marker = 0; }
       function set(uint value) external { marker = value; }
       function fail(address to) external payable { payable(to).transfer(msg.value); marker = 99; emit Transfer(msg.sender, to, 42); revert("rollback"); }
@@ -178,6 +189,132 @@ try {
     receipt.logs.map((l) => ({ address: l.address, topics: l.topics, data: l.data })),
   );
   assert.equal(replay.transaction.transaction_info.asset_changes?.[0].amount, '2');
+  // Fee opcodes must observe the pinned block, even after the node's head fee changes.
+  await client.request({
+    method: 'anvil_setNextBlockBaseFeePerGas' as never,
+    params: ['0x77359400'] as never,
+  });
+  await client.request({ method: 'evm_mine' as never });
+  const feeBlock = Number(await client.getBlockNumber({ cacheTime: 0 }));
+  await client.request({
+    method: 'anvil_setNextBlockBaseFeePerGas' as never,
+    params: ['0xb2d05e00'] as never,
+  });
+  await client.request({ method: 'evm_mine' as never });
+  const feePayload = {
+    ...tokenPayload,
+    block_number: feeBlock,
+    input: encodeFunctionData({ abi: compiled.abi, functionName: 'recordFees' }),
+  };
+  for (const gas_price of [undefined, '4000000000', '0']) {
+    const result = await sendSimulation({ ...feePayload, gas_price });
+    assert.equal(result.transaction.status, true);
+    const log = result.transaction.transaction_info.logs![0].raw;
+    const decoded = decodeEventLog({ abi: compiled.abi, ...log } as never);
+    const { callerBalance: _callerBalance, ...fees } = decoded.args as Record<string, bigint>;
+    assert.deepEqual(fees, {
+      baseFee: 2000000000n,
+      gasPrice: BigInt(gas_price ?? '2000000000'),
+      targetBalance: 0n,
+    });
+    assert.equal(result.simulation.gas_price, gas_price ?? '2000000000');
+  }
+  const synthetic = '0x0000000000000000000000000000000000009876';
+  await assert.rejects(
+    sendSimulation({ ...feePayload, from: synthetic }),
+    'Anvil requires a gas balance for a nonzero-price call',
+  );
+  const sponsored = await sendSimulation({
+    ...feePayload,
+    from: synthetic,
+    fund_synthetic_sender: true,
+  });
+  assert.equal(sponsored.transaction.status, true);
+  assert.equal(sponsored.postState?.[synthetic]?.balance, '0');
+  const sponsoredLog = sponsored.transaction.transaction_info.logs![0].raw;
+  assert.equal(
+    (decodeEventLog({ abi: compiled.abi, ...sponsoredLog } as never).args as Record<string, bigint>)
+      .callerBalance,
+    0n,
+  );
+  const repeated = await sendSimulation({
+    ...feePayload,
+    from: synthetic,
+    fund_synthetic_sender: true,
+    state_objects: sponsored.postState,
+  });
+  assert.equal(repeated.transaction.status, true);
+  assert.equal(repeated.postState?.[synthetic]?.balance, '0');
+  const marked = await sendSimulation({
+    ...feePayload,
+    from: synthetic,
+    fund_synthetic_sender: true,
+    input: encodeFunctionData({ abi: compiled.abi, functionName: 'set', args: [7n] }),
+  });
+  const refundedStorage = await sendSimulation({
+    ...feePayload,
+    from: synthetic,
+    fund_synthetic_sender: true,
+    state_objects: marked.postState,
+    input: encodeFunctionData({ abi: compiled.abi, functionName: 'clear' }),
+  });
+  assert.equal(refundedStorage.transaction.status, true);
+  assert.equal(refundedStorage.postState?.[synthetic]?.balance, '0');
+  const incoming = await sendSimulation({
+    ...feePayload,
+    from: synthetic,
+    fund_synthetic_sender: true,
+    state_objects: { [address]: { balance: '1' } },
+    input: encodeFunctionData({ abi: compiled.abi, functionName: 'refundCaller' }),
+  });
+  assert.equal(incoming.transaction.status, true);
+  assert.equal(incoming.postState?.[synthetic]?.balance, '1');
+  assert.equal(await client.getBalance({ address: synthetic }), 0n);
+  // Gas funding cannot become message value, even on providers that skip gas debiting.
+  const receiverValue = {
+    ...feePayload,
+    from: synthetic,
+    to: receiver,
+    input: '0x',
+    value: '1',
+    fund_synthetic_sender: true,
+  };
+  await assert.rejects(sendSimulation(receiverValue), /insufficient balance for call value/);
+  const suppliedValue = await sendSimulation({
+    ...receiverValue,
+    state_objects: { [synthetic]: { balance: '1' } },
+  });
+  assert.equal(suppliedValue.transaction.status, true);
+  assert.equal(suppliedValue.transaction.transaction_info.asset_changes?.[0].raw_amount, '1');
+  assert.equal(suppliedValue.postState?.[synthetic]?.balance, '0');
+  const zeroPrice = await sendSimulation({
+    ...receiverValue,
+    gas_price: '0',
+    state_objects: { [synthetic]: { balance: '1' } },
+  });
+  assert.equal(zeroPrice.transaction.status, true);
+  assert.equal(zeroPrice.postState?.[synthetic]?.balance, '0');
+  // A gas allowance for the artificial executor cannot make an empty treasury spendable.
+  const payPayload = {
+    ...feePayload,
+    from: synthetic,
+    fund_synthetic_sender: true,
+    input: encodeFunctionData({ abi: compiled.abi, functionName: 'pay', args: [receiver] }),
+  };
+  const emptyTreasury = await sendSimulation(payPayload);
+  assert.equal(emptyTreasury.transaction.status, false);
+  assert.equal(emptyTreasury.postState?.[synthetic]?.balance, '0');
+  assert.deepEqual(emptyTreasury.transaction.transaction_info.asset_changes, []);
+  const fundedTreasury = await sendSimulation({
+    ...payPayload,
+    state_objects: { [address]: { balance: parseEther('1').toString() } },
+  });
+  assert.equal(fundedTreasury.transaction.status, true);
+  assert.equal(
+    fundedTreasury.transaction.transaction_info.asset_changes?.[0].raw_amount,
+    parseEther('1').toString(),
+  );
+  assert.equal(await client.getBalance({ address }), 0n);
   await (await import('./rpc-oz-integration')).verifyOzDraft();
   process.stdout.write(
     `${JSON.stringify({
@@ -188,6 +325,8 @@ try {
       storageCleared: true,
       exactReplay: true,
       ozDraft: true,
+      pinnedFees: true,
+      callerFundingPreservesTreasury: true,
       noBroadcastFromSimulation: true,
     })}\n`,
   );

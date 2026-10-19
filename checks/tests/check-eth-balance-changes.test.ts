@@ -5,7 +5,7 @@ import { simulateNew as simulate } from '../../utils/clients/tenderly';
 import { checkEthBalanceChanges } from '../check-eth-balance-changes';
 
 describe('checkEthBalanceChanges', () => {
-  const integrationTest = process.env.RUN_TENDERLY_INTEGRATION_TESTS === '1' ? test : test.skip;
+  const integrationTest = process.env.RUN_RPC_INTEGRATION_TESTS === '1' ? test : test.skip;
 
   integrationTest(
     'should correctly handle ETH and ERC20 transfers to the same address',
@@ -48,7 +48,7 @@ describe('checkEthBalanceChanges', () => {
       const uniTokenMessage = result.info.find((msg) => msg.includes('UNI'));
       expect(uniTokenMessage).toBeUndefined();
 
-      expect(result.warnings).toHaveLength(0);
+      expect(result.warnings.join(' ')).toContain('Incomplete asset coverage:');
       expect(result.errors).toHaveLength(0);
     },
     30000,
@@ -73,8 +73,8 @@ describe('checkEthBalanceChanges', () => {
 
       // Check passes with info message when no ETH transfers detected
       expect(result.skipped).toBeUndefined();
-      expect(result.info).toContain('No ETH balance changes detected in this proposal.');
-      expect(result.warnings).toHaveLength(0);
+      expect(result.info).toContain('No native asset transfers detected in this proposal.');
+      expect(result.warnings.join(' ')).toContain('Incomplete asset coverage:');
       expect(result.errors).toHaveLength(0);
     },
     30000,

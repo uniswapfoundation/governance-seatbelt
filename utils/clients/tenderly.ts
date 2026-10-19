@@ -827,7 +827,7 @@ function buildSimulationPayload(params: SimulationPayloadParams): TenderlyPayloa
       args: executeInputs,
     }),
     gas: BLOCK_GAS_LIMIT,
-    gas_price: '0',
+    fund_synthetic_sender: true,
     value: '0', // Will be updated by handleETHValueRequirements if needed
     save_if_fails: false,
     save: false,
@@ -838,8 +838,8 @@ function buildSimulationPayload(params: SimulationPayloadParams): TenderlyPayloa
       timestamp: toHex(simTimestamp),
     },
     state_objects: {
-      // Since gas price is zero, the sender needs no balance. If the sender does need a balance to
-      // send ETH with the execution, this will be overridden later.
+      // The RPC layer adds the gas allowance for this artificial executor.
+      // ETH required by proposal calls is supplied separately below.
       [normalizedFrom]: { balance: '0' },
       // Ensure transactions are queued in the timelock
       [normalizedTimelockAddress]: {

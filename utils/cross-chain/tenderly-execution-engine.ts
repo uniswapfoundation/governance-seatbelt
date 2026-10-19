@@ -176,14 +176,20 @@ function buildDestinationSimulationPayload(
   workingState: SimulationStateObjects | undefined,
   blockNumber: number,
 ): TenderlyPayload {
+  const syntheticReceiver = execution.simulationSender === DEFAULT_CROSS_CHAIN_SIMULATION_SENDER;
+  if (syntheticReceiver && BigInt(call.l2Value) !== 0n) {
+    throw new Error(
+      'Nonzero receiver message value is unsupported without independent value funding',
+    );
+  }
   return {
     block_number: blockNumber,
     network_id: job.destinationChainId.toString() as TenderlyPayload['network_id'],
     from: execution.simulationSender ?? job.l2FromAddress ?? DEFAULT_CROSS_CHAIN_SIMULATION_SENDER,
     to: call.l2TargetAddress,
     input: call.l2InputData,
+    fund_synthetic_sender: syntheticReceiver,
     gas: BLOCK_GAS_LIMIT,
-    gas_price: '0',
     value: call.l2Value,
     save_if_fails: false,
     save: false,
