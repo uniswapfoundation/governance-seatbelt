@@ -33,25 +33,16 @@ function normalizeStateObjects(
   for (const [address, state] of Object.entries(stateObjects)) {
     const normalizedAddress = getAddress(address);
     const current = normalized[normalizedAddress] ?? {};
-    const balance =
-      typeof state.balance === 'string' && state.balance.length > 0 ? state.balance : undefined;
-
-    const normalizedState = {
+    const { balance, ...rest } = state;
+    normalized[normalizedAddress] = {
       ...current,
-      ...state,
-      ...(balance ? { balance } : {}),
+      ...rest,
+      ...(typeof balance === 'string' && balance.length > 0 ? { balance } : {}),
       storage: {
         ...(current.storage ?? {}),
         ...(state.storage ?? {}),
       },
     };
-
-    normalized[normalizedAddress] = balance
-      ? normalizedState
-      : {
-          ...normalizedState,
-          balance: undefined,
-        };
   }
 
   return normalized;
@@ -93,6 +84,7 @@ export function mergeStateObjects(
 export function extractStateOverridesFromSimulation(
   sim: TenderlySimulation,
 ): SimulationStateObjects {
+  if (sim.postState) return mergeStateObjects(sim.postState, undefined) ?? {};
   const overrides: SimulationStateObjects = {};
   const stateDiff = sim.transaction.transaction_info.state_diff ?? [];
 

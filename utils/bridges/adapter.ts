@@ -30,6 +30,7 @@ export type CrossChainBridgeExecutionContext = {
   job: CrossChainExecutionJob;
   workingState: SimulationStateObjects | undefined;
   sourceTimestamp: bigint;
+  blockNumber?: bigint;
   runtimeStore: CrossChainBridgeRuntimeStore;
 };
 

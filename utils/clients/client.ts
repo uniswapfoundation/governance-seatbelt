@@ -1,4 +1,4 @@
-import { http, createPublicClient } from 'viem';
+import { http, createPublicClient, custom } from 'viem';
 import type { PublicClient, Transport } from 'viem';
 import {
   arbitrum,
@@ -56,43 +56,25 @@ export interface ChainConfig {
   rpcUrl: string;
 }
 
-const MAINNET_RPC_URL = process.env.MAINNET_RPC_URL || 'https://ethereum-rpc.publicnode.com';
-const ARBITRUM_RPC_URL = process.env.ARBITRUM_RPC_URL || arbitrum.rpcUrls.default.http[0];
-const ROBINHOOD_RPC_URL = process.env.ROBINHOOD_RPC_URL || robinhood.rpcUrls.default.http[0];
-
-const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
-const OPTIMISM_RPC_URL =
-  process.env.OPTIMISM_RPC_URL ||
-  (ALCHEMY_API_KEY
-    ? `https://opt-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
-    : 'https://mainnet.optimism.io');
-const BASE_RPC_URL =
-  process.env.BASE_RPC_URL ||
-  (ALCHEMY_API_KEY
-    ? `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
-    : 'https://mainnet.base.org');
-const UNICHAIN_RPC_URL =
-  process.env.UNICHAIN_RPC_URL ||
-  (ALCHEMY_API_KEY
-    ? `https://unichain-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
-    : 'https://mainnet.unichain.org');
-const INK_RPC_URL =
-  process.env.INK_RPC_URL ||
-  (ALCHEMY_API_KEY
-    ? `https://ink-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
-    : 'https://rpc-gel.inkonchain.com');
-const SONEIUM_RPC_URL = process.env.SONEIUM_RPC_URL || soneium.rpcUrls.default.http[0];
-const BOB_RPC_URL = process.env.BOB_RPC_URL || 'https://bob.drpc.org';
-const BSC_RPC_URL = process.env.BSC_RPC_URL || 'https://bsc-dataseed1.bnbchain.org';
-const CELO_RPC_URL = process.env.CELO_RPC_URL || celo.rpcUrls.default.http[0];
-const POLYGON_RPC_URL = process.env.POLYGON_RPC_URL || 'https://polygon-bor-rpc.publicnode.com';
-const AVALANCHE_RPC_URL = process.env.AVALANCHE_RPC_URL || avalanche.rpcUrls.default.http[0];
-const MONAD_RPC_URL = process.env.MONAD_RPC_URL || monad.rpcUrls.default.http[0];
-const TEMPO_RPC_URL = process.env.TEMPO_RPC_URL || tempo.rpcUrls.default.http[0];
-const MEGAETH_RPC_URL = process.env.MEGAETH_RPC_URL || megaeth.rpcUrls.default.http[0];
-const WORLDCHAIN_RPC_URL = process.env.WORLDCHAIN_RPC_URL || worldchain.rpcUrls.default.http[0];
-const ZORA_RPC_URL = process.env.ZORA_RPC_URL || zora.rpcUrls.default.http[0];
-const XLAYER_RPC_URL = process.env.XLAYER_RPC_URL || xLayer.rpcUrls.default.http[0];
+const MAINNET_RPC_URL = process.env.QUICKNODE_RPC_URL || '';
+const ARBITRUM_RPC_URL = process.env.ARBITRUM_RPC_URL || '';
+const ROBINHOOD_RPC_URL = process.env.ROBINHOOD_RPC_URL || '';
+const OPTIMISM_RPC_URL = process.env.OPTIMISM_RPC_URL || '';
+const BASE_RPC_URL = process.env.BASE_RPC_URL || '';
+const UNICHAIN_RPC_URL = process.env.UNICHAIN_RPC_URL || '';
+const INK_RPC_URL = process.env.INK_RPC_URL || '';
+const SONEIUM_RPC_URL = process.env.SONEIUM_RPC_URL || '';
+const BOB_RPC_URL = process.env.BOB_RPC_URL || '';
+const BSC_RPC_URL = process.env.BSC_RPC_URL || '';
+const CELO_RPC_URL = process.env.CELO_RPC_URL || '';
+const POLYGON_RPC_URL = process.env.POLYGON_RPC_URL || '';
+const AVALANCHE_RPC_URL = process.env.AVALANCHE_RPC_URL || '';
+const MONAD_RPC_URL = process.env.MONAD_RPC_URL || '';
+const TEMPO_RPC_URL = process.env.TEMPO_RPC_URL || '';
+const MEGAETH_RPC_URL = process.env.MEGAETH_RPC_URL || '';
+const WORLDCHAIN_RPC_URL = process.env.WORLDCHAIN_RPC_URL || '';
+const ZORA_RPC_URL = process.env.ZORA_RPC_URL || '';
+const XLAYER_RPC_URL = process.env.XLAYER_RPC_URL || '';
 
 const ETHERSCAN_V2_API_URL = 'https://api.etherscan.io/v2/api';
 
@@ -160,7 +142,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       apiUrl: ETHERSCAN_V2_API_URL,
       apiKey: process.env.ETHERSCAN_API_KEY,
     },
-    rpcUrl: process.env.ARC_RPC_URL || 'https://rpc.mainnet.arc.io',
+    rpcUrl: process.env.ARC_RPC_URL || '',
   },
   [mainnet.id]: {
     chainId: mainnet.id,
@@ -439,86 +421,146 @@ export function resolveVerificationConfig(config: ChainConfig): ResolvedVerifica
   };
 }
 
+function rpcTransport(url: string, chainId: number): Transport {
+  if (url) {
+    const transport = http(url)({ retryCount: 0 });
+    return custom(
+      {
+        async request(args) {
+          try {
+            // QuickNode limits eth_getLogs to 10,000 blocks. Preserve the requested range.
+            if (args.method === 'eth_getLogs') {
+              const [filter] = args.params as [
+                { fromBlock?: string; toBlock?: string; blockHash?: string },
+              ];
+              if (!filter.blockHash && filter.fromBlock?.startsWith('0x')) {
+                const end =
+                  filter.toBlock === 'latest' || !filter.toBlock
+                    ? BigInt((await transport.request({ method: 'eth_blockNumber' })) as string)
+                    : filter.toBlock.startsWith('0x')
+                      ? BigInt(filter.toBlock)
+                      : undefined;
+                const start = BigInt(filter.fromBlock);
+                if (end !== undefined && end - start >= 10000n) {
+                  const logs: unknown[] = [];
+                  for (let from = start; from <= end; from += 10000n) {
+                    const to = from + 9999n < end ? from + 9999n : end;
+                    logs.push(
+                      ...((await transport.request({
+                        ...args,
+                        params: [
+                          {
+                            ...filter,
+                            fromBlock: `0x${from.toString(16)}`,
+                            toBlock: `0x${to.toString(16)}`,
+                          },
+                        ],
+                      })) as unknown[]),
+                    );
+                  }
+                  return logs;
+                }
+              }
+            }
+            return await transport.request(args);
+          } catch {
+            throw new Error(`RPC ${args.method} failed on chain ${chainId}`);
+          }
+        },
+      },
+      { retryCount: 0 },
+    );
+  }
+  return custom(
+    {
+      async request() {
+        throw new Error(`RPC endpoint is not configured for chain ${chainId}`);
+      },
+    },
+    { retryCount: 0 },
+  );
+}
+
 const clients = {
   [mainnet.id]: createPublicClient({
     chain: mainnet,
-    transport: http(CHAIN_CONFIGS[mainnet.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[mainnet.id].rpcUrl, mainnet.id),
   }),
   [arbitrum.id]: createPublicClient({
     chain: arbitrum,
-    transport: http(CHAIN_CONFIGS[arbitrum.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[arbitrum.id].rpcUrl, arbitrum.id),
   }),
   [robinhood.id]: createPublicClient({
     chain: robinhood,
-    transport: http(CHAIN_CONFIGS[robinhood.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[robinhood.id].rpcUrl, robinhood.id),
   }),
   [optimism.id]: createPublicClient({
     chain: optimism,
-    transport: http(CHAIN_CONFIGS[optimism.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[optimism.id].rpcUrl, optimism.id),
   }),
   [base.id]: createPublicClient({
     chain: base,
-    transport: http(CHAIN_CONFIGS[base.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[base.id].rpcUrl, base.id),
   }),
   [unichain.id]: createPublicClient({
     chain: unichain,
-    transport: http(CHAIN_CONFIGS[unichain.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[unichain.id].rpcUrl, unichain.id),
   }),
   [ink.id]: createPublicClient({
     chain: ink,
-    transport: http(CHAIN_CONFIGS[ink.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[ink.id].rpcUrl, ink.id),
   }),
   [soneium.id]: createPublicClient({
     chain: soneium,
-    transport: http(CHAIN_CONFIGS[soneium.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[soneium.id].rpcUrl, soneium.id),
   }),
   [bob.id]: createPublicClient({
     chain: bob,
-    transport: http(CHAIN_CONFIGS[bob.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[bob.id].rpcUrl, bob.id),
   }),
   [bsc.id]: createPublicClient({
     chain: bsc,
-    transport: http(CHAIN_CONFIGS[bsc.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[bsc.id].rpcUrl, bsc.id),
   }),
   [celo.id]: createPublicClient({
     chain: celo,
-    transport: http(CHAIN_CONFIGS[celo.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[celo.id].rpcUrl, celo.id),
   }),
   [polygon.id]: createPublicClient({
     chain: polygon,
-    transport: http(CHAIN_CONFIGS[polygon.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[polygon.id].rpcUrl, polygon.id),
   }),
   [avalanche.id]: createPublicClient({
     chain: avalanche,
-    transport: http(CHAIN_CONFIGS[avalanche.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[avalanche.id].rpcUrl, avalanche.id),
   }),
   [monad.id]: createPublicClient({
     chain: monad,
-    transport: http(CHAIN_CONFIGS[monad.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[monad.id].rpcUrl, monad.id),
   }),
   [arc.id]: createPublicClient({
     chain: arc,
-    transport: http(CHAIN_CONFIGS[arc.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[arc.id].rpcUrl, arc.id),
   }),
   [tempo.id]: createPublicClient({
     chain: tempo,
-    transport: http(CHAIN_CONFIGS[tempo.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[tempo.id].rpcUrl, tempo.id),
   }),
   [megaeth.id]: createPublicClient({
     chain: megaeth,
-    transport: http(CHAIN_CONFIGS[megaeth.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[megaeth.id].rpcUrl, megaeth.id),
   }),
   [worldchain.id]: createPublicClient({
     chain: worldchain,
-    transport: http(CHAIN_CONFIGS[worldchain.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[worldchain.id].rpcUrl, worldchain.id),
   }),
   [zora.id]: createPublicClient({
     chain: zora,
-    transport: http(CHAIN_CONFIGS[zora.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[zora.id].rpcUrl, zora.id),
   }),
   [xLayer.id]: createPublicClient({
     chain: xLayer,
-    transport: http(CHAIN_CONFIGS[xLayer.id].rpcUrl),
+    transport: rpcTransport(CHAIN_CONFIGS[xLayer.id].rpcUrl, xLayer.id),
   }),
 } satisfies ClientRegistry;
 

@@ -24,109 +24,88 @@ import { getCanonicalChainName } from './chain-name';
 
 type ChainCapability = {
   supportsL2Checks: boolean;
-  supportsTenderlyDestinationSimulation: boolean;
   isOpStackDestination: boolean;
 };
 
 const CHAIN_CAPABILITIES: Record<number, ChainCapability> = {
   [arc.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: false,
   },
   [mainnet.id]: {
     supportsL2Checks: false,
-    supportsTenderlyDestinationSimulation: false,
     isOpStackDestination: false,
   },
   [optimism.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: true,
   },
   [base.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: true,
   },
   [arbitrum.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: false,
   },
   [robinhood.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: false,
   },
   [unichain.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: true,
   },
   [ink.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: true,
   },
   [soneium.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: true,
   },
   [bob.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: true,
   },
   [bsc.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: false,
   },
   [celo.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: true,
   },
   [polygon.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: false,
   },
   [avalanche.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: false,
   },
   [monad.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: false,
   },
   [tempo.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: false,
   },
   [megaeth.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: false,
   },
   [worldchain.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: true,
   },
   [xLayer.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: true,
     isOpStackDestination: true,
   },
   [zora.id]: {
     supportsL2Checks: true,
-    supportsTenderlyDestinationSimulation: false,
     isOpStackDestination: true,
   },
 };
@@ -150,10 +129,6 @@ export function getChainName(chainId: number): string {
 
 export function supportsL2Checks(chainId: number): boolean {
   return CHAIN_CAPABILITIES[chainId]?.supportsL2Checks ?? false;
-}
-
-export function supportsTenderlyDestinationSimulation(chainId: number): boolean {
-  return CHAIN_CAPABILITIES[chainId]?.supportsTenderlyDestinationSimulation ?? false;
 }
 
 export function getOpStackDestinationChainIds(): number[] {

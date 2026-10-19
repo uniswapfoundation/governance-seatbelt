@@ -10,7 +10,9 @@ const require = createRequire(import.meta.url);
 const [compilerPath, expectedCompilerVersion] = process.argv.slice(2);
 const compiler = wrapper(require(compilerPath));
 if (compiler.version().split('.Emscripten')[0] !== expectedCompilerVersion) process.exit(1);
-const { input, contractName, fileName, runtime } = JSON.parse(readFileSync(0, 'utf8'));
+const { input, contractName, fileName, runtime, allowSourceHashMismatch } = JSON.parse(
+  readFileSync(0, 'utf8'),
+);
 
 // Blockscout also returns libraries as file:library -> address.
 const libraries = {};
@@ -35,7 +37,10 @@ function findVerifiedLayout(output, compilerInput, unlinkedOutput = output) {
   for (const [file, contracts] of Object.entries(output.contracts ?? {})) {
     if (fileName && file !== fileName) continue;
     const compiledContract = contracts[contractName];
-    if (!compiledContract || !matchesRuntime(compiledContract.evm.deployedBytecode, runtime))
+    if (
+      !compiledContract ||
+      !matchesRuntime(compiledContract.evm.deployedBytecode, runtime, allowSourceHashMismatch)
+    )
       continue;
     const contractAst = output.sources[file].ast.nodes.find(
       (node) => node.nodeType === 'ContractDefinition' && node.name === contractName,

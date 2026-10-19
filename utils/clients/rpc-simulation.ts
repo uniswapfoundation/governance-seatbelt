@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { type Hex, getAddress, pad, toHex } from 'viem';
 import type { CallTrace, StateDiff, TenderlyPayload, TenderlySimulation } from '../../types';
 import { z } from '../validation/zod';
-import { BlockExplorerFactory } from './block-explorers/factory';
 import { getChainConfig } from './client';
+import { getRpcAssetChanges } from './rpc-assets';
 
 export async function simulationRpc<T>(
   chainId: number,
@@ -30,14 +30,14 @@ export async function simulationRpc<T>(
   }
 }
 
-type RpcLog = {
+export type RpcLog = {
   address: string;
   topics: string[];
   data: string;
   index?: number | string;
   position?: Hex;
 };
-type RpcTrace = {
+export type RpcTrace = {
   from: string;
   to?: string;
   input: string;
@@ -56,22 +56,35 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
   if (Number(BigInt(await simulationRpc<Hex>(chainId, 'eth_chainId', []))) !== chainId) {
     throw new Error(`Simulation RPC chain identity mismatch for ${chainId}`);
   }
-  if (payload.transaction_index !== undefined || payload.contracts?.length) {
-    throw new Error('RPC simulation does not support transaction-index replay or source overrides');
+  if (
+    payload.contracts?.length ||
+    (payload.transaction_index !== undefined && !payload.transaction_hash)
+  ) {
+    throw new Error('RPC replay requires a transaction hash; source overrides are unsupported');
+  }
+  if (
+    payload.transaction_hash &&
+    (Object.keys(payload.state_objects ?? {}).length || payload.block_header)
+  ) {
+    throw new Error(
+      'Historical transaction replay cannot apply hypothetical state or block overrides',
+    );
   }
   const blockNumber =
     payload.block_number ??
     Number(BigInt(await simulationRpc<Hex>(chainId, 'eth_blockNumber', [])));
   const baseBlock = toHex(blockNumber);
-  const block = await simulationRpc<{ timestamp: Hex }>(chainId, 'eth_getBlockByNumber', [
-    baseBlock,
-    false,
-  ]);
+  const block = await simulationRpc<{ timestamp: Hex; baseFeePerGas?: Hex }>(
+    chainId,
+    'eth_getBlockByNumber',
+    [baseBlock, false],
+  );
   const states = Object.fromEntries(
     Object.entries(payload.state_objects ?? {}).map(([address, state]) => [
       getAddress(address),
       {
         ...(state.balance !== undefined ? { balance: toHex(BigInt(state.balance)) } : {}),
+        ...(state.nonce !== undefined ? { nonce: toHex(state.nonce) } : {}),
         ...(state.code !== undefined ? { code: state.code } : {}),
         ...(state.storage ? { stateDiff: state.storage } : {}),
       },
@@ -82,43 +95,50 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
     to: payload.to,
     input: payload.input,
     gas: toHex(payload.gas),
-    gasPrice: '0x0',
+    gasPrice: toHex(BigInt(payload.gas_price ?? 0)),
     value: toHex(BigInt(payload.value ?? 0)),
   };
   const blockOverrides = {
-    baseFeePerGas: '0x0',
+    baseFeePerGas: BigInt(payload.gas_price ?? 0) === 0n ? '0x0' : (block.baseFeePerGas ?? '0x0'),
     ...(payload.block_header?.number ? { number: payload.block_header.number } : {}),
     ...(payload.block_header?.timestamp ? { time: payload.block_header.timestamp } : {}),
   };
   const options = { stateOverrides: states, blockOverrides };
-  const trace = await simulationRpc<RpcTrace>(chainId, 'debug_traceCall', [
-    call,
-    baseBlock,
-    { ...options, tracer: 'callTracer', tracerConfig: { withLog: true } },
-  ]);
-  const diff = await simulationRpc<{
+  const traceWith = <T>(tracerOptions: Record<string, unknown>) =>
+    payload.transaction_hash
+      ? simulationRpc<T>(chainId, 'debug_traceTransaction', [
+          payload.transaction_hash,
+          tracerOptions,
+        ])
+      : simulationRpc<T>(chainId, 'debug_traceCall', [
+          call,
+          baseBlock,
+          { ...options, ...tracerOptions },
+        ]);
+  const trace = await traceWith<RpcTrace>({
+    tracer: 'callTracer',
+    tracerConfig: { withLog: true },
+  });
+  const diff = await traceWith<{
     pre: Record<string, RpcAccount>;
     post: Record<string, RpcAccount>;
-  }>(chainId, 'debug_traceCall', [
-    call,
-    baseBlock,
-    { ...options, tracer: 'prestateTracer', tracerConfig: { diffMode: true } },
-  ]);
-  const accounts = await simulationRpc<Record<string, RpcAccount>>(chainId, 'debug_traceCall', [
-    call,
-    baseBlock,
-    { ...options, tracer: 'prestateTracer' },
-  ]);
+  }>({
+    tracer: 'prestateTracer',
+    tracerConfig: { diffMode: true },
+  });
+  const accounts = await traceWith<Record<string, RpcAccount>>({ tracer: 'prestateTracer' });
   const logs: RpcLog[] = [];
   const addresses = new Set<string>([getAddress(payload.from), getAddress(payload.to)]);
-  function normalizeCall(frame: RpcTrace): CallTrace {
+  function normalizeCall(frame: RpcTrace, parentCommitted = true): CallTrace {
+    const committed = parentCommitted && !frame.error;
     addresses.add(getAddress(frame.from));
     if (frame.to) addresses.add(getAddress(frame.to));
     const children = frame.calls ?? [];
     const calls: CallTrace[] = [];
     for (let i = 0; i <= children.length; i++) {
-      logs.push(...(frame.logs ?? []).filter((log) => Number(BigInt(log.position ?? 0)) === i));
-      if (children[i]) calls.push(normalizeCall(children[i]));
+      if (committed)
+        logs.push(...(frame.logs ?? []).filter((log) => Number(BigInt(log.position ?? 0)) === i));
+      if (children[i]) calls.push(normalizeCall(children[i], committed));
     }
     return {
       from: frame.from,
@@ -135,6 +155,7 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
     logs.sort((a, b) => Number(BigInt(a.index!)) - Number(BigInt(b.index!)));
   const stateDiff: StateDiff[] = [];
   const contracts: TenderlySimulation['contracts'] = [];
+  const postState: NonNullable<TenderlySimulation['postState']> = {};
   const word = (value: Hex | undefined) => pad(value ?? '0x0', { size: 32 });
   for (const address of new Set([
     ...Object.keys(accounts),
@@ -144,26 +165,43 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
     addresses.add(getAddress(address));
     const pre = diff.pre[address];
     const post = diff.post[address];
+    if (pre || post) {
+      const deleted = !!pre && !post;
+      postState[getAddress(address)] = {
+        ...(post?.balance !== undefined
+          ? { balance: BigInt(post.balance).toString() }
+          : deleted
+            ? { balance: '0' }
+            : {}),
+        ...(post?.code !== undefined ? { code: post.code } : deleted ? { code: '0x' } : {}),
+        ...(post?.nonce !== undefined ? { nonce: post.nonce } : deleted ? { nonce: 0 } : {}),
+        storage: {},
+      };
+    }
     for (const key of new Set([
       ...Object.keys(pre?.storage ?? {}),
       ...Object.keys(post?.storage ?? {}),
     ])) {
       const original = word(pre?.storage?.[key as Hex]);
       const dirty = word(post?.storage?.[key as Hex]);
+      postState[getAddress(address)].storage![key] = dirty;
       stateDiff.push({ soltype: null, original, dirty, raw: [{ address, key, original, dirty }] });
     }
-    const code = accounts[address]?.code ?? pre?.code ?? post?.code;
+    const code = post?.code ?? accounts[address]?.code ?? pre?.code;
     if (code && code !== '0x') {
       contracts.push({
         address: getAddress(address),
-        contract_name: (await BlockExplorerFactory.fetchContractName(address, chainId)) ?? '',
+        contract_name: '',
         deployed_bytecode: code,
       });
     }
   }
+  const assets = await getRpcAssetChanges(trace, logs, chainId, BigInt(blockNumber));
   const id = `rpc-${randomUUID()}`;
   return {
     provider: 'rpc',
+    postState,
+    assetWarnings: assets.warnings,
     simulation: {
       id,
       network_id: String(chainId),
@@ -172,7 +210,7 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
       to: payload.to,
       input: payload.input,
       gas: payload.gas,
-      gas_price: '0',
+      gas_price: payload.gas_price ?? '0',
       value: payload.value ?? '0',
       status: !trace.error,
     },
@@ -198,8 +236,16 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
           raw: { address, topics, data },
         })),
         state_diff: stateDiff,
-        asset_changes: null,
-        balance_changes: null,
+        asset_changes: assets.changes,
+        balance_changes: [
+          ...new Set(assets.changes.flatMap((change) => [change.from, change.to])),
+        ].map((address) => ({
+          address,
+          dollar_value: '',
+          transfers: assets.changes.flatMap((change, index) =>
+            change.from === address || change.to === address ? [index] : [],
+          ),
+        })),
       },
     },
     contracts,

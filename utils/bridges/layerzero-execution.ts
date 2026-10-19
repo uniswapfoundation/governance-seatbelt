@@ -86,6 +86,7 @@ export async function prepareLayerZeroExecution(
       abi: LAYER_ZERO_TRUSTED_REMOTE_LOOKUP_ABI,
       functionName: 'trustedRemoteLookup',
       args: [trustedRemote.sourceRemoteChainId],
+      blockNumber: context.blockNumber,
     });
 
     if (typeof result !== 'string' || !isHex(result)) {

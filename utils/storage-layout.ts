@@ -89,7 +89,11 @@ async function downloadCompiler(version: string): Promise<string> {
   return path;
 }
 
-async function compile(source: SoliditySource, runtime: Hex): Promise<unknown> {
+async function compile(
+  source: SoliditySource,
+  runtime: Hex,
+  allowSourceHashMismatch: boolean,
+): Promise<unknown> {
   let pending = compilers.get(source.compilerVersion);
   if (!pending) {
     pending = downloadCompiler(source.compilerVersion);
@@ -136,6 +140,7 @@ async function compile(source: SoliditySource, runtime: Hex): Promise<unknown> {
       JSON.stringify({
         input,
         runtime,
+        allowSourceHashMismatch,
         contractName: source.contractName,
         fileName: source.fileName,
       }),
@@ -148,13 +153,17 @@ export async function getVerifiedStorageLayout(
   address: string,
   chainId: number,
   runtime: Hex,
+  allowSourceHashMismatch = false,
 ): Promise<VerifiedLayout | null> {
   const hash = keccak256(runtime);
-  const key = `${chainId}:${getAddress(address)}:${hash}`;
+  const directory = allowSourceHashMismatch
+    ? 'cache/storage-encoding-layouts'
+    : 'cache/storage-layouts-v2';
+  const key = `${directory}:${chainId}:${getAddress(address)}:${hash}`;
   const cached = layouts.get(key);
   if (cached) return cached;
   const pending = (async () => {
-    const path = resolve('cache/storage-layouts-v2', `${chainId}-${getAddress(address)}-${hash}.json`);
+    const path = resolve(directory, `${chainId}-${getAddress(address)}-${hash}.json`);
     try {
       return verifiedLayoutSchema.parse(JSON.parse(await readFile(path, 'utf8')));
     } catch {
@@ -164,14 +173,14 @@ export async function getVerifiedStorageLayout(
       try {
         const source = await provider.fetchContractSource?.(address, chainId);
         if (!source) continue;
-        const compiled = await compile(source, runtime);
+        const compiled = await compile(source, runtime, allowSourceHashMismatch);
         if (!compiled) continue;
         const result = verifiedLayoutSchema.parse({
           ...(compiled as object),
           source: provider.getName(),
           compilerVersion: source.compilerVersion,
         });
-        await mkdir(resolve('cache/storage-layouts-v2'), { recursive: true });
+        await mkdir(resolve(directory), { recursive: true });
         await writeFile(path, JSON.stringify(result));
         return result;
       } catch {

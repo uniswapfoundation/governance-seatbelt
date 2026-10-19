@@ -12,8 +12,9 @@ import {
   getCrossChainBridgeAdapter,
   getCrossChainBridgeAdapters,
 } from '../bridges/adapter';
-import { supportsTenderlyDestinationSimulation } from '../chains/capabilities';
-import { getTenderlySaveFlags, sendSimulation } from '../clients/tenderly-api';
+import { findBlockNumberAtOrBeforeTimestamp } from '../bridges/wormhole-execution';
+import { supportsL2Checks } from '../chains/capabilities';
+import { sendSimulation } from '../clients/tenderly-api';
 import { BLOCK_GAS_LIMIT } from '../constants';
 import {
   type DerivedStateByChain,
@@ -125,7 +126,7 @@ function getDestinationFailureReason(sim: TenderlySimulation): string {
   if (stackReason?.error_reason?.trim()) return stackReason.error_reason;
   if (stackReason?.error?.trim()) return stackReason.error;
 
-  return 'Destination job failed (no detailed error returned by Tenderly).';
+  return 'Destination job failed (no detailed error returned by RPC).';
 }
 
 function buildSkippedDestinationJobResult(
@@ -137,7 +138,7 @@ function buildSkippedDestinationJobResult(
     job,
     status: 'skipped',
     stepResults: [],
-    error: `Skipping destination job: chain ${job.destinationChainId} is not currently supported in this Tenderly workflow.`,
+    error: `Skipping destination job: chain ${job.destinationChainId} is not supported by the destination checks.`,
   };
 }
 
@@ -173,10 +174,10 @@ function buildDestinationSimulationPayload(
   call: CrossChainExecutionJob['calls'][number],
   execution: CrossChainBridgePreparedExecution,
   workingState: SimulationStateObjects | undefined,
+  blockNumber: number,
 ): TenderlyPayload {
-  const { save, saveIfFails } = getTenderlySaveFlags(true);
-
   return {
+    block_number: blockNumber,
     network_id: job.destinationChainId.toString() as TenderlyPayload['network_id'],
     from: execution.simulationSender ?? job.l2FromAddress ?? DEFAULT_CROSS_CHAIN_SIMULATION_SENDER,
     to: call.l2TargetAddress,
@@ -184,8 +185,8 @@ function buildDestinationSimulationPayload(
     gas: BLOCK_GAS_LIMIT,
     gas_price: '0',
     value: call.l2Value,
-    save_if_fails: saveIfFails,
-    save,
+    save_if_fails: false,
+    save: false,
     state_objects: execution.getStateObjects?.(workingState) ?? workingState,
   };
 }
@@ -197,8 +198,15 @@ async function simulateDestinationCall(
   workingState: SimulationStateObjects | undefined,
   stepIndex: number,
   totalSteps: number,
+  blockNumber: number,
 ): Promise<TenderlySimulation> {
-  const payload = buildDestinationSimulationPayload(job, call, execution, workingState);
+  const payload = buildDestinationSimulationPayload(
+    job,
+    call,
+    execution,
+    workingState,
+    blockNumber,
+  );
 
   console.log(
     `[CrossChainHandler] Sending L2 Simulation Payload (Chain ${payload.network_id}, Step ${stepIndex + 1}/${totalSteps}):`,
@@ -213,6 +221,7 @@ async function executeDestinationJob(
   committedState: SimulationStateObjects | undefined,
   runtimeStore: CrossChainBridgeRuntimeStore,
   sourceTimestamp: bigint,
+  blockNumber: number,
 ): Promise<DestinationJobExecutionOutcome> {
   let workingState = mergeStateObjects(committedState, undefined);
   const stepResults: CrossChainExecutionJobResult['stepResults'] = [];
@@ -228,6 +237,7 @@ async function executeDestinationJob(
         job,
         workingState,
         sourceTimestamp,
+        blockNumber: BigInt(blockNumber),
         runtimeStore,
       });
     }
@@ -263,6 +273,7 @@ async function executeDestinationJob(
         workingState,
         stepIndex,
         stepCalls.length,
+        blockNumber,
       );
 
       if (!destSim.transaction.status) {
@@ -389,6 +400,7 @@ export async function handleCrossChainSimulations<
     `[CrossChainHandler] Detected ${extractedJobs.length} execution jobs. Executing destination jobs...`,
   );
 
+  const blocksByChain = new Map<number, number>();
   for (const job of extractedJobs) {
     const destinationChainId = job.destinationChainId;
     const targetSummary = job.calls.map((call) => call.l2TargetAddress).join(', ');
@@ -396,18 +408,41 @@ export async function handleCrossChainSimulations<
       `[CrossChainHandler] Executing destination job on chain ${destinationChainId}: ${targetSummary}`,
     );
 
-    if (!supportsTenderlyDestinationSimulation(destinationChainId)) {
+    if (!supportsL2Checks(destinationChainId)) {
       const skippedResult = buildSkippedDestinationJobResult(job);
       console.warn(`[CrossChainHandler] ${skippedResult.error}`);
       destinationResults.push(skippedResult);
       continue;
     }
 
+    let blockNumber = blocksByChain.get(destinationChainId);
+    if (blockNumber === undefined) {
+      try {
+        blockNumber = Number(
+          await findBlockNumberAtOrBeforeTimestamp(
+            destinationChainId,
+            result.simulationTimestamp ?? result.latestBlock.timestamp,
+          ),
+        );
+        blocksByChain.set(destinationChainId, blockNumber);
+      } catch {
+        destinationResults.push({
+          chainId: destinationChainId,
+          bridgeType: job.bridgeType,
+          job,
+          status: 'failure',
+          stepResults: [],
+          error: `RPC block lookup failed on chain ${destinationChainId}`,
+        });
+        continue;
+      }
+    }
     const executionOutcome = await executeDestinationJob(
       job,
       committedStateByChain[destinationChainId],
       runtimeStore,
       result.simulationTimestamp ?? result.latestBlock.timestamp,
+      blockNumber,
     );
     if (executionOutcome.status === 'success' && executionOutcome.committedState) {
       committedStateByChain[destinationChainId] = executionOutcome.committedState;

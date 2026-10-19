@@ -68,7 +68,7 @@ export const checkTreasuryMovement: ProposalCheck = {
       };
     }
     const info: string[] = [];
-    const warnings: string[] = [];
+    const warnings: string[] = [...(sim.assetWarnings ?? [])];
     const errors: string[] = [];
 
     const { treasuryAddresses, thresholds } = getTreasuryMovementConfig({
