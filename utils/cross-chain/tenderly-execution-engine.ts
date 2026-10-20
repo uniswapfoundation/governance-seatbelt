@@ -22,6 +22,7 @@ import {
   extractStateOverridesFromSimulation,
   mergeStateObjects,
 } from '../derived-state';
+import { getTreasuryMovementConfig } from '../treasury-movement';
 
 export interface TenderlySimulationExecutionOptions {
   derivedStateByChain?: DerivedStateByChain;
@@ -175,6 +176,7 @@ function buildDestinationSimulationPayload(
   execution: CrossChainBridgePreparedExecution,
   workingState: SimulationStateObjects | undefined,
   blockNumber: number,
+  balanceAddresses: Address[],
 ): TenderlyPayload {
   const syntheticReceiver = execution.simulationSender === DEFAULT_CROSS_CHAIN_SIMULATION_SENDER;
   if (syntheticReceiver && BigInt(call.l2Value) !== 0n) {
@@ -189,6 +191,7 @@ function buildDestinationSimulationPayload(
     to: call.l2TargetAddress,
     input: call.l2InputData,
     fund_synthetic_sender: syntheticReceiver,
+    balance_addresses: balanceAddresses,
     gas: BLOCK_GAS_LIMIT,
     value: call.l2Value,
     save_if_fails: false,
@@ -205,6 +208,7 @@ async function simulateDestinationCall(
   stepIndex: number,
   totalSteps: number,
   blockNumber: number,
+  balanceAddresses: Address[],
 ): Promise<TenderlySimulation> {
   const payload = buildDestinationSimulationPayload(
     job,
@@ -212,6 +216,7 @@ async function simulateDestinationCall(
     execution,
     workingState,
     blockNumber,
+    balanceAddresses,
   );
 
   console.log(
@@ -228,6 +233,7 @@ async function executeDestinationJob(
   runtimeStore: CrossChainBridgeRuntimeStore,
   sourceTimestamp: bigint,
   blockNumber: number,
+  balanceAddresses: Address[],
 ): Promise<DestinationJobExecutionOutcome> {
   let workingState = mergeStateObjects(committedState, undefined);
   const stepResults: CrossChainExecutionJobResult['stepResults'] = [];
@@ -280,6 +286,7 @@ async function executeDestinationJob(
         stepIndex,
         stepCalls.length,
         blockNumber,
+        balanceAddresses,
       );
 
       if (!destSim.transaction.status) {
@@ -449,6 +456,10 @@ export async function handleCrossChainSimulations<
       runtimeStore,
       result.simulationTimestamp ?? result.latestBlock.timestamp,
       blockNumber,
+      getTreasuryMovementConfig({
+        governorAddress: result.deps.governor.address,
+        chainId: destinationChainId,
+      }).treasuryAddresses,
     );
     if (executionOutcome.status === 'success' && executionOutcome.committedState) {
       committedStateByChain[destinationChainId] = executionOutcome.committedState;

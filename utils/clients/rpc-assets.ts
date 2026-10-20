@@ -3,6 +3,9 @@ import type { AssetChange } from '../../types';
 import { getClientForChain } from './client';
 import type { RpcLog, RpcTrace } from './rpc-simulation';
 
+export const ARC_USDC = '0x3600000000000000000000000000000000000000';
+const ARC_NATIVE_TRANSFER_EMITTER = '0xfffffffffffffffffffffffffffffffffffffffe';
+
 const transferTopic = keccak256(stringToHex('Transfer(address,address,uint256)'));
 const tokenAbi = parseAbi([
   'function symbol() view returns (string)',
@@ -61,6 +64,18 @@ export async function getRpcAssetChanges(
       !/^0x[0-9a-fA-F]{64}$/.test(log.data)
     )
       continue;
+    if (chainId === 5042 && log.address.toLowerCase() === ARC_NATIVE_TRANSFER_EMITTER) continue;
+    if (chainId === 5042 && log.address.toLowerCase() === ARC_USDC) {
+      // ERC-20 USDC transfers change the native balance and use six decimal places.
+      // Ignore the duplicate system event; ordinary native calls are covered by the trace.
+      add(
+        `0x${log.topics[1].slice(-40)}`,
+        `0x${log.topics[2].slice(-40)}`,
+        BigInt(log.data) * 10n ** 12n,
+        nativeToken,
+      );
+      continue;
+    }
     const address = getAddress(log.address);
     let token = tokens.get(address);
     if (!token) {
@@ -100,8 +115,5 @@ export async function getRpcAssetChanges(
     }
     add(`0x${log.topics[1].slice(-40)}`, `0x${log.topics[2].slice(-40)}`, BigInt(log.data), token);
   }
-  warnings.push(
-    'Incomplete asset coverage: native transfers come from call traces and ERC-20 transfers from Transfer events. Transfer events do not prove balance changes. Balance snapshots cover observed accounts and detected tokens only; unobserved holders and unsupported tokens remain unchecked. No detected transfers does not prove balances are unchanged. USD values and USD-based risk thresholds are unavailable.',
-  );
   return { changes, warnings };
 }

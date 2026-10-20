@@ -35,7 +35,9 @@ interface DecisionHeaderProps {
 
 export function DecisionHeader({ report }: DecisionHeaderProps) {
   const { hasArtifact, isGenerating, onShare } = useShareLink();
-  const checks = report.checks ?? [];
+  const checks = report.chainReports?.length
+    ? report.chainReports.flatMap((chain) => chain.checks)
+    : (report.checks ?? []);
   const skippedChecks = checks.filter((check) => check.status === 'skipped');
   const skippedCount = skippedChecks.length;
   const totalChecks = checks.length;

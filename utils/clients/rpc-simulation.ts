@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { type Hex, getAddress, pad, toHex } from 'viem';
 import type { CallTrace, StateDiff, TenderlyPayload, TenderlySimulation } from '../../types';
 import { z } from '../validation/zod';
@@ -6,28 +7,56 @@ import { getChainConfig } from './client';
 import { getRpcAssetChanges } from './rpc-assets';
 import { getRpcBalanceSnapshots } from './rpc-balances';
 
+// QuickNode limits traces to 25/s. Share a 20/s queue across simulations on each endpoint.
+const traceQueues = new Map<string, Promise<void>>();
+
+export class SimulationRpcError extends Error {}
+
 export async function simulationRpc<T>(
   chainId: number,
   method: string,
   params: unknown[],
 ): Promise<T> {
   try {
-    const response = await fetch(getChainConfig(chainId).rpcUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const body = z
-      .object({ result: z.unknown().optional(), error: z.object({ code: z.number() }).optional() })
-      .parse(await response.json());
-    if (body.error) throw new Error(`JSON-RPC ${body.error.code}`);
-    if (body.result === undefined) throw new Error('Missing result');
-    return body.result as T;
+    const url = getChainConfig(chainId).rpcUrl;
+    for (let attempt = 0; ; attempt++) {
+      if (method.startsWith('debug_trace')) {
+        const slot = (traceQueues.get(url) ?? Promise.resolve()).then(() => delay(50));
+        traceQueues.set(url, slot);
+        await slot;
+      }
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      const body = response.ok
+        ? z
+            .object({
+              result: z.unknown().optional(),
+              error: z.object({ code: z.number() }).optional(),
+            })
+            .parse(await response.json())
+        : undefined;
+      if (!response.ok) await response.body?.cancel();
+      if ((response.status === 429 || body?.error?.code === -32009) && attempt < 3) {
+        const retryAfter = response.headers.get('retry-after');
+        const retryMs = retryAfter
+          ? /^\d+(\.\d+)?$/.test(retryAfter)
+            ? Number(retryAfter) * 1000
+            : Date.parse(retryAfter) - Date.now()
+          : 0;
+        await delay(Math.min(30_000, Math.max(1000 * 2 ** attempt, retryMs || 0)));
+        continue;
+      }
+      if (!response.ok || body?.error || body?.result === undefined)
+        throw new Error('RPC request failed');
+      return body.result as T;
+    }
   } catch {
     // Transport errors can contain credential-bearing endpoint URLs.
-    throw new Error(`Simulation RPC ${method} failed on chain ${chainId}`);
+    throw new SimulationRpcError(`Simulation RPC ${method} failed on chain ${chainId}`);
   }
 }
 
@@ -106,10 +135,15 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
       },
     ]),
   );
-  // Celo debits the whole gas allowance before execution. Sponsoring exactly that
-  // allowance preserves the real bridge caller's EVM-visible balance.
+  // These clients debit the allowance before execution. Exactly funding it preserves
+  // a simulated bridge caller's EVM-visible balance. OP clients skip that debit.
+  const debitsGasUpfront = [1, 137, 143, 196, 42161, 42220, 43114, 4326, 4663].includes(chainId);
   const sponsorGas =
-    !payload.transaction_hash && (payload.fund_synthetic_sender || chainId === 42220);
+    !payload.transaction_hash &&
+    (payload.fund_synthetic_sender || (debitsGasUpfront && chainId !== 1));
+  // Arc traceCall refunds unused gas without debiting the allowance upfront.
+  const gasAllowance = BigInt(payload.gas) * BigInt(gasPrice ?? 0);
+  const gasFunding = sponsorGas && debitsGasUpfront ? gasAllowance : 0n;
   if (sponsorGas) {
     const sender = getAddress(payload.from);
     const state = states[sender] ?? {};
@@ -121,7 +155,7 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
     }
     states[sender] = {
       ...state,
-      balance: toHex(balance + BigInt(payload.gas) * BigInt(gasPrice ?? 0)),
+      balance: toHex(balance + gasFunding),
     };
   }
   const call = {
@@ -160,6 +194,14 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
     tracerConfig: { diffMode: true },
   });
   const accounts = await traceWith<Record<string, RpcAccount>>({ tracer: 'prestateTracer' });
+  // Nitro exposes internal fee accounting as a fictional account. Its RPC forbids
+  // overriding it; only EVM account state can be carried to the next call.
+  if (chainId === 42161 || chainId === 4663) {
+    const arbos = '0xa4b05fffffffffffffffffffffffffffffffffff';
+    delete accounts[arbos];
+    delete diff.pre[arbos];
+    delete diff.post[arbos];
+  }
   const logs: RpcLog[] = [];
   const addresses = new Set<string>([getAddress(payload.from), getAddress(payload.to)]);
   function normalizeCall(frame: RpcTrace, parentCommitted = true): CallTrace {
@@ -229,13 +271,19 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
       });
     }
   }
-  // Gas is sponsored: carried balances must reflect only proposal value flows.
-  // Remove unused sponsor funds refunded after Ethereum/Celo's upfront gas debit.
-  if (sponsorGas && (chainId === 1 || chainId === 42220)) {
+  // Remove gas refunds from sponsored execution. Arc also needs its uncharged
+  // allowance removed for ordinary trace calls, so their balance includes the real fee.
+  if (!payload.transaction_hash && (chainId === 5042 || (sponsorGas && debitsGasUpfront))) {
     const sender = getAddress(payload.from);
-    const refund = (BigInt(payload.gas) - BigInt(trace.gasUsed)) * BigInt(gasPrice ?? 0);
-    const balance = BigInt(postState[sender]?.balance ?? states[sender].balance!);
-    postState[sender] = { ...postState[sender], balance: (balance - refund).toString() };
+    const correction = sponsorGas
+      ? gasAllowance - BigInt(trace.gasUsed) * BigInt(gasPrice ?? 0)
+      : gasAllowance;
+    const balance = postState[sender]?.balance ?? accounts[sender.toLowerCase()]?.balance;
+    if (balance !== undefined)
+      postState[sender] = {
+        ...postState[sender],
+        balance: (BigInt(balance) - correction).toString(),
+      };
   }
   const assets = await getRpcAssetChanges(trace, logs, chainId, BigInt(blockNumber));
   const balances = await getRpcBalanceSnapshots({
@@ -246,7 +294,7 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
     changes: assets.changes,
     blockNumber,
     blockOverrides,
-    gasAllowance: sponsorGas ? BigInt(payload.gas) * BigInt(gasPrice ?? 0) : 0n,
+    gasFunding,
   });
   const id = `rpc-${randomUUID()}`;
   return {

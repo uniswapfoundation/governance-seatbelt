@@ -16,6 +16,7 @@ import {
   ChevronUpIcon,
   HelpCircleIcon,
   InfoIcon,
+  MinusIcon,
   SkipForwardIcon,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -50,9 +51,31 @@ export function ExpandableCheckItem({
   coverage?: CheckCoverage;
   permissionsDiff?: PermissionsDiffItem[];
 }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(
+    check.status === 'warning' &&
+      (check.data as { type?: string } | undefined)?.type === 'treasuryBalances/v2',
+  );
+
+  const balanceData = check.data as
+    | {
+        type?: string;
+        rows?: Array<{ change?: string | null }>;
+        checked?: unknown[];
+        steps?: Array<{ rows: Array<{ change: string | null }>; checked: unknown[] }>;
+      }
+    | undefined;
+  const isBalanceReport = ['treasuryBalances/v2', 'assetBalances/v3'].includes(
+    balanceData?.type ?? '',
+  );
+  const noBalanceChanges =
+    check.status === 'passed' &&
+    isBalanceReport &&
+    (balanceData?.steps ?? [balanceData]).every(
+      (step) => (step?.checked?.length ?? 0) > 0 && step?.rows?.every((row) => row.change === '0'),
+    );
 
   const getStatusIcon = () => {
+    if (noBalanceChanges) return <MinusIcon className="h-5 w-5 text-muted-foreground" />;
     switch (check.status) {
       case 'warning':
         return <AlertTriangleIcon className="h-5 w-5 text-yellow-500" />;
@@ -72,6 +95,12 @@ export function ExpandableCheckItem({
   };
 
   const getStatusBadge = () => {
+    if (noBalanceChanges)
+      return (
+        <Badge variant="outline" className="text-muted-foreground">
+          No changes
+        </Badge>
+      );
     switch (check.status) {
       case 'warning': {
         const hasWarningMessages = check.warnings && check.warnings.length > 0;
@@ -161,8 +190,6 @@ export function ExpandableCheckItem({
   const isProxyResolutionCheck = title.includes('proxy implementation');
   const isTreasuryMovementCheck =
     title.includes('treasury movement') || title.includes('treasury balance');
-  const isBalanceReport =
-    (check.data as { type?: string } | undefined)?.type === 'treasuryBalances/v1';
   const isPermissionChangesCheck = title.includes('permission changes');
 
   const outcome = getOutcome(check, coverage);
@@ -191,6 +218,12 @@ export function ExpandableCheckItem({
   }, [isTreasuryMovementCheck, check.data, check.details, check.warnings]);
 
   const getStatusStyles = () => {
+    if (noBalanceChanges)
+      return {
+        border: 'border border-border',
+        bg: 'bg-muted/20',
+        hoverBg: 'hover:bg-muted/50',
+      };
     switch (check.status) {
       case 'failed':
         return {
@@ -254,7 +287,7 @@ export function ExpandableCheckItem({
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <span className="hidden sm:block">{getStatusBadge()}</span>
+          <span className={noBalanceChanges ? 'block' : 'hidden sm:block'}>{getStatusBadge()}</span>
           {(check.details ||
             check.skipReason ||
             isTreasuryMovementCheck ||

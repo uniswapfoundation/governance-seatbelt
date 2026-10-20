@@ -376,6 +376,8 @@ export type TenderlyPayload = {
   gas_price?: string;
   /** Fund only an artificial executor; never enable for a real treasury or bridge caller. */
   fund_synthetic_sender?: boolean;
+  /** Additional accounts to measure even when execution does not touch them. */
+  balance_addresses?: Address[];
   value?: string;
   simulation_type?: 'full' | 'quick';
   save?: boolean;
