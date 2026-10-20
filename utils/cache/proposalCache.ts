@@ -5,7 +5,7 @@ import type { SimulationBlock, SimulationData } from '../../types';
 import type { CachedBlock, NeedsSimulationParams, ProposalCacheEntry } from './types';
 
 // Cache directory path
-const CACHE_DIR = join(process.cwd(), 'cache', 'rpc-v4');
+const CACHE_DIR = join(process.cwd(), 'cache', 'rpc-v5');
 
 // Ensure cache directory exists
 if (!existsSync(CACHE_DIR)) {

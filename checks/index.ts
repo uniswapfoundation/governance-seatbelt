@@ -1,5 +1,4 @@
 import type { ProposalCheck } from '../types';
-import { checkAssetBalances } from './check-asset-balances';
 import { checkDecodeCalldata } from './check-decode-calldata';
 import { checkEthBalanceChanges } from './check-eth-balance-changes';
 import { checkLogs } from './check-logs';
@@ -33,7 +32,6 @@ const ALL_CHECKS: {
   checkTouchedContractsNoSelfdestruct,
   checkValueRequired,
   checkEthBalanceChanges,
-  checkAssetBalances,
   checkTreasuryMovement,
   // The solc check must be run before the slither check, because the compilation exports a zip file
   // which is consumed by slither. This prevents us from having to compile the contracts twice.

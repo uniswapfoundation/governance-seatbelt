@@ -398,6 +398,8 @@ export interface TenderlySimulation {
   postState?: Record<string, StateObject>;
   assetWarnings?: string[];
   assetBalances?: AssetBalanceSnapshot[];
+  assetBalanceHistoricalReplay?: boolean;
+  assetBalanceUnavailableTokens?: { tokenAddress: string; reason: string }[];
   gasSponsored?: boolean;
   transaction: Transaction;
   simulation: Simulation;

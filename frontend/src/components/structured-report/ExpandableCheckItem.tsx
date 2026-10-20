@@ -159,7 +159,10 @@ export function ExpandableCheckItem({
     title.includes('verified on block explorer') ||
     title.includes('verification backend api');
   const isProxyResolutionCheck = title.includes('proxy implementation');
-  const isTreasuryMovementCheck = title.includes('treasury movement');
+  const isTreasuryMovementCheck =
+    title.includes('treasury movement') || title.includes('treasury balance');
+  const isBalanceReport =
+    (check.data as { type?: string } | undefined)?.type === 'treasuryBalances/v1';
   const isPermissionChangesCheck = title.includes('permission changes');
 
   const outcome = getOutcome(check, coverage);
@@ -273,6 +276,7 @@ export function ExpandableCheckItem({
           coverage?.skipReason) && (
           <div className="px-3 pb-4 sm:px-4 sm:pb-4 sm:pl-12 text-sm border-t border-muted/50 bg-background/50">
             {check.status === 'warning' &&
+              !isBalanceReport &&
               check.warnings &&
               check.warnings.length > 0 &&
               check.warnings.some((w) => !w.includes('0x') && w.length < 200) && (
@@ -336,13 +340,13 @@ export function ExpandableCheckItem({
               <div className="mt-4">
                 <ProxyResolutionDetails details={check.details} />
               </div>
+            ) : isBalanceReport ? (
+              <div className="mt-4">
+                <AssetBalanceChanges data={check.data} />
+              </div>
             ) : isTreasuryMovementCheck && treasuryData ? (
               <div className="mt-4">
                 <TreasuryMovementCheck {...treasuryData} />
-              </div>
-            ) : checkId === 'checkassetbalances' ? (
-              <div className="mt-4">
-                <AssetBalanceChanges data={check.data} warnings={check.warnings ?? []} />
               </div>
             ) : isPermissionChangesCheck ? (
               <div className="mt-4">
