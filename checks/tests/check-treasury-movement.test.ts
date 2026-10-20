@@ -213,6 +213,6 @@ describe('checkTreasuryMovement', () => {
     );
 
     expect(result.skipped).toBeUndefined();
-    expect(result.warnings.join('\n')).toContain('missing USD pricing');
+    expect(result.warnings.join('\n')).toContain('USD risk thresholds were not evaluated');
   });
 });

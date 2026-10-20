@@ -47,9 +47,11 @@ Storage overrides are encoded locally from verified Solidity source and compiler
 layouts. This requires explorer source access and downloads the exact compiler from Solidity's
 official distribution into `cache/compilers/`. For encoding, a recognized Solidity source hash may differ after explorer flattening; executable code and compiler version must still match. Report labels retain strict metadata verification in a separate cache. Unsupported layouts fail explicitly. OZ draft coverage is the 4.7-style timer layout, tested with 4.7.3; other layouts require separate support.
 
-RPC results are cached separately in `cache/rpc-v3/`. Reports retain calls, events, storage changes,
+RPC results are cached separately in `cache/rpc-v4/`. Reports retain calls, events, storage changes,
 and safety checks. Reverts produce failed reports; reverted call effects are excluded. Native transfers come from committed call traces; standard ERC20 transfers
-come from events. Asset checks always warn that this is incomplete balance accounting: rebasing and nonstandard token changes and gas fees are excluded. No detected transfers does not prove balances are unchanged; USD-based risk thresholds are unavailable.
+come from events. Transfers alone are not balance accounting. No detected transfers does not prove balances are unchanged; USD-based risk thresholds are unavailable.
+The balance check reads native pre/post state and probes detected tokens with `balanceOf` before and after hypothetical execution, including carried overrides. It reports differences from Transfer events, unavailable reads, and exact decimal amounts. Only observed accounts and detected tokens are covered; rebases affecting unseen holders are not exhaustively enumerated. Token balance snapshots for historical transaction replay remain unavailable because block-level reads cannot prove exact transaction state. Native caller deltas include unsponsored execution fees; supported gas sponsorship is excluded from verified balances. USD totals stay unavailable and dollar thresholds are not evaluated until a pricing source is selected.
+
 Unavailable token metadata is shown as raw units. USD prices and Tenderly debugger links are
 unavailable. Contract-source overrides are unsupported. Drafts and destination calls preserve the pinned block base fee. Their default gas price equals that base fee (zero priority tip); legacy blocks use the first transaction's gas price and require an explicit price if the block is empty. Explicit gas prices are respected without changing the block base fee. The synthetic governor executor and designated Wormhole receiver executor receive a gas allowance. Celo callers also receive exactly the gas budget because its client debits that amount before execution, preserving their EVM-visible balance. On Ethereum and Celo, unused gas allowances are removed from carried state; artificial-executor balances on other chains are not normalized. Other real bridge caller and target balances are not overridden. An allowance cannot supply missing transaction value. Wormhole receiver simulations reject nonzero message value until bridge funding is modeled. Future inclusion fees are not predicted. Existing bridge simulations retain
 their authorization and delivery assumptions; an execution success does not prove bridge delivery.
@@ -119,7 +121,7 @@ Some notes on the outputs of reports:
 - If a transaction reverts, that will be reported in the state changes section
 - State changes and events around the proposal execution process, such as the `ExecuteTransaction` event and `queuedTransactions` state changes, are omitted from reports to reduce noise
 - Slither analysis for the timelock, governor proxy, and governor implementation is skipped to reduce noise in the output. Note that skipping analysis for the implementation on historical proposals requires an archive node, and a warning will be shown if archive data is required not available
-- ETH balance changes are reported in a dedicated section, showing transfers and net balance changes for each address involved
+- Native transfers are reported separately from verified before/after balance changes for observed accounts and detected tokens
 - Permission changes (ownership transfers, role grants/revokes, timelock admin changes) are detected and surfaced as warnings, and also emitted as structured data in `structuredReport.permissionsDiff`
 
 ## Caching
@@ -331,7 +333,7 @@ cd checks
 bun test tests/check-eth-balance-changes.test.ts
 ```
 
-Currently, there is a test for the ETH balance changes check, which verifies that the check correctly identifies and reports ETH transfers and balance changes. As new checks are added or existing checks are modified, corresponding tests should be added to ensure their functionality. The test framework is set up to use Bun's built-in testing capabilities and can be extended to cover additional checks in the future.
+Currently, there is a test for the ETH balance changes check, which verifies that the check correctly identifies and reports ETH transfers. As new checks are added or existing checks are modified, corresponding tests should be added to ensure their functionality. The test framework is set up to use Bun's built-in testing capabilities and can be extended to cover additional checks in the future.
 
 ## Using Seatbelt for Other DAOs
 

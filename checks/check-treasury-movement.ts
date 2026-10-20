@@ -18,17 +18,17 @@ type TreasuryMovementCheckDataV1 = {
     recipientUsdWarning: number;
     topRecipients: number;
   };
-  totalOutgoingUsd: number;
+  totalOutgoingUsd: number | null;
   transferCount: number;
   topRecipients: Array<{
     recipient: string;
-    totalUsd: number;
+    totalUsd: number | null;
     tokens: Array<{
       standard: string;
       symbol: string;
       decimals: number;
       amount: number;
-      usd: number;
+      usd: number | null;
       usdPriced: boolean;
     }>;
   }>;
@@ -92,7 +92,7 @@ export const checkTreasuryMovement: ProposalCheck = {
         blockExplorerBaseUrl: deps.chainConfig.blockExplorer.baseUrl,
         treasuryAddresses: treasuryAddresses.map((a) => getAddress(a)),
         thresholds,
-        totalOutgoingUsd: 0,
+        totalOutgoingUsd: sim.provider === 'rpc' ? null : 0,
         transferCount: 0,
         topRecipients: [],
         unpricedTransferCount: 0,
@@ -121,11 +121,10 @@ export const checkTreasuryMovement: ProposalCheck = {
       return sum + usd;
     }, 0);
 
-    if (unpricedTransferCount > 0) {
+    const usdUnavailable = sim.provider === 'rpc' || unpricedTransferCount > 0;
+    if (usdUnavailable) {
       warnings.push(
-        `Some outgoing transfers were missing USD pricing; totals may be under-reported (${unpricedTransferCount} transfer${
-          unpricedTransferCount === 1 ? '' : 's'
-        })`,
+        'USD valuation is unavailable or incomplete. Dollar totals and USD risk thresholds were not evaluated.',
       );
     }
 
@@ -134,7 +133,7 @@ export const checkTreasuryMovement: ProposalCheck = {
 
     info.push('');
     info.push(
-      `Outgoing transfers (excluding treasury-to-treasury): ${formatUsd(totalUsd)} across ${
+      `Outgoing transfers (excluding treasury-to-treasury): ${usdUnavailable ? 'USD unavailable' : formatUsd(totalUsd)} across ${
         outgoing.length
       } transfers`,
     );
@@ -144,7 +143,7 @@ export const checkTreasuryMovement: ProposalCheck = {
       )} per recipient`,
     );
 
-    if (totalUsd >= thresholds.totalUsdWarning) {
+    if (!usdUnavailable && totalUsd >= thresholds.totalUsdWarning) {
       warnings.push(
         `Total outgoing treasury transfers exceeded threshold (${formatUsd(totalUsd)} > ${formatUsd(
           thresholds.totalUsdWarning,
@@ -211,10 +210,12 @@ export const checkTreasuryMovement: ProposalCheck = {
       entry.byToken.set(key, tokenEntry);
     }
 
-    const recipients = [...byRecipient.values()].sort((a, b) => b.totalUsd - a.totalUsd);
+    const recipients = [...byRecipient.values()].sort((a, b) =>
+      usdUnavailable ? a.recipient.localeCompare(b.recipient) : b.totalUsd - a.totalUsd,
+    );
 
     for (const entry of recipients) {
-      if (entry.totalUsd >= thresholds.recipientUsdWarning) {
+      if (!usdUnavailable && entry.totalUsd >= thresholds.recipientUsdWarning) {
         warnings.push(
           `Recipient \`${entry.recipient}\` received ${formatUsd(entry.totalUsd)} from treasury (>${formatUsd(
             thresholds.recipientUsdWarning,
@@ -224,7 +225,11 @@ export const checkTreasuryMovement: ProposalCheck = {
     }
 
     info.push('');
-    info.push(`Top recipients by USD (top ${thresholds.topRecipients}):`);
+    info.push(
+      usdUnavailable
+        ? `Recipients (first ${thresholds.topRecipients}; USD ranking unavailable):`
+        : `Top recipients by USD (top ${thresholds.topRecipients}):`,
+    );
     for (const entry of recipients.slice(0, thresholds.topRecipients)) {
       const tokenParts = [...entry.byToken.values()]
         .sort((a, b) => b.usd - a.usd)
@@ -232,11 +237,13 @@ export const checkTreasuryMovement: ProposalCheck = {
           (t) =>
             `${t.label}: ${new Intl.NumberFormat('en-US', {
               maximumFractionDigits: t.decimals <= 6 ? t.decimals : 4,
-            }).format(t.amount)} (${formatUsd(t.usd)})`,
+            }).format(t.amount)} (${t.usdPriced ? formatUsd(t.usd) : 'USD unavailable'})`,
         )
         .join(', ');
 
-      info.push(`• \`${entry.recipient}\`: ${formatUsd(entry.totalUsd)} (${tokenParts})`);
+      info.push(
+        `• \`${entry.recipient}\`: ${usdUnavailable ? 'USD unavailable' : formatUsd(entry.totalUsd)} (${tokenParts})`,
+      );
     }
 
     const data: TreasuryMovementCheckDataV1 = {
@@ -244,11 +251,11 @@ export const checkTreasuryMovement: ProposalCheck = {
       blockExplorerBaseUrl: deps.chainConfig.blockExplorer.baseUrl,
       treasuryAddresses: treasuryAddresses.map((a) => getAddress(a)),
       thresholds,
-      totalOutgoingUsd: totalUsd,
+      totalOutgoingUsd: usdUnavailable ? null : totalUsd,
       transferCount: outgoing.length,
       topRecipients: recipients.slice(0, thresholds.topRecipients).map((entry) => ({
         recipient: entry.recipient,
-        totalUsd: entry.totalUsd,
+        totalUsd: usdUnavailable ? null : entry.totalUsd,
         tokens: [...entry.byToken.values()]
           .sort((a, b) => b.usd - a.usd)
           .map((t) => ({
@@ -256,7 +263,7 @@ export const checkTreasuryMovement: ProposalCheck = {
             symbol: t.label,
             decimals: t.decimals,
             amount: t.amount,
-            usd: t.usd,
+            usd: t.usdPriced ? t.usd : null,
             usdPriced: t.usdPriced,
           })),
       })),

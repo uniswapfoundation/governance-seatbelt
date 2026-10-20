@@ -397,6 +397,8 @@ export interface TenderlySimulation {
   provider?: 'tenderly' | 'rpc';
   postState?: Record<string, StateObject>;
   assetWarnings?: string[];
+  assetBalances?: AssetBalanceSnapshot[];
+  gasSponsored?: boolean;
   transaction: Transaction;
   simulation: Simulation;
   contracts: TenderlyContract[];
@@ -407,6 +409,7 @@ export interface TenderlySimulation {
 
 interface AssetChange {
   token_info: {
+    contract_address?: string;
     standard: string;
     type: 'Native' | string;
     symbol: string;
@@ -421,6 +424,15 @@ interface AssetChange {
   amount: string;
   raw_amount: string;
   dollar_value: string;
+}
+
+export interface AssetBalanceSnapshot {
+  address: string;
+  tokenAddress: string | null;
+  symbol: string;
+  decimals: number;
+  before: string | null;
+  after: string | null;
 }
 
 interface BalanceChange {
