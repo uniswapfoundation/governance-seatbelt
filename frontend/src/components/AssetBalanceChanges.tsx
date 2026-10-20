@@ -95,7 +95,7 @@ export function AssetBalanceChanges({ data }: { data: unknown }) {
   function account(value: string) {
     return (
       <a
-        className="text-foreground underline decoration-muted-foreground/40 underline-offset-4 hover:decoration-foreground whitespace-nowrap font-mono text-xs"
+        className="text-muted-foreground hover:text-foreground hover:underline underline-offset-4 whitespace-nowrap font-mono text-xs"
         href={`${blockExplorerBaseUrl}/address/${value}`}
         title={value}
         target="_blank"
@@ -107,8 +107,8 @@ export function AssetBalanceChanges({ data }: { data: unknown }) {
   }
   function asset(row: { symbol: string | null; tokenAddress: string | null }) {
     return (
-      <div className="space-y-1">
-        <div className="max-w-40 break-words font-medium">
+      <div className="space-y-1.5">
+        <div className="max-w-40 break-words font-semibold text-foreground">
           {row.symbol && !row.symbol.startsWith('0x')
             ? row.symbol
             : row.symbol?.includes('(raw units)')
@@ -125,10 +125,10 @@ export function AssetBalanceChanges({ data }: { data: unknown }) {
   }
   function balances(items: BalanceRow[], caption: string) {
     return (
-      <div className="rounded-md border bg-background">
-        <Table>
+      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+        <Table className="[&_th]:px-4 [&_th]:h-11 [&_th]:text-xs [&_th]:font-medium [&_td]:px-4 [&_td]:py-4">
           <TableCaption className="sr-only">{caption}</TableCaption>
-          <TableHeader>
+          <TableHeader className="bg-muted/40">
             <TableRow>
               {['Asset', 'Account', 'Before', 'After', 'Net change'].map((label, i) => (
                 <TableHead key={label} className={i > 1 ? 'text-right' : ''}>
@@ -145,7 +145,7 @@ export function AssetBalanceChanges({ data }: { data: unknown }) {
                 {[row.before, row.after, row.change].map((value, i) => (
                   <TableCell
                     key={i}
-                    className={`text-right tabular-nums ${i === 2 ? 'font-semibold' : ''} ${value === null ? 'text-muted-foreground' : ''}`}
+                    className={`text-right tabular-nums ${i === 2 ? 'font-semibold text-base' : 'text-muted-foreground'} ${value === null ? 'text-muted-foreground' : ''}`}
                   >
                     {formatAmount(value)}
                   </TableCell>
@@ -158,20 +158,21 @@ export function AssetBalanceChanges({ data }: { data: unknown }) {
     );
   }
   return (
-    <div className="space-y-6 text-sm">
-      <div className="space-y-2">
-        <div className="flex flex-wrap gap-2">
-          <Badge variant="secondary">{checked.length} balances read before and after</Badge>
-          <Badge variant="outline">USD unavailable</Badge>
-        </div>
+    <div className="space-y-8 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
         <p className="text-muted-foreground">
-          {new Set(checked.map((row) => row.address.toLowerCase())).size} accounts ·{' '}
+          <span className="font-medium text-foreground">{checked.length} balances checked</span>
+          {' · '}
+          {new Set(checked.map((row) => row.address.toLowerCase())).size} accounts
+          {' · '}
           {new Set(checked.map((row) => row.tokenAddress?.toLowerCase() ?? 'native')).size} assets
-          checked. See the full list below.
         </p>
+        <Badge variant="outline" className="font-normal text-muted-foreground">
+          USD unavailable
+        </Badge>
       </div>
       <section className="space-y-3">
-        <h4 className="font-semibold">Treasury balance changes</h4>
+        <h4 className="text-base font-semibold tracking-tight">Treasury balances</h4>
         {treasury.length ? (
           balances(treasury, 'Treasury balances before and after simulation')
         ) : (
@@ -196,24 +197,35 @@ export function AssetBalanceChanges({ data }: { data: unknown }) {
         </section>
       )}
       {mismatches.length > 0 && (
-        <section className="rounded-md border border-amber-500/40 bg-amber-500/5 p-4 space-y-3">
-          <h4 className="font-semibold">Transfers don’t explain these balance changes</h4>
+        <section className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:p-5 space-y-4">
+          <h4 className="font-semibold">Balance / transfer mismatch</h4>
           {mismatches.map((row) => (
-            <p key={`${row.tokenAddress}:${row.address}`}>
-              {account(row.address)} · {row.symbol || 'Token'}{' '}
-              {row.tokenAddress && account(row.tokenAddress)}: transfer events imply{' '}
-              <strong>{formatAmount(row.eventNet)}</strong>; balance changed by{' '}
-              <strong>{formatAmount(row.change)}</strong> (difference {formatAmount(row.difference)}
-              ).
-            </p>
+            <div key={`${row.tokenAddress}:${row.address}`} className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">{row.symbol || 'Token'}</span>
+                {row.tokenAddress && account(row.tokenAddress)}
+                <span className="text-muted-foreground">at</span> {account(row.address)}
+              </div>
+              <dl className="grid grid-cols-3 gap-3 rounded-lg bg-background/70 p-3">
+                {[
+                  ['Transfer net', row.eventNet],
+                  ['Actual change', row.change],
+                  ['Difference', row.difference],
+                ].map(([label, value]) => (
+                  <div key={label} className="min-w-0 space-y-1">
+                    <dt className="text-xs text-muted-foreground">{label}</dt>
+                    <dd className="font-semibold tabular-nums break-all">{formatAmount(value)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
           ))}
           <p className="text-xs text-muted-foreground">
-            A fee, burn, mint, or another balance change may explain the difference. Its cause has
-            not been established.
+            Cause unknown. Fees, burns, mints, or other balance changes may explain the difference.
           </p>
         </section>
       )}
-      <section className="space-y-2">
+      <section className="rounded-xl border bg-muted/20 p-4 sm:p-5 space-y-3">
         <h4 className="font-semibold">What we couldn’t check</h4>
         <ul className="list-disc pl-5 space-y-2 text-muted-foreground">
           {unreadable.map((row) => (
@@ -237,11 +249,8 @@ export function AssetBalanceChanges({ data }: { data: unknown }) {
             <li key={address}>Treasury {account(address)}: no balance reads available.</li>
           ))}
           {historicalReplay && <li>Token balances at the exact historical transaction state.</li>}
-          <li>
-            Accounts and tokens we didn’t detect during execution, including other holders affected
-            by a rebase.
-          </li>
-          <li>USD values and dollar-based risk thresholds: no pricing source.</li>
+          <li>Undetected accounts and tokens, including other holders affected by a rebase.</li>
+          <li>USD values and risk thresholds: pricing unavailable.</li>
         </ul>
         {checked.length > 0 && !unreadable.length && !unavailableTokens.length && (
           <p className="text-xs text-muted-foreground">
@@ -254,14 +263,13 @@ export function AssetBalanceChanges({ data }: { data: unknown }) {
           Observed transfers <span className="text-muted-foreground">({transfers.length})</span>
         </h4>
         <p className="text-xs text-muted-foreground">
-          Reported by transfer events or native call traces. These amounts can differ from the
-          balances above.
+          From events and native call traces. May differ from actual balance changes.
         </p>
         {transfers.length ? (
-          <div className="rounded-md border bg-background">
-            <Table>
+          <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+            <Table className="[&_th]:px-4 [&_th]:h-11 [&_th]:text-xs [&_th]:font-medium [&_td]:px-4 [&_td]:py-4">
               <TableCaption className="sr-only">Observed transfers</TableCaption>
-              <TableHeader>
+              <TableHeader className="bg-muted/40">
                 <TableRow>
                   <TableHead>Asset</TableHead>
                   <TableHead>From</TableHead>
@@ -289,7 +297,7 @@ export function AssetBalanceChanges({ data }: { data: unknown }) {
           </p>
         )}
       </section>
-      <Accordion type="multiple">
+      <Accordion type="multiple" className="rounded-xl border px-4 [&>div:last-child]:border-b-0">
         <AccordionItem value="checked">
           <AccordionTrigger>All checked balances ({checked.length})</AccordionTrigger>
           <AccordionContent>
