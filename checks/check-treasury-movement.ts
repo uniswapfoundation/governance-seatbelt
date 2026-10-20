@@ -4,7 +4,7 @@ import {
   getOutgoingTreasuryAssetChanges,
   getTreasuryMovementConfig,
 } from '../utils/treasury-movement';
-import { checkAssetBalances } from './check-asset-balances';
+import { getAssetBalanceReport } from './check-asset-balances';
 
 type TenderlyAssetChange = NonNullable<
   NonNullable<TenderlySimulation['transaction']['transaction_info']['asset_changes']>[number]
@@ -58,42 +58,85 @@ function tokenKey(change: TenderlyAssetChange) {
 }
 
 export const checkTreasuryMovement: ProposalCheck = {
-  name: 'Treasury balance changes',
-  async checkProposal(proposal, sim, deps) {
+  name: 'Treasury movement',
+  async checkProposal(_proposal, sim, deps) {
     if (sim.provider === 'rpc') {
-      const balances = await checkAssetBalances.checkProposal(proposal, sim, deps);
-      const { treasuryAddresses } = getTreasuryMovementConfig({
+      const { treasuryAddresses, thresholds } = getTreasuryMovementConfig({
         governorAddress: deps.governor.address,
         timelockAddress: deps.timelock?.address,
+        chainId: Number(sim.transaction.network_id),
       });
+      if (!treasuryAddresses.length)
+        return {
+          info: [],
+          warnings: [],
+          errors: [],
+          skipped: {
+            reason: `No treasury addresses configured for chain ${sim.transaction.network_id}`,
+          },
+        };
+      const balances = await getAssetBalanceReport(sim, deps);
+      const isTreasury = (address: string) =>
+        treasuryAddresses.some((treasury) => treasury.toLowerCase() === address.toLowerCase());
+      const rows = balances.data.rows.filter(
+        (row) => isTreasury(row.address) && row.change !== '0',
+      );
+      const changes = rows.filter((row) => row.change !== null && row.change !== '0');
+      const missingTreasuries = treasuryAddresses.filter(
+        (address) =>
+          !sim.assetBalances?.some((row) => row.address.toLowerCase() === address.toLowerCase()),
+      );
+      const incomplete =
+        balances.data.unavailableTokens.length > 0 ||
+        missingTreasuries.length > 0 ||
+        rows.some((row) => row.change === null || (row.change !== '0' && row.usdChange === null));
+      const decreases = changes.reduce((sum, row) => sum + Math.max(0, -(row.usdChange ?? 0)), 0);
+      const warnings = changes.map(
+        (row) => `Treasury ${row.address}: ${row.change} ${row.symbol ?? 'Token'}.`,
+      );
+      const usdWarnings: string[] = [];
+      if (incomplete)
+        usdWarnings.push(
+          'Treasury valuation is incomplete. Full USD thresholds were not evaluated.',
+        );
+      if (decreases >= thresholds.totalUsdWarning)
+        usdWarnings.push(
+          `Measured treasury decreases exceed the ${formatUsd(thresholds.totalUsdWarning)} warning threshold${incomplete ? ' even with incomplete pricing' : ''}.`,
+        );
+      // Positive balances are account increases, not proof of a transfer from the treasury.
+      const recipients = new Map<string, number>();
+      for (const row of balances.data.rows) {
+        if (!isTreasury(row.address) && row.usdChange !== null && row.usdChange > 0)
+          recipients.set(row.address, (recipients.get(row.address) ?? 0) + row.usdChange);
+      }
+      for (const [address, usd] of recipients) {
+        if (usd >= thresholds.recipientUsdWarning)
+          usdWarnings.push(
+            `Account ${address} gains approximately ${formatUsd(usd)}, above the ${formatUsd(thresholds.recipientUsdWarning)} account warning threshold; treasury attribution is not established.`,
+          );
+      }
+      if (missingTreasuries.length)
+        warnings.push(`No balance reads for treasury accounts: ${missingTreasuries.join(', ')}.`);
       return {
-        ...balances,
         info: [
-          `Treasury accounts: ${treasuryAddresses.join(', ') || 'none configured'}`,
-          ...balances.info,
-          '',
-          'Observed transfers (events / native traces):',
-          ...(sim.transaction.transaction_info.asset_changes ?? []).map(
-            (transfer) =>
-              `${transfer.from} → ${transfer.to}: ${transfer.amount} ${transfer.token_info.symbol}`,
+          ...changes.map(
+            (row) =>
+              `${row.symbol ?? 'Token'} at ${row.address}: ${row.before} → ${row.after} (${row.change}); USD estimate: ${row.usdChange === null ? 'Unavailable' : formatUsd(row.usdChange)}.`,
           ),
+          'Measured decreases include internal treasury movements and execution fees; they are not a total of external transfers.',
+          ...balances.data.notes,
         ],
-        warnings: [
-          ...balances.warnings,
-          'USD valuation is unavailable. Dollar thresholds were not evaluated.',
-        ],
+        warnings: [...warnings, ...usdWarnings],
+        errors: [],
         data: {
-          ...(balances.data as Record<string, unknown>),
-          type: 'treasuryBalances/v1',
-          treasuryAddresses,
-          totalOutgoingUsd: null,
-          transfers: (sim.transaction.transaction_info.asset_changes ?? []).map((transfer) => ({
-            from: transfer.from,
-            to: transfer.to,
-            tokenAddress: transfer.token_info.contract_address ?? null,
-            symbol: transfer.token_info.symbol,
-            amount: transfer.amount,
-          })),
+          ...balances.data,
+          type: 'treasuryBalances/v2',
+          usdWarnings,
+          rows,
+          checked: balances.data.checked.filter((row) => isTreasury(row.address)),
+          missingTreasuries,
+          measuredDecreaseUsd: incomplete ? null : decreases,
+          thresholds,
         },
       };
     }
@@ -112,6 +155,7 @@ export const checkTreasuryMovement: ProposalCheck = {
     const { treasuryAddresses, thresholds } = getTreasuryMovementConfig({
       governorAddress: deps.governor.address,
       timelockAddress: deps.timelock?.address,
+      chainId: Number(sim.transaction.network_id),
     });
 
     if (treasuryAddresses.length === 0) {

@@ -14,7 +14,13 @@ import type {
 } from '../../types';
 import { mergeStateObjects } from '../derived-state';
 import { getClientForChain } from './client';
-import { type RpcAccount, type RpcTrace, simulationRpc } from './rpc-simulation';
+import { ARC_USDC } from './rpc-assets';
+import {
+  type RpcAccount,
+  type RpcTrace,
+  SimulationRpcError,
+  simulationRpc,
+} from './rpc-simulation';
 
 const tokenAbi = parseAbi([
   'function balanceOf(address) view returns (uint256)',
@@ -33,7 +39,7 @@ export async function getRpcBalanceSnapshots({
   changes,
   blockNumber,
   blockOverrides,
-  gasAllowance,
+  gasFunding,
 }: {
   payload: TenderlyPayload;
   trace: RpcTrace;
@@ -42,7 +48,7 @@ export async function getRpcBalanceSnapshots({
   changes: AssetChange[];
   blockNumber: number;
   blockOverrides: Record<string, string>;
-  gasAllowance: bigint;
+  gasFunding: bigint;
 }): Promise<{
   rows: AssetBalanceSnapshot[];
   warnings: string[];
@@ -54,8 +60,13 @@ export async function getRpcBalanceSnapshots({
   const warnings: string[] = [];
   const unavailableTokens: { tokenAddress: string; reason: string }[] = [];
   const sender = getAddress(payload.from);
-  const holders = new Set<string>([sender, getAddress(payload.to)]);
+  const holders = new Set<string>([
+    sender,
+    getAddress(payload.to),
+    ...(payload.balance_addresses ?? []).map((address) => getAddress(address)),
+  ]);
   const candidates = new Set<string>();
+  const tokenCalls = new Set<string>();
   function visit(frame: RpcTrace) {
     holders.add(getAddress(frame.from));
     if (frame.to) {
@@ -65,6 +76,8 @@ export async function getRpcBalanceSnapshots({
     }
     try {
       const decoded = decodeFunctionData({ abi: tokenAbi, data: frame.input as Hex });
+      if (frame.to && ['balanceOf', 'transfer', 'transferFrom'].includes(decoded.functionName))
+        tokenCalls.add(getAddress(frame.to));
       for (const arg of decoded.args ?? [])
         if (typeof arg === 'string') holders.add(getAddress(arg));
     } catch {
@@ -80,17 +93,32 @@ export async function getRpcBalanceSnapshots({
       candidates.add(getAddress(change.token_info.contract_address));
   }
   holders.delete('0x0000000000000000000000000000000000000000');
+  // Some clients omit new recipients from the prestate tracer. Read every detected
+  // account and configured treasury at the pinned state, including carried overrides.
+  for (const address of new Set([...holders, ...Object.keys(postState)])) {
+    if (Object.keys(accounts).some((account) => account.toLowerCase() === address.toLowerCase()))
+      continue;
+    let balance: Hex | undefined;
+    try {
+      if (payload.transaction_hash) throw new Error('Exact transaction balance unavailable');
+      const override = Object.entries(payload.state_objects ?? {}).find(
+        ([account]) => account.toLowerCase() === address.toLowerCase(),
+      )?.[1].balance;
+      balance =
+        override !== undefined
+          ? toHex(BigInt(override))
+          : await simulationRpc<Hex>(chainId, 'eth_getBalance', [address, toHex(blockNumber)]);
+    } catch {
+      // Keep a missing read explicit instead of assuming an empty treasury.
+    }
+    accounts[getAddress(address)] = { balance };
+  }
   for (const [rawAddress, account] of Object.entries(accounts)) {
     const address = getAddress(rawAddress);
     let before = account.balance === undefined ? null : BigInt(account.balance);
-    if (before !== null && address === sender) before -= gasAllowance;
+    if (before !== null && address === sender) before -= gasFunding;
     const afterValue = postState[address]?.balance;
-    let after = afterValue === undefined ? before : BigInt(afterValue);
-    if (address === sender && gasAllowance > 0n && chainId !== 1 && chainId !== 42220) {
-      before = null;
-      after = null;
-      warnings.push('Artificial executor balance accounting is unavailable on this chain.');
-    }
+    const after = afterValue === undefined ? before : BigInt(afterValue);
     rows.push({
       address,
       tokenAddress: null,
@@ -135,9 +163,30 @@ export async function getRpcBalanceSnapshots({
     return BigInt(result.output);
   }
   for (const token of candidates) {
+    if (chainId === 5042 && token.toLowerCase() === ARC_USDC) continue;
     const metadata = changes.find(
       (c) => c.token_info.contract_address?.toLowerCase() === token.toLowerCase(),
     )?.token_info;
+    // decimals() alone is not token evidence: unrelated fallback functions can
+    // return a small integer. Require a balance read, token call, or Transfer log.
+    if (!metadata && !tokenCalls.has(token)) {
+      try {
+        await read(
+          token,
+          encodeFunctionData({ abi: tokenAbi, functionName: 'balanceOf', args: [sender] }),
+          beforeState,
+        );
+      } catch (error) {
+        if (error instanceof SimulationRpcError) {
+          unavailableTokens.push({
+            tokenAddress: token,
+            reason: 'RPC request failed while identifying a token',
+          });
+          warnings.push(`Token discovery unavailable for ${token}.`);
+        }
+        continue;
+      }
+    }
     let decimals: number;
     try {
       const value = await read(
@@ -161,11 +210,15 @@ export async function getRpcBalanceSnapshots({
         continue;
       }
       decimals = Number(value);
-    } catch {
-      if (metadata) {
-        warnings.push(`Token balance reads unavailable for ${token}.`);
-        unavailableTokens.push({ tokenAddress: token, reason: 'Token decimals could not be read' });
-      }
+    } catch (error) {
+      warnings.push(`Token balance reads unavailable for ${token}.`);
+      unavailableTokens.push({
+        tokenAddress: token,
+        reason:
+          error instanceof SimulationRpcError
+            ? 'RPC request failed while checking token metadata'
+            : 'Token decimals could not be read',
+      });
       continue;
     }
     let symbol = metadata?.symbol ?? token;

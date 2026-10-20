@@ -399,7 +399,7 @@ function makeSourceResult(
       description: 'Test wormhole proposal',
     },
     deps: {
-      governor: null,
+      governor: { address: '0x408ED6354d4973f66138C91495F2f2FCbd8724C3' },
       timelock: { address: TIMELOCK_ADDRESS },
       publicClient: null,
       chainConfig: {

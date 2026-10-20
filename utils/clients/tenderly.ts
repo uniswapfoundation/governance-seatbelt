@@ -38,6 +38,7 @@ import {
 } from '../contracts/governor';
 import type { TenderlySimulationExecutionOptions } from '../cross-chain/tenderly-execution-engine';
 import { mergeStateObjects } from '../derived-state';
+import { getTreasuryMovementConfig } from '../treasury-movement';
 export type { TenderlySimulationExecutionOptions as SimulationExecutionOptions } from '../cross-chain/tenderly-execution-engine';
 export { handleCrossChainSimulations } from '../cross-chain/tenderly-execution-engine';
 import { CacheManager } from './block-explorers/cache';
@@ -817,6 +818,11 @@ function buildSimulationPayload(params: SimulationPayloadParams): TenderlyPayloa
 
   return {
     network_id: '1',
+    balance_addresses: getTreasuryMovementConfig({
+      governorAddress: governor.address,
+      timelockAddress: timelock.address,
+      chainId: 1,
+    }).treasuryAddresses,
     // this field represents the block state to simulate against, so we use the latest block number
     block_number: Number(latestBlock.number),
     from,

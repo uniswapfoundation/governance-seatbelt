@@ -63,7 +63,20 @@ function mergeCheckResult(current: CheckResult, next: CheckResult): CheckResult 
     if (Array.isArray(current.data) && Array.isArray(next.data)) {
       data = dedupeJsonValues([...current.data, ...next.data]);
     } else if (isPlainObject(current.data) && isPlainObject(next.data)) {
-      data = { ...current.data, ...next.data };
+      // Destination calls have separate before/after snapshots. Keep each call's
+      // rows and missing coverage instead of replacing them with the last call.
+      if (
+        ['treasuryBalances/v2', 'assetBalances/v3'].includes(String(current.data.type)) &&
+        current.data.type === next.data.type
+      ) {
+        data = {
+          type: current.data.type,
+          steps: [
+            ...(Array.isArray(current.data.steps) ? current.data.steps : [current.data]),
+            ...(Array.isArray(next.data.steps) ? next.data.steps : [next.data]),
+          ],
+        };
+      } else data = { ...current.data, ...next.data };
     }
   }
 

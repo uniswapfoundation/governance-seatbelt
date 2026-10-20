@@ -30,9 +30,14 @@ const rowSchema = z.object({
   change: amount,
   eventNet: amount,
   difference: amount,
+  usdChange: z.number().finite().nullable().default(null),
+  priceTimestamp: z.number().nullable().default(null),
+  priceUnavailable: z.string().nullable().default(null),
 });
 const balanceData = z.object({
-  type: z.literal('treasuryBalances/v1'),
+  type: z.enum(['treasuryBalances/v2', 'assetBalances/v3']),
+  usdWarnings: z.array(z.string()).default([]),
+  missingTreasuries: z.array(address).default([]),
   gasSponsored: z.boolean(),
   blockExplorerBaseUrl: z
     .string()
@@ -43,27 +48,53 @@ const balanceData = z.object({
   checked: z.array(rowSchema),
   unavailableTokens: z.array(z.object({ tokenAddress: address, reason: z.string() })),
   historicalReplay: z.boolean(),
-  notes: z.array(z.string()),
-  transfers: z.array(
-    z.object({
-      from: address,
-      to: address,
-      tokenAddress: address.nullable(),
-      symbol: z.string(),
-      amount: z.string(),
-    }),
-  ),
 });
 type BalanceRow = z.infer<typeof rowSchema>;
 
 function formatAmount(value: string | null) {
   if (value === null) return 'Unavailable';
-  const [whole, fraction] = value.split('.');
-  return whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (fraction ? `.${fraction}` : '');
+  const sign = /^[+-]/.test(value) ? value[0] : '';
+  const [whole, fraction = ''] = value.replace(/^[+-]/, '').split('.');
+  const cents = BigInt(whole) * 100n + BigInt(fraction.slice(0, 2).padEnd(2, '0'));
+  const rounded = cents + (fraction[2] >= '5' ? 1n : 0n);
+  const display =
+    cents === 0n && /[1-9]/.test(fraction)
+      ? '<0.01'
+      : `${(rounded / 100n).toLocaleString('en-US')}.${(rounded % 100n).toString().padStart(2, '0')}`;
+  return (
+    <span title={value}>
+      {sign}
+      {display}
+    </span>
+  );
 }
+const formatUsd = (value: number | null) =>
+  value === null
+    ? 'Unavailable'
+    : value !== 0 && Math.abs(value) < 0.01
+      ? `${value < 0 ? '-' : '+'}<$0.01`
+      : new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: 'USD',
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+          signDisplay: 'exceptZero',
+        }).format(value);
 const shortAddress = (value: string) => `${value.slice(0, 6)}…${value.slice(-4)}`;
 
 export function AssetBalanceChanges({ data }: { data: unknown }) {
+  const steps = z.object({ steps: z.array(balanceData) }).safeParse(data);
+  if (steps.success)
+    return (
+      <div className="space-y-6">
+        {steps.data.steps.map((step, index) => (
+          <section key={index} className="space-y-2">
+            <h4 className="text-sm font-medium">Call {index + 1}</h4>
+            <AssetBalanceChanges data={step} />
+          </section>
+        ))}
+      </div>
+    );
   const parsed = balanceData.safeParse(data);
   if (!parsed.success)
     return (
@@ -75,17 +106,16 @@ export function AssetBalanceChanges({ data }: { data: unknown }) {
     rows,
     gasSponsored,
     checked,
-    notes,
     blockExplorerBaseUrl,
     treasuryAddresses,
-    transfers,
     unavailableTokens,
     historicalReplay,
   } = parsed.data;
   const isTreasury = (value: string) =>
     treasuryAddresses.some((address) => address.toLowerCase() === value.toLowerCase());
-  const treasury = rows.filter((row) => isTreasury(row.address));
-  const others = rows.filter((row) => !isTreasury(row.address));
+  const treasuryOnly = parsed.data.type === 'treasuryBalances/v2';
+  const unpriced = rows.filter((row) => row.usdChange === null);
+  const missingPrices = unpriced.filter((row) => row.change !== null);
   const unreadable = rows.filter((row) => row.before === null || row.after === null);
   const unobservedTreasuries = treasuryAddresses.filter(
     (address) =>
@@ -108,7 +138,7 @@ export function AssetBalanceChanges({ data }: { data: unknown }) {
   function asset(row: { symbol: string | null; tokenAddress: string | null }) {
     return (
       <div className="space-y-1.5">
-        <div className="max-w-40 break-words font-semibold text-foreground">
+        <div className="max-w-40 whitespace-normal [overflow-wrap:anywhere] font-semibold text-foreground">
           {row.symbol && !row.symbol.startsWith('0x')
             ? row.symbol
             : row.symbol?.includes('(raw units)')
@@ -123,33 +153,72 @@ export function AssetBalanceChanges({ data }: { data: unknown }) {
       </div>
     );
   }
-  function balances(items: BalanceRow[], caption: string) {
+  function balances(items: BalanceRow[], caption: string, detailed = false) {
     return (
-      <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-        <Table className="[&_th]:px-4 [&_th]:h-11 [&_th]:text-xs [&_th]:font-medium [&_td]:px-4 [&_td]:py-4">
+      <div className="min-w-0 overflow-hidden">
+        <Table
+          className={`${detailed ? '' : 'table-fixed sm:table-auto'} [&_th]:px-2 [&_th]:h-9 [&_th]:text-xs [&_th]:font-medium [&_td]:px-2 [&_td]:py-2`}
+        >
           <TableCaption className="sr-only">{caption}</TableCaption>
           <TableHeader className="bg-muted/40">
             <TableRow>
-              {['Asset', 'Account', 'Before', 'After', 'Net change'].map((label, i) => (
-                <TableHead key={label} className={i > 1 ? 'text-right' : ''}>
-                  {label}
-                </TableHead>
-              ))}
+              <TableHead className={detailed ? '' : 'w-2/5 sm:w-auto'}>Asset</TableHead>
+              <TableHead className={detailed ? '' : 'hidden sm:table-cell'}>Account</TableHead>
+              {detailed && <TableHead className="text-right">Before</TableHead>}
+              {detailed && <TableHead className="text-right">After</TableHead>}
+              <TableHead className="text-right">Net change</TableHead>
+              <TableHead className={`text-right ${detailed ? '' : 'hidden sm:table-cell'}`}>
+                USD ≈
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.map((row) => (
               <TableRow key={`${row.tokenAddress}:${row.address}`}>
-                <TableCell>{asset(row)}</TableCell>
-                <TableCell>{account(row.address)}</TableCell>
-                {[row.before, row.after, row.change].map((value, i) => (
-                  <TableCell
-                    key={i}
-                    className={`text-right tabular-nums ${i === 2 ? 'font-semibold text-base' : 'text-muted-foreground'} ${value === null ? 'text-muted-foreground' : ''}`}
+                <TableCell className="whitespace-normal">
+                  {asset(row)}
+                  {!detailed && (
+                    <div className="mt-1 text-xs text-muted-foreground sm:hidden">
+                      {isTreasury(row.address) ? 'Treasury' : 'Account'}
+                      <br />
+                      {account(row.address)}
+                    </div>
+                  )}
+                </TableCell>
+                <TableCell className={detailed ? '' : 'hidden sm:table-cell'}>
+                  {account(row.address)}
+                  {!treasuryOnly && isTreasury(row.address) && (
+                    <span className="block text-xs text-muted-foreground">Treasury</span>
+                  )}
+                </TableCell>
+                {detailed &&
+                  [row.before, row.after].map((value, i) => (
+                    <TableCell key={i} className="text-right tabular-nums text-muted-foreground">
+                      {formatAmount(value)}
+                    </TableCell>
+                  ))}
+                <TableCell className="text-right tabular-nums whitespace-normal [overflow-wrap:anywhere]">
+                  <span
+                    className={`font-semibold text-base ${row.change === null ? 'text-muted-foreground' : ''}`}
                   >
-                    {formatAmount(value)}
-                  </TableCell>
-                ))}
+                    {formatAmount(row.change)}
+                  </span>
+                  {!detailed && (
+                    <span className="block text-xs text-muted-foreground sm:hidden">
+                      {row.usdChange === null ? 'USD unavailable' : `≈ ${formatUsd(row.usdChange)}`}
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell
+                  className={`text-right tabular-nums text-muted-foreground ${detailed ? '' : 'hidden sm:table-cell'}`}
+                  title={
+                    row.priceTimestamp
+                      ? `DefiLlama quote: ${new Date(row.priceTimestamp * 1000).toISOString()}`
+                      : (row.priceUnavailable ?? 'Price unavailable')
+                  }
+                >
+                  {formatUsd(row.usdChange)}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -157,9 +226,58 @@ export function AssetBalanceChanges({ data }: { data: unknown }) {
       </div>
     );
   }
+  if (treasuryOnly)
+    return (
+      <div className="min-w-0 space-y-2 text-sm [overflow-wrap:anywhere]">
+        {rows.length > 0 ? (
+          balances(rows, 'Measured treasury balance changes')
+        ) : (
+          <p>No treasury changes detected in available reads.</p>
+        )}
+        {unreadable.length > 0 && (
+          <p className="font-medium">{unreadable.length} treasury balances unreadable.</p>
+        )}
+        {parsed.data.missingTreasuries.map((value) => (
+          <p key={value}>Treasury {account(value)}: balance reads unavailable.</p>
+        ))}
+        {(rows.length > 0 || parsed.data.usdWarnings.length > 0) && (
+          <Accordion type="single" collapsible>
+            <AccordionItem value="treasury-details">
+              <AccordionTrigger
+                className={
+                  parsed.data.usdWarnings.length ? 'text-amber-700 dark:text-amber-400' : ''
+                }
+              >
+                {parsed.data.usdWarnings.length
+                  ? `${parsed.data.usdWarnings.length} USD warning${parsed.data.usdWarnings.length === 1 ? '' : 's'}`
+                  : 'Pricing & coverage'}
+              </AccordionTrigger>
+              <AccordionContent className="space-y-3 text-muted-foreground">
+                {parsed.data.usdWarnings.map((warning) => (
+                  <p key={warning} className="font-medium text-foreground">
+                    {warning}
+                  </p>
+                ))}
+                <p>
+                  {gasSponsored
+                    ? 'Simulation gas funding excluded.'
+                    : 'Native changes include execution fees.'}{' '}
+                  USD estimates use DefiLlama prices near simulation time. Missing prices are not
+                  zero.
+                </p>
+                <p>
+                  Only detected accounts and tokens were checked. See Asset balance changes for
+                  mismatches and missing coverage.
+                </p>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        )}
+      </div>
+    );
   return (
-    <div className="space-y-8 text-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+    <div className="min-w-0 space-y-4 text-sm [overflow-wrap:anywhere]">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-muted-foreground">
           <span className="font-medium text-foreground">{checked.length} balances checked</span>
           {' · '}
@@ -167,155 +285,110 @@ export function AssetBalanceChanges({ data }: { data: unknown }) {
           {' · '}
           {new Set(checked.map((row) => row.tokenAddress?.toLowerCase() ?? 'native')).size} assets
         </p>
-        <Badge variant="outline" className="font-normal text-muted-foreground">
-          USD unavailable
-        </Badge>
-      </div>
-      <section className="space-y-3">
-        <h4 className="text-base font-semibold tracking-tight">Treasury balances</h4>
-        {treasury.length ? (
-          balances(treasury, 'Treasury balances before and after simulation')
-        ) : (
-          <p className="text-muted-foreground">
-            {treasuryAddresses.length
-              ? 'No treasury balance changes detected in the available reads.'
-              : 'No treasury accounts configured.'}
-          </p>
+        {rows.length > 0 && (
+          <Badge variant="outline" className="font-normal text-muted-foreground">
+            {rows.length - unpriced.length}/{rows.length} changes valued in USD
+          </Badge>
         )}
-      </section>
-      {rows.some((row) => row.tokenAddress === null) && (
-        <p className="text-xs text-muted-foreground">
-          {gasSponsored
-            ? 'Native balances exclude simulation gas funding.'
-            : 'Native balance changes include execution fees.'}
-        </p>
-      )}
-      {others.length > 0 && (
-        <section className="space-y-3">
-          <h4 className="font-semibold">Other affected accounts</h4>
-          {balances(others, 'Other affected account balances')}
-        </section>
+      </div>
+      {rows.length ? (
+        balances(rows, 'Measured asset balance changes')
+      ) : (
+        <p>No balance changes or transfers detected in checked accounts.</p>
       )}
       {mismatches.length > 0 && (
-        <section className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:p-5 space-y-4">
-          <h4 className="font-semibold">Balance / transfer mismatch</h4>
+        <section className="border-l-2 border-amber-500 pl-3 space-y-2">
+          <h4 className="font-semibold">Balance / event mismatch</h4>
           {mismatches.map((row) => (
-            <div key={`${row.tokenAddress}:${row.address}`} className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
+            <div key={`${row.tokenAddress}:${row.address}`} className="space-y-1">
+              <p className="flex flex-wrap items-center gap-x-2">
                 <span className="font-medium">{row.symbol || 'Token'}</span>
                 {row.tokenAddress && account(row.tokenAddress)}
                 <span className="text-muted-foreground">at</span> {account(row.address)}
-              </div>
-              <dl className="grid grid-cols-3 gap-3 rounded-lg bg-background/70 p-3">
-                {[
-                  ['Transfer net', row.eventNet],
-                  ['Actual change', row.change],
-                  ['Difference', row.difference],
-                ].map(([label, value]) => (
-                  <div key={label} className="min-w-0 space-y-1">
-                    <dt className="text-xs text-muted-foreground">{label}</dt>
-                    <dd className="font-semibold tabular-nums break-all">{formatAmount(value)}</dd>
-                  </div>
-                ))}
-              </dl>
+              </p>
+              <p className="tabular-nums">
+                Contract reported {formatAmount(row.eventNet)} · Balance change{' '}
+                {formatAmount(row.change)} ·{' '}
+                <strong>Difference {formatAmount(row.difference)}</strong>
+              </p>
             </div>
           ))}
-          <p className="text-xs text-muted-foreground">
-            Cause unknown. Fees, burns, mints, or other balance changes may explain the difference.
-          </p>
+          <p className="text-xs text-muted-foreground">Cause of the difference is unknown.</p>
         </section>
       )}
-      <section className="rounded-xl border bg-muted/20 p-4 sm:p-5 space-y-3">
-        <h4 className="font-semibold">What we couldn’t check</h4>
-        <ul className="list-disc pl-5 space-y-2 text-muted-foreground">
-          {unreadable.map((row) => (
-            <li key={`${row.tokenAddress}:${row.address}`}>
-              {row.symbol || 'Token'} {row.tokenAddress && account(row.tokenAddress)} at{' '}
-              {account(row.address)}:{' '}
-              {row.before === null && row.after === null
-                ? 'before and after balances unavailable'
-                : row.before === null
-                  ? 'before balance unavailable'
-                  : 'after balance unavailable'}
-              .
-            </li>
-          ))}
-          {unavailableTokens.map((token) => (
-            <li key={token.tokenAddress}>
-              {account(token.tokenAddress)}: {token.reason}.
-            </li>
-          ))}
-          {unobservedTreasuries.map((address) => (
-            <li key={address}>Treasury {account(address)}: no balance reads available.</li>
-          ))}
-          {historicalReplay && <li>Token balances at the exact historical transaction state.</li>}
-          <li>Undetected accounts and tokens, including other holders affected by a rebase.</li>
-          <li>USD values and risk thresholds: pricing unavailable.</li>
-        </ul>
-        {checked.length > 0 && !unreadable.length && !unavailableTokens.length && (
-          <p className="text-xs text-muted-foreground">
-            No failed balance reads among the detected account/asset pairs.
-          </p>
-        )}
-      </section>
-      <section className="space-y-3">
-        <h4 className="font-semibold">
-          Observed transfers <span className="text-muted-foreground">({transfers.length})</span>
-        </h4>
-        <p className="text-xs text-muted-foreground">
-          From events and native call traces. May differ from actual balance changes.
-        </p>
-        {transfers.length ? (
-          <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-            <Table className="[&_th]:px-4 [&_th]:h-11 [&_th]:text-xs [&_th]:font-medium [&_td]:px-4 [&_td]:py-4">
-              <TableCaption className="sr-only">Observed transfers</TableCaption>
-              <TableHeader className="bg-muted/40">
-                <TableRow>
-                  <TableHead>Asset</TableHead>
-                  <TableHead>From</TableHead>
-                  <TableHead>To</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {transfers.map((transfer, i) => (
-                  <TableRow key={i}>
-                    <TableCell>{asset(transfer)}</TableCell>
-                    <TableCell>{account(transfer.from)}</TableCell>
-                    <TableCell>{account(transfer.to)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatAmount(transfer.amount)}
-                    </TableCell>
-                  </TableRow>
+      <Accordion type="multiple">
+        {(missingPrices.length > 0 ||
+          unreadable.length > 0 ||
+          unavailableTokens.length > 0 ||
+          unobservedTreasuries.length > 0 ||
+          historicalReplay) && (
+          <AccordionItem value="coverage">
+            <AccordionTrigger>
+              Couldn’t check
+              {missingPrices.length > 0 ? ` · ${missingPrices.length} unpriced changes` : ''}
+              {unreadable.length > 0 ? ` · ${unreadable.length} unreadable balances` : ''}
+              {unavailableTokens.length > 0
+                ? ` · ${unavailableTokens.length} tokens unavailable`
+                : ''}
+              {unobservedTreasuries.length > 0
+                ? ` · ${unobservedTreasuries.length} unread treasuries`
+                : ''}
+              {historicalReplay ? ' · historical token state' : ''}
+            </AccordionTrigger>
+            <AccordionContent className="space-y-3">
+              <ul className="list-disc pl-5 space-y-2 text-muted-foreground">
+                {unreadable.map((row) => (
+                  <li key={`${row.tokenAddress}:${row.address}`}>
+                    {row.symbol || 'Token'} {row.tokenAddress && account(row.tokenAddress)} at{' '}
+                    {account(row.address)}:{' '}
+                    {row.before === null && row.after === null
+                      ? 'before and after balances unavailable'
+                      : row.before === null
+                        ? 'before balance unavailable'
+                        : 'after balance unavailable'}
+                    .
+                  </li>
                 ))}
-              </TableBody>
-            </Table>
-          </div>
-        ) : (
-          <p className="text-muted-foreground">
-            No transfer events or native transfers detected. Balance changes may still appear above.
-          </p>
+                {unavailableTokens.map((token) => (
+                  <li key={token.tokenAddress}>
+                    {account(token.tokenAddress)}: {token.reason}.
+                  </li>
+                ))}
+                {unobservedTreasuries.map((address) => (
+                  <li key={address}>Treasury {account(address)}: no balance reads available.</li>
+                ))}
+                {historicalReplay && (
+                  <li>Token balances at the exact historical transaction state.</li>
+                )}
+                {missingPrices.map((row) => (
+                  <li key={`price:${row.tokenAddress}:${row.address}`}>
+                    {row.symbol || 'Token'} at {account(row.address)}: USD unavailable.{' '}
+                    {row.priceUnavailable}
+                  </li>
+                ))}
+              </ul>
+            </AccordionContent>
+          </AccordionItem>
         )}
-      </section>
-      <Accordion type="multiple" className="rounded-xl border px-4 [&>div:last-child]:border-b-0">
         <AccordionItem value="checked">
-          <AccordionTrigger>All checked balances ({checked.length})</AccordionTrigger>
+          <AccordionTrigger>Before &amp; after balances</AccordionTrigger>
           <AccordionContent>
             {checked.length ? (
-              balances(checked, 'Every successfully checked balance, including unchanged balances')
+              balances(
+                checked,
+                'Every successfully checked balance, including unchanged balances',
+                true,
+              )
             ) : (
               <p>No before/after balance pair could be read.</p>
             )}
-          </AccordionContent>
-        </AccordionItem>
-        <AccordionItem value="method">
-          <AccordionTrigger>How balances are calculated</AccordionTrigger>
-          <AccordionContent>
-            <ul className="list-disc space-y-2 pl-5 text-muted-foreground">
-              {notes.map((note) => (
-                <li key={note}>{note}</li>
-              ))}
-            </ul>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Only accounts and tokens found in this simulation are checked.{' '}
+              {gasSponsored
+                ? 'Simulation gas funding is excluded.'
+                : 'Native changes include execution fees.'}{' '}
+              USD estimates: DefiLlama.
+            </p>
           </AccordionContent>
         </AccordionItem>
       </Accordion>

@@ -815,12 +815,11 @@ function extractCalldata(
   return undefined;
 }
 
-function getStatusForChecks(value: AllCheckResults): 'success' | 'warning' | 'error' {
+function getStatusForChecks(...groups: AllCheckResults[]): 'success' | 'warning' | 'error' {
   let hasErrors = false;
   let hasWarnings = false;
 
-  for (const checkId in value) {
-    const { result } = value[checkId];
+  for (const { result } of groups.flatMap((group) => Object.values(group))) {
     if (result.errors.length > 0) hasErrors = true;
     if (result.warnings.length > 0) hasWarnings = true;
   }
@@ -971,11 +970,8 @@ function generateStructuredReport(
   const title = getProposalTitle(proposal.description.trim());
   const proposalText = proposal.description.trim();
 
-  // Determine overall status
-  let status: 'success' | 'warning' | 'error' | 'inconclusive' = 'success';
-
-  // Set status based on conditions (skips are informational and do not make the report inconclusive)
-  status = getStatusForChecks(checks);
+  // Destination warnings and errors count toward the overall result; skips remain informational.
+  const status = getStatusForChecks(checks, ...Object.values(destinationChecks ?? {}));
 
   // Format checks
   const formattedChecks: SimulationCheck[] = formatChecksForStructuredReport(checks, chainId ?? 1);
@@ -1480,7 +1476,7 @@ ${
   return (await remark().use(remarkToc, { tight: true }).process(report)).toString();
 }
 
-function getOverallStatusFromChecks(checks: AllCheckResults): {
+function getOverallStatusFromChecks(...groups: AllCheckResults[]): {
   status: 'success' | 'warning' | 'error' | 'inconclusive';
   skipped: Array<{ checkId: string; name: string; reason: string }>;
   warningCount: number;
@@ -1490,11 +1486,13 @@ function getOverallStatusFromChecks(checks: AllCheckResults): {
   let warningCount = 0;
   let errorCount = 0;
 
-  for (const checkId in checks) {
-    const { name, result } = checks[checkId];
-    if (result.skipped) skipped.push({ checkId, name, reason: result.skipped.reason });
-    warningCount += result.warnings.length;
-    errorCount += result.errors.length;
+  for (const checks of groups) {
+    for (const checkId in checks) {
+      const { name, result } = checks[checkId];
+      if (result.skipped) skipped.push({ checkId, name, reason: result.skipped.reason });
+      warningCount += result.warnings.length;
+      errorCount += result.errors.length;
+    }
   }
 
   if (errorCount > 0) {
@@ -1512,7 +1510,10 @@ async function formatExecutiveSummary(
   destinationJobResults?: SimulationResult['destinationJobResults'],
   destinationChecks?: Record<number, AllCheckResults>,
 ): Promise<string> {
-  const { status, skipped, warningCount, errorCount } = getOverallStatusFromChecks(checks);
+  const { status, skipped, warningCount, errorCount } = getOverallStatusFromChecks(
+    checks,
+    ...Object.values(destinationChecks ?? {}),
+  );
 
   const statusLabel =
     status === 'success'

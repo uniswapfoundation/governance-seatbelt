@@ -12,10 +12,32 @@ import { mainnet } from 'viem/chains';
 
 // Local contracts have no external explorer record; only that HTTP boundary is unavailable.
 const realFetch = globalThis.fetch;
+const traceTimes: number[] = [];
+let rpcFault: { token: string; selector: string; remaining: number; status: number } | undefined;
+let injectedFailures = 0;
 globalThis.fetch = ((input, init) => {
   const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input : input.url);
   if (url.hostname !== '127.0.0.1')
     return Promise.resolve(new Response('Local fixture has no explorer record', { status: 404 }));
+  const request = JSON.parse(String(init?.body ?? '{}'));
+  if (request.method?.startsWith('debug_trace')) traceTimes.push(performance.now());
+  // Real Anvil execution follows transient HTTP / JSON-RPC throttling at the provider boundary.
+  if (
+    rpcFault &&
+    rpcFault.remaining > 0 &&
+    request.method === 'debug_traceCall' &&
+    request.params[0].to.toLowerCase() === rpcFault.token.toLowerCase() &&
+    request.params[0].input.startsWith(rpcFault.selector)
+  ) {
+    rpcFault.remaining--;
+    injectedFailures++;
+    return Promise.resolve(
+      Response.json(
+        { jsonrpc: '2.0', id: request.id, error: { code: -32009, message: 'Trace rate limit' } },
+        { status: rpcFault.status, headers: { 'retry-after': '0' } },
+      ),
+    );
+  }
   return realFetch(input, init);
 }) as typeof fetch;
 for (const method of ['log', 'warn', 'error', 'info', 'debug'] as const) console[method] = () => {};
@@ -83,6 +105,14 @@ try {
       function set(uint value) external { marker = value; }
       function fail(address to) external payable { payable(to).transfer(msg.value); marker = 99; emit Transfer(msg.sender, to, 42); revert("rollback"); }
     }
+    contract NonToken {
+      uint8 public constant decimals = 18;
+      function update() external {}
+    }
+    contract NoDecimalsToken {
+      mapping(address => uint) public balanceOf;
+      function update() external { balanceOf[msg.sender] = 42; }
+    }
     contract UnreadableToken {
       uint8 public constant decimals = 6;
       function balanceOf(address) external pure returns (uint) { revert("unavailable"); }
@@ -91,7 +121,8 @@ try {
     },
     settings: { outputSelection: { '*': { '*': ['abi', 'evm.bytecode'] } } },
   };
-  const compiled = JSON.parse(solc.compile(JSON.stringify(input))).contracts['Fixture.sol'].Fixture;
+  const contracts = JSON.parse(solc.compile(JSON.stringify(input))).contracts['Fixture.sol'];
+  const compiled = contracts.Fixture;
   const deployment = await client.waitForTransactionReceipt({
     hash: await wallet.deployContract({
       account,
@@ -157,6 +188,25 @@ try {
   assert.equal(snapshot(token, account)?.after, '7750000');
   assert.equal(snapshot(token, receiver)?.before, '0');
   assert.equal(snapshot(token, receiver)?.after, '1250000');
+  for (const status of [429, 200]) {
+    rpcFault = { token: address, selector: '0x70a08231', remaining: 1, status };
+    const recovered = await sendSimulation(tokenPayload);
+    assert.equal(snapshot(recovered, account)?.after, '7750000');
+    assert.equal(snapshot(recovered, receiver)?.after, '1250000');
+    assert.deepEqual(recovered.assetWarnings, []);
+    assert.equal(rpcFault.remaining, 0);
+  }
+  rpcFault = undefined;
+  const concurrent = await Promise.all([
+    sendSimulation(tokenPayload),
+    sendSimulation(tokenPayload),
+    sendSimulation(tokenPayload),
+  ]);
+  for (const result of concurrent) assert.equal(snapshot(result, receiver)?.after, '1250000');
+  assert.ok(
+    traceTimes.every((time, index) => index < 25 || time - traceTimes[index - 25] >= 1000),
+    'Concurrent simulations must stay within the provider limit of 25 traces per second',
+  );
   const secondTransfer = await sendSimulation({ ...tokenPayload, state_objects: token.postState });
   assert.equal(snapshot(secondTransfer, receiver)?.before, '1250000');
   assert.equal(snapshot(secondTransfer, receiver)?.after, '2500000');
@@ -182,15 +232,81 @@ try {
   assert.deepEqual(silent.transaction.transaction_info.asset_changes, []);
   assert.equal(snapshot(silent, account)?.before, '9000000');
   assert.equal(snapshot(silent, account)?.after, '42');
+  rpcFault = { token: address, selector: '0x313ce567', remaining: 10, status: 429 };
+  const failuresBefore = injectedFailures;
+  const exhausted = await sendSimulation({
+    ...tokenPayload,
+    input: encodeFunctionData({
+      abi: compiled.abi,
+      functionName: 'setBalance',
+      args: [account, 42n],
+    }),
+  });
+  rpcFault = undefined;
+  assert.equal(injectedFailures - failuresBefore, 4);
+  assert.equal(exhausted.assetBalanceUnavailableTokens?.length, 1);
+  assert.equal(
+    exhausted.assetBalanceUnavailableTokens[0].tokenAddress.toLowerCase(),
+    address.toLowerCase(),
+  );
+  assert.equal(
+    exhausted.assetBalanceUnavailableTokens[0].reason,
+    'RPC request failed while checking token metadata',
+  );
+  assert.match(exhausted.assetWarnings!.join(' '), /Token balance reads unavailable/);
+
   const redenominated = await sendSimulation({
     ...tokenPayload,
     input: encodeFunctionData({ abi: compiled.abi, functionName: 'setDecimals', args: [18] }),
   });
   assert.equal(snapshot(redenominated, account), undefined);
   assert.match(redenominated.assetWarnings!.join(' '), /denomination changed/);
-  const unreadableContract = JSON.parse(solc.compile(JSON.stringify(input))).contracts[
-    'Fixture.sol'
-  ].UnreadableToken;
+  const nonToken = contracts.NonToken;
+  const nonTokenReceipt = await client.waitForTransactionReceipt({
+    hash: await wallet.deployContract({
+      account,
+      abi: nonToken.abi,
+      bytecode: `0x${nonToken.evm.bytecode.object}`,
+    }),
+  });
+  const ordinary = await sendSimulation({
+    ...tokenPayload,
+    to: nonTokenReceipt.contractAddress!,
+    block_number: Number(nonTokenReceipt.blockNumber),
+    input: encodeFunctionData({ abi: nonToken.abi, functionName: 'update' }),
+  });
+  assert.equal(ordinary.transaction.status, true);
+  assert.equal(
+    snapshot(ordinary, account, null)?.before,
+    (
+      await client.getBalance({ address: account, blockNumber: nonTokenReceipt.blockNumber })
+    ).toString(),
+  );
+  assert.deepEqual(
+    ordinary.assetBalances?.filter((row) => row.tokenAddress !== null),
+    [],
+  );
+  assert.deepEqual(ordinary.assetBalanceUnavailableTokens, []);
+  const noDecimals = contracts.NoDecimalsToken;
+  const noDecimalsReceipt = await client.waitForTransactionReceipt({
+    hash: await wallet.deployContract({
+      account,
+      abi: noDecimals.abi,
+      bytecode: `0x${noDecimals.evm.bytecode.object}`,
+    }),
+  });
+  const missingDecimals = await sendSimulation({
+    ...tokenPayload,
+    to: noDecimalsReceipt.contractAddress!,
+    block_number: Number(noDecimalsReceipt.blockNumber),
+    input: encodeFunctionData({ abi: noDecimals.abi, functionName: 'update' }),
+  });
+  assert.equal(missingDecimals.transaction.status, true);
+  assert.equal(
+    missingDecimals.assetBalanceUnavailableTokens?.[0].reason,
+    'Token decimals could not be read',
+  );
+  const unreadableContract = contracts.UnreadableToken;
   const unreadableReceipt = await client.waitForTransactionReceipt({
     hash: await wallet.deployContract({
       account,
@@ -202,7 +318,11 @@ try {
     ...tokenPayload,
     to: unreadableReceipt.contractAddress!,
     block_number: Number(unreadableReceipt.blockNumber),
-    input: encodeFunctionData({ abi: unreadableContract.abi, functionName: 'decimals' }),
+    input: encodeFunctionData({
+      abi: unreadableContract.abi,
+      functionName: 'balanceOf',
+      args: [account],
+    }),
   });
   const unknown = unreadable.assetBalances!.find(
     (row) => row.tokenAddress?.toLowerCase() === unreadableReceipt.contractAddress!.toLowerCase(),
@@ -223,8 +343,21 @@ try {
     timelock: { address: account },
     chainConfig: { blockExplorer: { baseUrl: 'https://etherscan.io' } },
   } as never;
+  const untouched = await sendSimulation({
+    ...tokenPayload,
+    balance_addresses: [nextReceiver, '0xf38521f130fcCF29dB1961597bc5d2B60F995f85'],
+    state_objects: { [nextReceiver]: { balance: '5000000000000000000' } },
+  });
+  assert.equal(snapshot(untouched, nextReceiver, null)?.before, '5000000000000000000');
+  assert.equal(snapshot(untouched, nextReceiver, null)?.after, '5000000000000000000');
+  assert.equal(snapshot(untouched, nextReceiver, address)?.before, '0');
+  assert.equal(snapshot(untouched, nextReceiver, address)?.after, '0');
+  assert.equal(
+    snapshot(untouched, '0xf38521f130fcCF29dB1961597bc5d2B60F995f85', address)?.after,
+    '0',
+  );
   const treasury = await checkTreasuryMovement.checkProposal(proposal, feeTransfer, deps);
-  assert.equal((treasury.data as { totalOutgoingUsd: unknown }).totalOutgoingUsd, null);
+  assert.equal((treasury.data as { measuredDecreaseUsd: unknown }).measuredDecreaseUsd, null);
   const treasuryBalances = treasury.data as {
     type: string;
     treasuryAddresses: string[];
@@ -235,11 +368,20 @@ try {
       change: string | null;
     }>;
     checked: unknown[];
-    transfers: unknown[];
   };
-  assert.equal(treasuryBalances.type, 'treasuryBalances/v1');
+  assert.equal(treasuryBalances.type, 'treasuryBalances/v2');
+  assert.equal(
+    treasuryBalances.rows.every((row) => row.address.toLowerCase() === account.toLowerCase()),
+    true,
+  );
+  assert.match(treasury.warnings.join(' '), /Treasury .*TEST/);
+  const exhaustedTreasury = await checkTreasuryMovement.checkProposal(proposal, exhausted, deps);
+  assert.match(exhaustedTreasury.warnings.join(' '), /valuation is incomplete/);
+  const exhaustedAssets = await checkAssetBalances.checkProposal(proposal, exhausted, deps);
+  assert.match(exhaustedAssets.warnings.join(' '), /Token balance reads unavailable/);
+  const assetReport = await checkAssetBalances.checkProposal(proposal, feeTransfer, deps);
   assert.equal(treasuryBalances.treasuryAddresses[0].toLowerCase(), account.toLowerCase());
-  const mismatch = treasuryBalances.rows.find(
+  const mismatch = (assetReport.data as typeof treasuryBalances).rows.find(
     (row) =>
       row.address.toLowerCase() === receiver.toLowerCase() &&
       row.tokenAddress?.toLowerCase() === address.toLowerCase(),
@@ -247,7 +389,6 @@ try {
   assert.equal(mismatch?.eventNet, '0.0001');
   assert.equal(mismatch?.change, '+0.00009');
   assert.ok(treasuryBalances.checked.length > 0);
-  assert.equal(treasuryBalances.transfers.length, 1);
   assert.equal(
     redenominated.assetBalanceUnavailableTokens?.[0].tokenAddress.toLowerCase(),
     address.toLowerCase(),
@@ -255,6 +396,17 @@ try {
 
   assert.match(treasury.warnings.join(' '), /thresholds were not evaluated/);
   assert.doesNotMatch(treasury.info.join(' '), /: \$0/);
+  const { mergeAllCheckResults } = await import('../../utils/check-results');
+  const noChangeTreasury = await checkTreasuryMovement.checkProposal(proposal, ordinary, deps);
+  const merged = mergeAllCheckResults(
+    { checkTreasuryMovement: { name: 'Treasury movement', result: treasury } },
+    { checkTreasuryMovement: { name: 'Treasury movement', result: noChangeTreasury } },
+  );
+  const withUnavailable = mergeAllCheckResults(merged, {
+    checkTreasuryMovement: { name: 'Treasury movement', result: exhaustedTreasury },
+  });
+  const steps = (withUnavailable.checkTreasuryMovement.result.data as { steps: unknown[] }).steps;
+  assert.deepEqual(steps, [treasury.data, noChangeTreasury.data, exhaustedTreasury.data]);
   const report = await checkAssetBalances.checkProposal(proposal, silent, deps);
   assert.match(report.info.join(' '), /-8\.999958/);
   assert.match(report.info.join(' '), /TEST/);
