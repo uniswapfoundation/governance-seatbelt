@@ -4,6 +4,7 @@ import {
   getOutgoingTreasuryAssetChanges,
   getTreasuryMovementConfig,
 } from '../utils/treasury-movement';
+import { checkAssetBalances } from './check-asset-balances';
 
 type TenderlyAssetChange = NonNullable<
   NonNullable<TenderlySimulation['transaction']['transaction_info']['asset_changes']>[number]
@@ -57,8 +58,45 @@ function tokenKey(change: TenderlyAssetChange) {
 }
 
 export const checkTreasuryMovement: ProposalCheck = {
-  name: 'Treasury movement check',
-  async checkProposal(_, sim, deps) {
+  name: 'Treasury balance changes',
+  async checkProposal(proposal, sim, deps) {
+    if (sim.provider === 'rpc') {
+      const balances = await checkAssetBalances.checkProposal(proposal, sim, deps);
+      const { treasuryAddresses } = getTreasuryMovementConfig({
+        governorAddress: deps.governor.address,
+        timelockAddress: deps.timelock?.address,
+      });
+      return {
+        ...balances,
+        info: [
+          `Treasury accounts: ${treasuryAddresses.join(', ') || 'none configured'}`,
+          ...balances.info,
+          '',
+          'Observed transfers (events / native traces):',
+          ...(sim.transaction.transaction_info.asset_changes ?? []).map(
+            (transfer) =>
+              `${transfer.from} → ${transfer.to}: ${transfer.amount} ${transfer.token_info.symbol}`,
+          ),
+        ],
+        warnings: [
+          ...balances.warnings,
+          'USD valuation is unavailable. Dollar thresholds were not evaluated.',
+        ],
+        data: {
+          ...(balances.data as Record<string, unknown>),
+          type: 'treasuryBalances/v1',
+          treasuryAddresses,
+          totalOutgoingUsd: null,
+          transfers: (sim.transaction.transaction_info.asset_changes ?? []).map((transfer) => ({
+            from: transfer.from,
+            to: transfer.to,
+            tokenAddress: transfer.token_info.contract_address ?? null,
+            symbol: transfer.token_info.symbol,
+            amount: transfer.amount,
+          })),
+        },
+      };
+    }
     if (sim.transaction.transaction_info.asset_changes == null) {
       return {
         info: [],
@@ -92,7 +130,7 @@ export const checkTreasuryMovement: ProposalCheck = {
         blockExplorerBaseUrl: deps.chainConfig.blockExplorer.baseUrl,
         treasuryAddresses: treasuryAddresses.map((a) => getAddress(a)),
         thresholds,
-        totalOutgoingUsd: sim.provider === 'rpc' ? null : 0,
+        totalOutgoingUsd: 0,
         transferCount: 0,
         topRecipients: [],
         unpricedTransferCount: 0,
@@ -121,7 +159,7 @@ export const checkTreasuryMovement: ProposalCheck = {
       return sum + usd;
     }, 0);
 
-    const usdUnavailable = sim.provider === 'rpc' || unpricedTransferCount > 0;
+    const usdUnavailable = unpricedTransferCount > 0;
     if (usdUnavailable) {
       warnings.push(
         'USD valuation is unavailable or incomplete. Dollar totals and USD risk thresholds were not evaluated.',

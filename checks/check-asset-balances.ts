@@ -6,7 +6,7 @@ export const checkAssetBalances: ProposalCheck = {
   async checkProposal(_, sim, deps) {
     const warnings = [...(sim.assetWarnings ?? [])];
     const transfers = sim.transaction.transaction_info.asset_changes ?? [];
-    if (!sim.assetBalances && !transfers.length)
+    if (sim.provider !== 'rpc' && !sim.assetBalances && !transfers.length)
       return {
         info: [],
         warnings,
@@ -37,16 +37,36 @@ export const checkAssetBalances: ProposalCheck = {
           });
       }
     }
-    const shown = snapshots.filter(
-      (row) =>
-        row.before !== row.after ||
-        row.before === null ||
-        moved.has(key(row.address, row.tokenAddress)),
-    );
-    const rows = shown.map((row) => {
+    const allRows = snapshots.map((row) => {
       const delta =
         row.before === null || row.after === null ? null : BigInt(row.after) - BigInt(row.before);
+      const eventNet = transfers
+        .filter(
+          (transfer) =>
+            (transfer.token_info.contract_address?.toLowerCase() ?? 'native') ===
+            (row.tokenAddress?.toLowerCase() ?? 'native'),
+        )
+        .reduce(
+          (net, transfer) =>
+            net +
+            (transfer.to.toLowerCase() === row.address.toLowerCase()
+              ? BigInt(transfer.raw_amount)
+              : 0n) -
+            (transfer.from.toLowerCase() === row.address.toLowerCase()
+              ? BigInt(transfer.raw_amount)
+              : 0n),
+          0n,
+        );
       return {
+        eventNet:
+          row.tokenAddress && delta !== null && eventNet !== delta
+            ? formatUnits(eventNet, row.decimals)
+            : null,
+        difference:
+          row.tokenAddress && delta !== null && eventNet !== delta
+            ? formatUnits(delta - eventNet, row.decimals)
+            : null,
+        moved: moved.has(key(row.address, row.tokenAddress)),
         address: row.address,
         tokenAddress: row.tokenAddress,
         symbol: /^0x/i.test(row.symbol)
@@ -58,9 +78,10 @@ export const checkAssetBalances: ProposalCheck = {
           delta === null ? null : `${delta > 0n ? '+' : ''}${formatUnits(delta, row.decimals)}`,
       };
     });
+    const rows = allRows.filter((row) => row.change !== '0' || row.moved);
     const notes = [
       'Read before and after simulation, including supplied state overrides.',
-      'Partial coverage: only observed accounts and detected tokens. Unavailable means a balance could not be read.',
+      'Accounts and tokens outside the execution trace and detected transfers were not checked. Rebases may affect other holders.',
       'USD pricing is unavailable; dollar thresholds were not evaluated.',
       sim.gasSponsored
         ? 'Simulation gas funding is excluded; unsupported fee accounting is unavailable.'
@@ -76,15 +97,33 @@ export const checkAssetBalances: ProposalCheck = {
           ),
         ]
       : ['No balance changes or transfers detected in checked accounts.'];
-    info.push('', ...notes);
+    info.push(
+      '',
+      ...rows
+        .filter((row) => row.eventNet !== null)
+        .map(
+          (row) =>
+            `${row.address} / ${row.symbol ?? row.tokenAddress}: transfer-event net ${row.eventNet}; measured change ${row.change}; difference ${row.difference}.`,
+        ),
+      ...notes,
+    );
+    info.push(
+      `Read before and after: ${allRows.filter((row) => row.before !== null && row.after !== null).length} account/asset pairs.`,
+    );
+    for (const token of sim.assetBalanceUnavailableTokens ?? [])
+      info.push(`Unavailable: ${token.tokenAddress}: ${token.reason}.`);
     return {
       info,
       warnings,
       errors: [],
       data: {
-        type: 'assetBalances/v1',
+        type: 'assetBalances/v2',
+        gasSponsored: sim.gasSponsored ?? false,
         blockExplorerBaseUrl: deps.chainConfig.blockExplorer.baseUrl,
         rows,
+        checked: allRows.filter((row) => row.before !== null && row.after !== null),
+        unavailableTokens: sim.assetBalanceUnavailableTokens ?? [],
+        historicalReplay: sim.assetBalanceHistoricalReplay ?? false,
         notes,
       },
     };

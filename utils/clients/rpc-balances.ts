@@ -43,11 +43,16 @@ export async function getRpcBalanceSnapshots({
   blockNumber: number;
   blockOverrides: Record<string, string>;
   gasAllowance: bigint;
-}): Promise<{ rows: AssetBalanceSnapshot[]; warnings: string[] }> {
+}): Promise<{
+  rows: AssetBalanceSnapshot[];
+  warnings: string[];
+  unavailableTokens: { tokenAddress: string; reason: string }[];
+}> {
   const chainId = Number(payload.network_id);
   const native = getClientForChain(chainId).chain.nativeCurrency;
   const rows: AssetBalanceSnapshot[] = [];
   const warnings: string[] = [];
+  const unavailableTokens: { tokenAddress: string; reason: string }[] = [];
   const sender = getAddress(payload.from);
   const holders = new Set<string>([sender, getAddress(payload.to)]);
   const candidates = new Set<string>();
@@ -100,7 +105,7 @@ export async function getRpcBalanceSnapshots({
     warnings.push(
       'Token balance snapshots are unavailable for historical transaction replay; Transfer events are observations, not measured token balance changes.',
     );
-    return { rows, warnings };
+    return { rows, warnings, unavailableTokens };
   }
   const beforeState = payload.state_objects ?? {};
   const afterState = mergeStateObjects(beforeState, postState) ?? {};
@@ -146,6 +151,10 @@ export async function getRpcBalanceSnapshots({
         beforeState,
       );
       if (value > 255n || beforeDecimals !== value) {
+        unavailableTokens.push({
+          tokenAddress: token,
+          reason: 'Token decimals changed or are unsupported',
+        });
         warnings.push(
           `Token denomination changed or is unsupported for ${token}; balance changes are unavailable.`,
         );
@@ -153,7 +162,10 @@ export async function getRpcBalanceSnapshots({
       }
       decimals = Number(value);
     } catch {
-      if (metadata) warnings.push(`Token balance reads unavailable for ${token}.`);
+      if (metadata) {
+        warnings.push(`Token balance reads unavailable for ${token}.`);
+        unavailableTokens.push({ tokenAddress: token, reason: 'Token decimals could not be read' });
+      }
       continue;
     }
     let symbol = metadata?.symbol ?? token;
@@ -218,5 +230,5 @@ export async function getRpcBalanceSnapshots({
   }
   if (rows.some((row) => row.before === null || row.after === null))
     warnings.push('Some balance reads are unavailable; unknown balances are not treated as zero.');
-  return { rows, warnings };
+  return { rows, warnings, unavailableTokens };
 }

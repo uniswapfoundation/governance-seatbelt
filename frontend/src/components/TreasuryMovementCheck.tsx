@@ -218,7 +218,7 @@ export function TreasuryMovementCheck({
             {totalOutgoingUsd === null ? 'Recipients (USD ranking unavailable)' : 'Top Recipients'}
           </p>
           <p className="text-xs text-muted-foreground mb-2">
-            Transfer events can differ from actual balance changes. See asset balance changes.
+            Transfer events can differ from actual balance changes.
           </p>
           <div className="border border-border/60 rounded-md overflow-hidden">
             <table className="w-full text-sm">

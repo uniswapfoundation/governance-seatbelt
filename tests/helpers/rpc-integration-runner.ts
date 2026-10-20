@@ -225,6 +225,34 @@ try {
   } as never;
   const treasury = await checkTreasuryMovement.checkProposal(proposal, feeTransfer, deps);
   assert.equal((treasury.data as { totalOutgoingUsd: unknown }).totalOutgoingUsd, null);
+  const treasuryBalances = treasury.data as {
+    type: string;
+    treasuryAddresses: string[];
+    rows: Array<{
+      address: string;
+      tokenAddress: string | null;
+      eventNet: string | null;
+      change: string | null;
+    }>;
+    checked: unknown[];
+    transfers: unknown[];
+  };
+  assert.equal(treasuryBalances.type, 'treasuryBalances/v1');
+  assert.equal(treasuryBalances.treasuryAddresses[0].toLowerCase(), account.toLowerCase());
+  const mismatch = treasuryBalances.rows.find(
+    (row) =>
+      row.address.toLowerCase() === receiver.toLowerCase() &&
+      row.tokenAddress?.toLowerCase() === address.toLowerCase(),
+  );
+  assert.equal(mismatch?.eventNet, '0.0001');
+  assert.equal(mismatch?.change, '+0.00009');
+  assert.ok(treasuryBalances.checked.length > 0);
+  assert.equal(treasuryBalances.transfers.length, 1);
+  assert.equal(
+    redenominated.assetBalanceUnavailableTokens?.[0].tokenAddress.toLowerCase(),
+    address.toLowerCase(),
+  );
+
   assert.match(treasury.warnings.join(' '), /thresholds were not evaluated/);
   assert.doesNotMatch(treasury.info.join(' '), /: \$0/);
   const report = await checkAssetBalances.checkProposal(proposal, silent, deps);

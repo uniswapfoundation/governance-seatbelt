@@ -254,6 +254,8 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
     postState,
     assetWarnings: [...assets.warnings, ...balances.warnings],
     assetBalances: balances.rows,
+    assetBalanceHistoricalReplay: Boolean(payload.transaction_hash),
+    assetBalanceUnavailableTokens: balances.unavailableTokens,
     gasSponsored: Boolean(sponsorGas),
     simulation: {
       id,
