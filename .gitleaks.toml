@@ -64,6 +64,8 @@ regexes = [
   '''(yourEtherscanApiKey|yourMainnetRpcUrl|yourTenderlyAccessToken|yourTenderlyOrgOrMeIfPersonal|yourTenderlyProjectSlug|yourArbitrumRpcUrl)''',
   # Governor and known contract addresses
   '''0x408ED6354d4973f66138C91495F2f2FCbd8724C3''',
+  # Public Arc protocol-fee TokenJar address, not an API key
+  '''0xfd39ac616e630e9db03EFB2c9a4Fe63eDB949233''',
   # Test-only idempotency keys used in relay fixtures
   '''publish-key-[0-9]+''',
 ]
