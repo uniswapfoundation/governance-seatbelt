@@ -274,7 +274,13 @@ export function ExpandableCheckItem({
           isTreasuryMovementCheck ||
           isPermissionChangesCheck ||
           coverage?.skipReason) && (
-          <div className="px-3 pb-4 sm:px-4 sm:pb-4 sm:pl-12 text-sm border-t border-muted/50 bg-background/50">
+          <div
+            className={
+              isBalanceReport
+                ? 'px-4 pb-6 sm:px-6 text-sm border-t bg-background'
+                : 'px-3 pb-4 sm:px-4 sm:pb-4 sm:pl-12 text-sm border-t border-muted/50 bg-background/50'
+            }
+          >
             {check.status === 'warning' &&
               !isBalanceReport &&
               check.warnings &&
