@@ -2,56 +2,91 @@ import { formatUnits } from 'viem';
 import type { ProposalCheck } from '../types';
 
 export const checkAssetBalances: ProposalCheck = {
-  name: 'Verified asset balance changes',
+  name: 'Asset balance changes',
   async checkProposal(_, sim, deps) {
     const warnings = [...(sim.assetWarnings ?? [])];
-    if (!sim.assetBalances)
+    const transfers = sim.transaction.transaction_info.asset_changes ?? [];
+    if (!sim.assetBalances && !transfers.length)
       return {
         info: [],
         warnings,
         errors: [],
         skipped: { reason: 'Balance snapshots unavailable' },
       };
-    const verified = sim.assetBalances.filter((row) => row.before !== null && row.after !== null);
-    const changed = sim.assetBalances.filter(
-      (row) => row.before !== row.after || row.before === null,
-    );
-    const info = [
-      `Verified ${verified.length} account/asset balances in the simulated state. Coverage is limited to observed accounts and detected tokens.`,
-      'Balances use the simulation baseline, including supplied state overrides, rather than necessarily live balances.',
-      sim.gasSponsored
-        ? 'Execution gas is sponsored. Verified caller balances exclude simulation gas funding; unsupported normalization is shown as unavailable.'
-        : 'Native caller balance changes include execution fees; transfer totals do not.',
-      '',
-    ];
-    if (!changed.length)
-      info.push(
-        'No balance changes among the verified account/asset pairs. Other balances were not checked.',
-      );
-    else {
-      info.push('| Account | Asset | Before | After | Change |', '| --- | --- | --- | --- | --- |');
-      for (const row of changed) {
-        const before =
-          row.before === null ? 'Unavailable' : formatUnits(BigInt(row.before), row.decimals);
-        const after =
-          row.after === null ? 'Unavailable' : formatUnits(BigInt(row.after), row.decimals);
-        const delta =
-          row.before === null || row.after === null ? null : BigInt(row.after) - BigInt(row.before);
-        const change =
-          delta === null
-            ? 'Unavailable'
-            : `${delta > 0n ? '+' : ''}${formatUnits(delta, row.decimals)}`;
-        const short = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`;
-        const label =
-          row.symbol === row.tokenAddress
-            ? short(row.symbol)
-            : row.symbol.replace(/[|\n\r\[\]]/g, ' ');
-        const asset = row.tokenAddress
-          ? `[${label}](${deps.chainConfig.blockExplorer.baseUrl}/address/${row.tokenAddress})`
-          : row.symbol;
-        info.push(`| \`${row.address}\` | ${asset} | ${before} | ${after} | ${change} |`);
+    const snapshots = [...(sim.assetBalances ?? [])];
+    const key = (address: string, token: string | null) =>
+      `${address.toLowerCase()}:${token?.toLowerCase() ?? 'native'}`;
+    const moved = new Set<string>();
+    // Keep observed transfers visible even when balance reads are unavailable or net to zero.
+    for (const transfer of transfers) {
+      const token = transfer.token_info;
+      const tokenAddress = token.contract_address ?? null;
+      if (!tokenAddress && token.standard !== 'NativeCurrency') continue;
+      for (const address of [transfer.from, transfer.to]) {
+        if (/^0x0{40}$/i.test(address)) continue;
+        const id = key(address, tokenAddress);
+        moved.add(id);
+        if (!snapshots.some((row) => key(row.address, row.tokenAddress) === id))
+          snapshots.push({
+            address,
+            tokenAddress,
+            symbol: token.symbol,
+            decimals: token.decimals,
+            before: null,
+            after: null,
+          });
       }
     }
-    return { info, warnings, errors: [] };
+    const shown = snapshots.filter(
+      (row) =>
+        row.before !== row.after ||
+        row.before === null ||
+        moved.has(key(row.address, row.tokenAddress)),
+    );
+    const rows = shown.map((row) => {
+      const delta =
+        row.before === null || row.after === null ? null : BigInt(row.after) - BigInt(row.before);
+      return {
+        address: row.address,
+        tokenAddress: row.tokenAddress,
+        symbol: /^0x/i.test(row.symbol)
+          ? null
+          : row.symbol.replace(/[|\n\r\[\]]/g, ' ').slice(0, 96),
+        before: row.before === null ? null : formatUnits(BigInt(row.before), row.decimals),
+        after: row.after === null ? null : formatUnits(BigInt(row.after), row.decimals),
+        change:
+          delta === null ? null : `${delta > 0n ? '+' : ''}${formatUnits(delta, row.decimals)}`,
+      };
+    });
+    const notes = [
+      'Read before and after simulation, including supplied state overrides.',
+      'Partial coverage: only observed accounts and detected tokens. Unavailable means a balance could not be read.',
+      'USD pricing is unavailable; dollar thresholds were not evaluated.',
+      sim.gasSponsored
+        ? 'Simulation gas funding is excluded; unsupported fee accounting is unavailable.'
+        : 'Native balance changes include execution fees.',
+    ];
+    const info = rows.length
+      ? [
+          '| Asset | Account | Before | After | Change |',
+          '| --- | --- | ---: | ---: | ---: |',
+          ...rows.map(
+            (row) =>
+              `| ${row.symbol ?? 'Token'}${row.tokenAddress ? ` (${row.tokenAddress})` : ''} | ${row.address} | ${row.before ?? 'Unavailable'} | ${row.after ?? 'Unavailable'} | ${row.change ?? 'Unavailable'} |`,
+          ),
+        ]
+      : ['No balance changes or transfers detected in checked accounts.'];
+    info.push('', ...notes);
+    return {
+      info,
+      warnings,
+      errors: [],
+      data: {
+        type: 'assetBalances/v1',
+        blockExplorerBaseUrl: deps.chainConfig.blockExplorer.baseUrl,
+        rows,
+        notes,
+      },
+    };
   },
 };

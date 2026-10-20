@@ -19,6 +19,7 @@ import { type RpcAccount, type RpcTrace, simulationRpc } from './rpc-simulation'
 const tokenAbi = parseAbi([
   'function balanceOf(address) view returns (uint256)',
   'function decimals() view returns (uint8)',
+  'function symbol() view returns (string)',
   'function transfer(address,uint256) returns (bool)',
   'function transferFrom(address,address,uint256) returns (bool)',
 ]);
@@ -97,7 +98,7 @@ export async function getRpcBalanceSnapshots({
   // A block-level eth_call cannot establish a token's exact pre/post transaction state.
   if (payload.transaction_hash) {
     warnings.push(
-      'Token balance snapshots are unavailable for historical transaction replay; Transfer events are observations, not verified token balance changes.',
+      'Token balance snapshots are unavailable for historical transaction replay; Transfer events are observations, not measured token balance changes.',
     );
     return { rows, warnings };
   }
@@ -155,6 +156,21 @@ export async function getRpcBalanceSnapshots({
       if (metadata) warnings.push(`Token balance reads unavailable for ${token}.`);
       continue;
     }
+    let symbol = metadata?.symbol ?? token;
+    if (!metadata) {
+      try {
+        symbol = (
+          await getClientForChain(chainId).readContract({
+            address: token as Hex,
+            abi: tokenAbi,
+            functionName: 'symbol',
+            blockNumber: BigInt(blockNumber),
+          })
+        ).slice(0, 96);
+      } catch {
+        /* The token address remains the identity when its symbol is unavailable. */
+      }
+    }
     for (const address of holders) {
       const input = encodeFunctionData({
         abi: tokenAbi,
@@ -176,7 +192,7 @@ export async function getRpcBalanceSnapshots({
       rows.push({
         address,
         tokenAddress: token,
-        symbol: metadata?.symbol ?? token,
+        symbol,
         decimals,
         before,
         after,
@@ -195,7 +211,7 @@ export async function getRpcBalanceSnapshots({
           );
         if (BigInt(after) - BigInt(before) !== observed)
           warnings.push(
-            `Verified balance change for ${address} in token ${token} differs from Transfer events.`,
+            `Measured balance change for ${address} in token ${token} differs from Transfer events.`,
           );
       }
     }
