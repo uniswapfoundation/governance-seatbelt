@@ -229,6 +229,42 @@ try {
   assert.doesNotMatch(treasury.info.join(' '), /: \$0/);
   const report = await checkAssetBalances.checkProposal(proposal, silent, deps);
   assert.match(report.info.join(' '), /-8\.999958/);
+  assert.match(report.info.join(' '), /TEST/);
+  const selfTransfer = await sendSimulation({
+    ...tokenPayload,
+    input: encodeFunctionData({
+      abi: compiled.abi,
+      functionName: 'transfer',
+      args: [account, 100n],
+    }),
+  });
+  const selfReport = await checkAssetBalances.checkProposal(proposal, selfTransfer, deps);
+  const balanceRows = (result: typeof selfReport) =>
+    (
+      result.data as {
+        rows: Array<{ address: string; tokenAddress: string | null; change: string | null }>;
+      }
+    ).rows;
+  assert.equal(
+    balanceRows(selfReport).find(
+      (row) =>
+        row.tokenAddress?.toLowerCase() === address.toLowerCase() &&
+        row.address.toLowerCase() === account.toLowerCase(),
+    )?.change,
+    '0',
+  );
+  const unavailableReport = await checkAssetBalances.checkProposal(
+    proposal,
+    { ...token, assetBalances: [] },
+    deps,
+  );
+  assert.equal(
+    balanceRows(unavailableReport).filter(
+      (row) => row.tokenAddress?.toLowerCase() === address.toLowerCase(),
+    ).length,
+    2,
+  );
+  assert.ok(balanceRows(unavailableReport).every((row) => row.change === null));
 
   const failed = await sendSimulation({
     ...tokenPayload,

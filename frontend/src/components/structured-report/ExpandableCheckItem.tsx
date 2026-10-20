@@ -19,8 +19,8 @@ import {
   SkipForwardIcon,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { AssetBalanceChanges } from '../AssetBalanceChanges';
 import { PermissionsDiff } from '../PermissionsDiff';
-import { CactusMarkdown } from '../ProposalDescriptionPreview';
 import {
   TreasuryMovementCheck,
   isTreasuryMovementCheckDataV1,
@@ -341,13 +341,8 @@ export function ExpandableCheckItem({
                 <TreasuryMovementCheck {...treasuryData} />
               </div>
             ) : checkId === 'checkassetbalances' ? (
-              <div className="mt-4 space-y-3 text-sm">
-                {(check.warnings ?? []).map((warning, index) => (
-                  <p key={index} className="text-amber-700 dark:text-amber-300">
-                    {warning}
-                  </p>
-                ))}
-                <CactusMarkdown content={(check.info ?? []).join('\n')} />
+              <div className="mt-4">
+                <AssetBalanceChanges data={check.data} warnings={check.warnings ?? []} />
               </div>
             ) : isPermissionChangesCheck ? (
               <div className="mt-4">
