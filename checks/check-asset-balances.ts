@@ -72,7 +72,11 @@ export async function getAssetBalanceReport(sim: TenderlySimulation, deps: Propo
       );
     const price = prices.quotes[row.tokenAddress?.toLowerCase() ?? 'native'];
     const usd =
-      delta === null || !price ? null : Number(formatUnits(delta, row.decimals)) * price.usd;
+      delta === 0n
+        ? 0
+        : delta === null || !price
+          ? null
+          : Number(formatUnits(delta, row.decimals)) * price.usd;
     return {
       usdChange: usd !== null && Number.isFinite(usd) ? usd : null,
       priceTimestamp: price?.timestamp ?? null,

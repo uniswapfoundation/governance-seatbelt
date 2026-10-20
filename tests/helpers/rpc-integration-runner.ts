@@ -412,6 +412,7 @@ try {
   assert.match(report.info.join(' '), /TEST/);
   const selfTransfer = await sendSimulation({
     ...tokenPayload,
+    fund_synthetic_sender: true,
     input: encodeFunctionData({
       abi: compiled.abi,
       functionName: 'transfer',
@@ -419,6 +420,11 @@ try {
     }),
   });
   const selfReport = await checkAssetBalances.checkProposal(proposal, selfTransfer, deps);
+  assert.deepEqual(selfReport.warnings, []);
+  assert.equal(
+    (selfReport.data as { rows: Array<{ usdChange: number | null }> }).rows[0].usdChange,
+    0,
+  );
   const balanceRows = (result: typeof selfReport) =>
     (
       result.data as {

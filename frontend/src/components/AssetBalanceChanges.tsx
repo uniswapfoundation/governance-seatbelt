@@ -114,7 +114,8 @@ export function AssetBalanceChanges({ data }: { data: unknown }) {
   const isTreasury = (value: string) =>
     treasuryAddresses.some((address) => address.toLowerCase() === value.toLowerCase());
   const treasuryOnly = parsed.data.type === 'treasuryBalances/v2';
-  const unpriced = rows.filter((row) => row.usdChange === null);
+  const valuationRows = rows.filter((row) => row.change !== '0');
+  const unpriced = valuationRows.filter((row) => row.usdChange === null);
   const missingPrices = unpriced.filter((row) => row.change !== null);
   const unreadable = rows.filter((row) => row.before === null || row.after === null);
   const unobservedTreasuries = treasuryAddresses.filter(
@@ -212,9 +213,11 @@ export function AssetBalanceChanges({ data }: { data: unknown }) {
                 <TableCell
                   className={`text-right tabular-nums text-muted-foreground ${detailed ? '' : 'hidden sm:table-cell'}`}
                   title={
-                    row.priceTimestamp
-                      ? `DefiLlama quote: ${new Date(row.priceTimestamp * 1000).toISOString()}`
-                      : (row.priceUnavailable ?? 'Price unavailable')
+                    row.change === '0'
+                      ? 'No net balance change.'
+                      : row.priceTimestamp
+                        ? `DefiLlama quote: ${new Date(row.priceTimestamp * 1000).toISOString()}`
+                        : (row.priceUnavailable ?? 'Price unavailable')
                   }
                 >
                   {formatUsd(row.usdChange)}
@@ -285,9 +288,9 @@ export function AssetBalanceChanges({ data }: { data: unknown }) {
           {' · '}
           {new Set(checked.map((row) => row.tokenAddress?.toLowerCase() ?? 'native')).size} assets
         </p>
-        {rows.length > 0 && (
+        {valuationRows.length > 0 && (
           <Badge variant="outline" className="font-normal text-muted-foreground">
-            {rows.length - unpriced.length}/{rows.length} changes valued in USD
+            {valuationRows.length - unpriced.length}/{valuationRows.length} changes valued in USD
           </Badge>
         )}
       </div>
