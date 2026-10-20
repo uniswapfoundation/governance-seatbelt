@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { PermissionsDiff } from '../PermissionsDiff';
+import { CactusMarkdown } from '../ProposalDescriptionPreview';
 import {
   TreasuryMovementCheck,
   isTreasuryMovementCheckDataV1,
@@ -338,6 +339,15 @@ export function ExpandableCheckItem({
             ) : isTreasuryMovementCheck && treasuryData ? (
               <div className="mt-4">
                 <TreasuryMovementCheck {...treasuryData} />
+              </div>
+            ) : checkId === 'checkassetbalances' ? (
+              <div className="mt-4 space-y-3 text-sm">
+                {(check.warnings ?? []).map((warning, index) => (
+                  <p key={index} className="text-amber-700 dark:text-amber-300">
+                    {warning}
+                  </p>
+                ))}
+                <CactusMarkdown content={(check.info ?? []).join('\n')} />
               </div>
             ) : isPermissionChangesCheck ? (
               <div className="mt-4">

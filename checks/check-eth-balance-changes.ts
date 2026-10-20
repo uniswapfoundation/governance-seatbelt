@@ -1,5 +1,5 @@
 import { getAddress } from 'viem';
-import type { AssetChange, BalanceChange, ProposalCheck, TenderlyContract } from '../types';
+import type { AssetChange, ProposalCheck, TenderlyContract } from '../types';
 import { DEFAULT_SIMULATION_ADDRESS, getContractNameFromTenderly } from '../utils/clients/tenderly';
 
 /**
@@ -67,19 +67,6 @@ export const checkEthBalanceChanges: ProposalCheck = {
     // Add a blank line after the transfer messages
     if (significantChanges.length > 0) {
       significantChanges.push('');
-    }
-
-    // Add a table for balance changes if available
-    if (
-      sim.transaction.transaction_info.balance_changes &&
-      sim.transaction.transaction_info.balance_changes.length > 0
-    ) {
-      addBalanceChangesTable(
-        sim.transaction.transaction_info.balance_changes,
-        ethTransfers,
-        findContractByAddress,
-        significantChanges,
-      );
     }
 
     // Return the collected info
@@ -168,109 +155,4 @@ function generateTransferMessages(
       minorChanges.push('');
     }
   }
-}
-
-/**
- * Adds a table showing ETH balance changes for each address
- */
-function addBalanceChangesTable(
-  balanceChanges: BalanceChange[],
-  ethTransfers: AssetChange[],
-  findContractByAddress: (address: string) => TenderlyContract | undefined,
-  significantChanges: string[],
-) {
-  // Create table header
-  significantChanges.push('ETH Balance Changes');
-  significantChanges.push('| Address | Description | Net ETH Change |');
-  significantChanges.push('| ------- | ----------- | ------------- |');
-
-  // Get addresses involved in ETH transfers to verify balance changes are ETH-related
-  const ethAddresses = getEthAddresses(ethTransfers);
-
-  // Calculate net ETH changes for each address
-  const netEthChanges = calculateNetEthChanges(ethTransfers);
-
-  // Sort balance changes by address for consistency
-  const sortedBalanceChanges = [...balanceChanges]
-    .filter((change) => ethAddresses.has(change.address.toLowerCase())) // Only include addresses involved in ETH transfers
-    .sort((a, b) => a.address.toLowerCase().localeCompare(b.address.toLowerCase()));
-
-  if (sortedBalanceChanges.length === 0) {
-    significantChanges.push('| | No relevant ETH balance changes detected | |');
-  } else {
-    // Add each balance change to the table
-    for (const change of sortedBalanceChanges) {
-      const address = getAddress(change.address);
-      const addressLower = address.toLowerCase();
-      const contract = findContractByAddress(address);
-
-      // Format description based on whether it's a contract or EOA
-      let description = contract ? getContractNameFromTenderly(contract).split(' at ')[0] : 'EOA';
-      if (getAddress(address) === getAddress(DEFAULT_SIMULATION_ADDRESS)) {
-        description += ' (simulation placeholder)';
-      }
-
-      // Get the net ETH change for this address
-      const netChange = netEthChanges.get(addressLower) || 0;
-
-      // Format the ETH change with sign, fixed precision, and color coding
-      const formattedChange: string = formatEthChange(netChange);
-
-      // Add row to table
-      significantChanges.push(`| \`${address}\` | ${description} | ${formattedChange} |`);
-    }
-  }
-
-  significantChanges.push('');
-}
-
-/**
- * Gets a set of addresses involved in ETH transfers
- */
-function getEthAddresses(ethTransfers: AssetChange[]): Set<string> {
-  const ethAddresses = new Set<string>();
-  for (const transfer of ethTransfers) {
-    ethAddresses.add(transfer.from.toLowerCase());
-    ethAddresses.add(transfer.to.toLowerCase());
-  }
-  return ethAddresses;
-}
-
-/**
- * Calculates net ETH changes for each address
- */
-function calculateNetEthChanges(ethTransfers: AssetChange[]): Map<string, number> {
-  const netEthChanges = new Map<string, number>();
-
-  for (const transfer of ethTransfers) {
-    const fromLower = transfer.from.toLowerCase();
-    const toLower = transfer.to.toLowerCase();
-    const amount = Number.parseFloat(transfer.amount);
-
-    // Subtract from sender
-    netEthChanges.set(fromLower, (netEthChanges.get(fromLower) || 0) - amount);
-
-    // Add to receiver
-    netEthChanges.set(toLower, (netEthChanges.get(toLower) || 0) + amount);
-  }
-
-  return netEthChanges;
-}
-
-/**
- * Formats an ETH change value with color coding
- */
-function formatEthChange(netChange: number): string {
-  if (netChange > 0) {
-    // Green for positive changes
-    return `<span style="color:green">+${netChange.toFixed(4)} ETH</span>`;
-  }
-
-  if (netChange < 0) {
-    // Red for negative changes
-    return `<span style="color:red">${netChange.toFixed(4)} ETH</span>`;
-  }
-
-  // Gray for zero changes
-  return `<span style="color:gray">${netChange.toFixed(4)} ETH</span>`;
 }

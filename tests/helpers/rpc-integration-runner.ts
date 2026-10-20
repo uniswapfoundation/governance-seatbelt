@@ -65,11 +65,14 @@ try {
       'Fixture.sol': {
         content: `pragma solidity ^0.8.30;
     contract Fixture {
-      string public constant symbol = "TEST"; uint8 public constant decimals = 6;
-      mapping(address => uint) public balanceOf; uint public marker;
+      string public constant symbol = "TEST";
+      mapping(address => uint) public balanceOf; uint public marker; uint8 public decimals = 6;
+      function setDecimals(uint8 value) external { decimals = value; }
       event Transfer(address indexed from, address indexed to, uint value);
       constructor() { balanceOf[msg.sender] = 9000000; }
       function transfer(address to, uint amount) external { balanceOf[msg.sender] -= amount; balanceOf[to] += amount; emit Transfer(msg.sender, to, amount); }
+      function transferWithFee(address to, uint amount) external { balanceOf[msg.sender] -= amount; balanceOf[to] += amount - 10; emit Transfer(msg.sender, to, amount); }
+      function setBalance(address holder, uint amount) external { balanceOf[holder] = amount; }
       receive() external payable {}
       function withdraw(address to) external { payable(to).transfer(address(this).balance); }
       event Fees(uint baseFee, uint gasPrice, uint targetBalance, uint callerBalance);
@@ -79,6 +82,10 @@ try {
       function clear() external { marker = 0; }
       function set(uint value) external { marker = value; }
       function fail(address to) external payable { payable(to).transfer(msg.value); marker = 99; emit Transfer(msg.sender, to, 42); revert("rollback"); }
+    }
+    contract UnreadableToken {
+      uint8 public constant decimals = 6;
+      function balanceOf(address) external pure returns (uint) { revert("unavailable"); }
     }`,
       },
     },
@@ -140,12 +147,96 @@ try {
   assert.equal(movement?.amount, '1.25');
   assert.equal(movement?.token_info.symbol, 'TEST');
 
+  const snapshot = (sim: typeof token, holder: string, asset: string | null = address) =>
+    sim.assetBalances?.find(
+      (row) =>
+        row.address.toLowerCase() === holder.toLowerCase() &&
+        row.tokenAddress?.toLowerCase() === asset?.toLowerCase(),
+    );
+  assert.equal(snapshot(token, account)?.before, '9000000');
+  assert.equal(snapshot(token, account)?.after, '7750000');
+  assert.equal(snapshot(token, receiver)?.before, '0');
+  assert.equal(snapshot(token, receiver)?.after, '1250000');
+  const secondTransfer = await sendSimulation({ ...tokenPayload, state_objects: token.postState });
+  assert.equal(snapshot(secondTransfer, receiver)?.before, '1250000');
+  assert.equal(snapshot(secondTransfer, receiver)?.after, '2500000');
+  const feeTransfer = await sendSimulation({
+    ...tokenPayload,
+    input: encodeFunctionData({
+      abi: compiled.abi,
+      functionName: 'transferWithFee',
+      args: [receiver, 100n],
+    }),
+  });
+  assert.equal(feeTransfer.transaction.transaction_info.asset_changes?.[0].raw_amount, '100');
+  assert.equal(snapshot(feeTransfer, receiver)?.after, '90');
+  assert.match(feeTransfer.assetWarnings!.join(' '), /differs from Transfer events/);
+  const silent = await sendSimulation({
+    ...tokenPayload,
+    input: encodeFunctionData({
+      abi: compiled.abi,
+      functionName: 'setBalance',
+      args: [account, 42n],
+    }),
+  });
+  assert.deepEqual(silent.transaction.transaction_info.asset_changes, []);
+  assert.equal(snapshot(silent, account)?.before, '9000000');
+  assert.equal(snapshot(silent, account)?.after, '42');
+  const redenominated = await sendSimulation({
+    ...tokenPayload,
+    input: encodeFunctionData({ abi: compiled.abi, functionName: 'setDecimals', args: [18] }),
+  });
+  assert.equal(snapshot(redenominated, account), undefined);
+  assert.match(redenominated.assetWarnings!.join(' '), /denomination changed/);
+  const unreadableContract = JSON.parse(solc.compile(JSON.stringify(input))).contracts[
+    'Fixture.sol'
+  ].UnreadableToken;
+  const unreadableReceipt = await client.waitForTransactionReceipt({
+    hash: await wallet.deployContract({
+      account,
+      abi: unreadableContract.abi,
+      bytecode: `0x${unreadableContract.evm.bytecode.object}`,
+    }),
+  });
+  const unreadable = await sendSimulation({
+    ...tokenPayload,
+    to: unreadableReceipt.contractAddress!,
+    block_number: Number(unreadableReceipt.blockNumber),
+    input: encodeFunctionData({ abi: unreadableContract.abi, functionName: 'decimals' }),
+  });
+  const unknown = unreadable.assetBalances!.find(
+    (row) => row.tokenAddress?.toLowerCase() === unreadableReceipt.contractAddress!.toLowerCase(),
+  )!;
+  assert.equal(unknown.before, null);
+  assert.equal(unknown.after, null);
+  assert.match(unreadable.assetWarnings!.join(' '), /unknown balances are not treated as zero/);
+  const nativeSender = snapshot(funded, account, null)!;
+  assert.equal(
+    BigInt(nativeSender.before!) - BigInt(nativeSender.after!),
+    parseEther('1') + BigInt(funded.transaction.gas_used!) * BigInt(funded.simulation.gas_price),
+  );
+  const { checkTreasuryMovement } = await import('../../checks/check-treasury-movement');
+  const { checkAssetBalances } = await import('../../checks/check-asset-balances');
+  const proposal = { targets: [address] } as never;
+  const deps = {
+    governor: { address: account },
+    timelock: { address: account },
+    chainConfig: { blockExplorer: { baseUrl: 'https://etherscan.io' } },
+  } as never;
+  const treasury = await checkTreasuryMovement.checkProposal(proposal, feeTransfer, deps);
+  assert.equal((treasury.data as { totalOutgoingUsd: unknown }).totalOutgoingUsd, null);
+  assert.match(treasury.warnings.join(' '), /thresholds were not evaluated/);
+  assert.doesNotMatch(treasury.info.join(' '), /: \$0/);
+  const report = await checkAssetBalances.checkProposal(proposal, silent, deps);
+  assert.match(report.info.join(' '), /-8\.999958/);
+
   const failed = await sendSimulation({
     ...tokenPayload,
     value: parseEther('1').toString(),
     input: encodeFunctionData({ abi: compiled.abi, functionName: 'fail', args: [receiver] }),
   });
   assert.equal(failed.transaction.status, false);
+  assert.equal(snapshot(failed, account)?.before, snapshot(failed, account)?.after);
   assert.deepEqual(failed.transaction.transaction_info.asset_changes, []);
   assert.deepEqual(failed.transaction.transaction_info.logs, []);
   assert.deepEqual(failed.transaction.transaction_info.state_diff, []);
@@ -183,6 +274,7 @@ try {
     gas_price: (tx.gasPrice ?? 0n).toString(),
   });
   assert.equal(replay.transaction.status, true);
+  assert.match(replay.assetWarnings!.join(' '), /unavailable for historical transaction replay/);
   assert.equal(replay.transaction.gas_used, Number(receipt.gasUsed));
   assert.deepEqual(
     replay.transaction.transaction_info.logs?.map((l) => l.raw),
@@ -231,6 +323,8 @@ try {
   });
   assert.equal(sponsored.transaction.status, true);
   assert.equal(sponsored.postState?.[synthetic]?.balance, '0');
+  assert.equal(snapshot(sponsored, synthetic, null)?.before, '0');
+  assert.equal(snapshot(sponsored, synthetic, null)?.after, '0');
   const sponsoredLog = sponsored.transaction.transaction_info.logs![0].raw;
   assert.equal(
     (decodeEventLog({ abi: compiled.abi, ...sponsoredLog } as never).args as Record<string, bigint>)

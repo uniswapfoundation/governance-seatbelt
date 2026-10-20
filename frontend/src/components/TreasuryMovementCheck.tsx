@@ -11,17 +11,17 @@ export type TreasuryMovementCheckDataV1 = {
     recipientUsdWarning: number;
     topRecipients: number;
   };
-  totalOutgoingUsd: number;
+  totalOutgoingUsd: number | null;
   transferCount: number;
   topRecipients: Array<{
     recipient: string;
-    totalUsd: number;
+    totalUsd: number | null;
     tokens: Array<{
       standard: string;
       symbol: string;
       decimals: number;
       amount: number;
-      usd: number;
+      usd: number | null;
       usdPriced: boolean;
     }>;
   }>;
@@ -41,7 +41,7 @@ export function isTreasuryMovementCheckDataV1(data: unknown): data is TreasuryMo
     typeof thresholds.totalUsdWarning === 'number' &&
     typeof thresholds.recipientUsdWarning === 'number' &&
     typeof thresholds.topRecipients === 'number' &&
-    typeof d.totalOutgoingUsd === 'number' &&
+    (d.totalOutgoingUsd === null || typeof d.totalOutgoingUsd === 'number') &&
     typeof d.transferCount === 'number' &&
     Array.isArray(d.topRecipients)
   );
@@ -55,7 +55,7 @@ type TreasuryToken = {
 
 type TreasuryRecipientRow = {
   recipient: string;
-  totalUsd: number;
+  totalUsd: number | null;
   tokens: TreasuryToken[];
 };
 
@@ -63,7 +63,7 @@ export type TreasuryMovementCheckViewModel = {
   warnings: string[];
   treasuryAddresses: string[];
   transfers: TreasuryRecipientRow[];
-  totalOutgoingUsd: number;
+  totalOutgoingUsd: number | null;
   transferCount: number;
   thresholds: {
     totalUsdWarning: number;
@@ -148,8 +148,8 @@ function formatAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-function formatUsdCompact(value: number): string {
-  if (!Number.isFinite(value)) return '$0';
+function formatUsdCompact(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return 'Unavailable';
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
   return `$${value.toFixed(0)}`;
@@ -215,7 +215,10 @@ export function TreasuryMovementCheck({
       {transfers.length > 0 && (
         <div>
           <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-2">
-            Top Recipients
+            {totalOutgoingUsd === null ? 'Recipients (USD ranking unavailable)' : 'Top Recipients'}
+          </p>
+          <p className="text-xs text-muted-foreground mb-2">
+            Transfer events can differ from actual balance changes. See verified balances.
           </p>
           <div className="border border-border/60 rounded-md overflow-hidden">
             <table className="w-full text-sm">
@@ -228,7 +231,7 @@ export function TreasuryMovementCheck({
                     Value
                   </th>
                   <th className="text-right py-2 px-3 font-medium text-muted-foreground text-xs">
-                    Tokens
+                    Observed transfers
                   </th>
                 </tr>
               </thead>
@@ -298,7 +301,7 @@ export function TreasuryMovementCheck({
         </div>
         <div className="text-right">
           <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">
-            Thresholds
+            {totalOutgoingUsd === null ? 'USD thresholds not evaluated' : 'Thresholds'}
           </p>
           <p className="text-xs text-muted-foreground">
             {formatUsdCompact(thresholds.totalUsdWarning)} total /{' '}
@@ -320,7 +323,7 @@ export function parseTreasuryMovementDetails(
     warnings: [],
     treasuryAddresses: [],
     transfers: [],
-    totalOutgoingUsd: 0,
+    totalOutgoingUsd: null,
     transferCount: 0,
     thresholds: { totalUsdWarning: 1_000_000, recipientUsdWarning: 250_000 },
   };
@@ -416,14 +419,14 @@ export function treasuryMovementDataToViewModel(
     treasuryAddresses: data.treasuryAddresses,
     transfers: data.topRecipients.map((r) => ({
       recipient: r.recipient,
-      totalUsd: r.totalUsd,
+      totalUsd: data.unpricedTransferCount ? null : r.totalUsd,
       tokens: r.tokens.map((t) => ({
         symbol: t.symbol.toUpperCase(),
         amount: t.amount,
         decimals: t.decimals,
       })),
     })),
-    totalOutgoingUsd: data.totalOutgoingUsd,
+    totalOutgoingUsd: data.unpricedTransferCount ? null : data.totalOutgoingUsd,
     transferCount: data.transferCount,
     thresholds: {
       totalUsdWarning: data.thresholds.totalUsdWarning,

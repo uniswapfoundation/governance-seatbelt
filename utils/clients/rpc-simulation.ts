@@ -4,6 +4,7 @@ import type { CallTrace, StateDiff, TenderlyPayload, TenderlySimulation } from '
 import { z } from '../validation/zod';
 import { getChainConfig } from './client';
 import { getRpcAssetChanges } from './rpc-assets';
+import { getRpcBalanceSnapshots } from './rpc-balances';
 
 export async function simulationRpc<T>(
   chainId: number,
@@ -49,7 +50,7 @@ export type RpcTrace = {
   calls?: RpcTrace[];
   logs?: RpcLog[];
 };
-type RpcAccount = { code?: Hex; balance?: Hex; nonce?: number; storage?: Record<Hex, Hex> };
+export type RpcAccount = { code?: Hex; balance?: Hex; nonce?: number; storage?: Record<Hex, Hex> };
 
 export async function sendRpcSimulation(payload: TenderlyPayload): Promise<TenderlySimulation> {
   const chainId = Number(payload.network_id);
@@ -237,11 +238,23 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
     postState[sender] = { ...postState[sender], balance: (balance - refund).toString() };
   }
   const assets = await getRpcAssetChanges(trace, logs, chainId, BigInt(blockNumber));
+  const balances = await getRpcBalanceSnapshots({
+    payload,
+    trace,
+    accounts,
+    postState,
+    changes: assets.changes,
+    blockNumber,
+    blockOverrides,
+    gasAllowance: sponsorGas ? BigInt(payload.gas) * BigInt(gasPrice ?? 0) : 0n,
+  });
   const id = `rpc-${randomUUID()}`;
   return {
     provider: 'rpc',
     postState,
-    assetWarnings: assets.warnings,
+    assetWarnings: [...assets.warnings, ...balances.warnings],
+    assetBalances: balances.rows,
+    gasSponsored: Boolean(sponsorGas),
     simulation: {
       id,
       network_id: String(chainId),
@@ -277,15 +290,7 @@ export async function sendRpcSimulation(payload: TenderlyPayload): Promise<Tende
         })),
         state_diff: stateDiff,
         asset_changes: assets.changes,
-        balance_changes: [
-          ...new Set(assets.changes.flatMap((change) => [change.from, change.to])),
-        ].map((address) => ({
-          address,
-          dollar_value: '',
-          transfers: assets.changes.flatMap((change, index) =>
-            change.from === address || change.to === address ? [index] : [],
-          ),
-        })),
+        balance_changes: null,
       },
     },
     contracts,
