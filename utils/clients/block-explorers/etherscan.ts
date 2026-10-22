@@ -1,5 +1,6 @@
 import { type Abi, getAddress } from 'viem';
 import { SchemaValidationError, parseWithSchema, z } from '../../validation/zod';
+import { managedFetch, usesManagedAccess } from '../managed-access';
 import { isAbi } from '../verifier-lookup';
 import { CacheManager } from './cache';
 import { BaseBlockExplorer, type VerificationOptions } from './index';
@@ -82,7 +83,7 @@ export class EtherscanExplorer extends BaseBlockExplorer {
         return cachedAbi;
       }
 
-      if (!this.apiKey) return null;
+      if (!this.apiKey && !usesManagedAccess()) return null;
 
       this.log(
         `Fetching new ABI for ${normalizedAddress} from Etherscan V2 API (Chain ${chainId})`,
@@ -101,7 +102,18 @@ export class EtherscanExplorer extends BaseBlockExplorer {
           // Use Etherscan V2 API with chainid parameter for unified multichain support
           const url = `https://api.etherscan.io/v2/api?chainid=${chainId}&module=contract&action=getabi&address=${normalizedAddress}&apikey=${this.apiKey}`;
 
-          const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+          const response =
+            !this.apiKey && usesManagedAccess()
+              ? await managedFetch('explorer', {
+                  chainId,
+                  address: normalizedAddress,
+                  action: 'getabi',
+                })
+              : await fetch(url, { signal: AbortSignal.timeout(10000), redirect: 'error' });
+          if (!response.ok) {
+            await response.body?.cancel();
+            throw new Error(`Explorer request unavailable (HTTP ${response.status})`);
+          }
           const rawData = await response.json();
           data = parseWithSchema(etherscanAbiResponseSchema, rawData, 'Etherscan getabi response');
 
@@ -221,7 +233,18 @@ export class EtherscanExplorer extends BaseBlockExplorer {
       try {
         const url = `https://api.etherscan.io/v2/api?chainid=${chainId}&module=contract&action=getsourcecode&address=${normalizedAddress}&apikey=${this.apiKey}`;
 
-        const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+        const response =
+          !this.apiKey && usesManagedAccess()
+            ? await managedFetch('explorer', {
+                chainId,
+                address: normalizedAddress,
+                action: 'getsourcecode',
+              })
+            : await fetch(url, { signal: AbortSignal.timeout(10000), redirect: 'error' });
+        if (!response.ok) {
+          await response.body?.cancel();
+          throw new Error(`Explorer request unavailable (HTTP ${response.status})`);
+        }
         const rawData = await response.json();
         const data = parseWithSchema(
           etherscanSourceCodeResponseSchema,
@@ -282,7 +305,7 @@ export class EtherscanExplorer extends BaseBlockExplorer {
   }
 
   async fetchContractSource(address: string, chainId: number): Promise<SoliditySource | null> {
-    if (!this.apiKey) return null;
+    if (!this.apiKey && !usesManagedAccess()) return null;
     const entry = await this.fetchSourceCodeEntry(getAddress(address), chainId);
     const source = entry.SourceCode?.trim();
     if (!source) return null;
@@ -378,22 +401,22 @@ export class EtherscanExplorer extends BaseBlockExplorer {
 // Legacy functions for backward compatibility
 export async function fetchContractAbi(address: string, chainId = 1): Promise<Abi | null> {
   const apiKey = process.env.ETHERSCAN_API_KEY;
-  if (!apiKey) {
+  if (!apiKey && !usesManagedAccess()) {
     console.warn('[ABI] ETHERSCAN_API_KEY not found in environment variables');
     return null;
   }
 
-  const explorer = new EtherscanExplorer(apiKey);
+  const explorer = new EtherscanExplorer(apiKey || '');
   return explorer.fetchContractAbi(address, chainId);
 }
 
 export async function isContractVerified(address: string, chainId = 1): Promise<boolean> {
   const apiKey = process.env.ETHERSCAN_API_KEY;
-  if (!apiKey) {
+  if (!apiKey && !usesManagedAccess()) {
     console.warn('[Verification] ETHERSCAN_API_KEY not found in environment variables');
     return false;
   }
 
-  const explorer = new EtherscanExplorer(apiKey);
+  const explorer = new EtherscanExplorer(apiKey || '');
   return explorer.isContractVerified(address, chainId);
 }

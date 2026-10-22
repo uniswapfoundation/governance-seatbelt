@@ -1,15 +1,10 @@
-import { execFile as execFileCallback } from 'node:child_process';
-import util from 'node:util';
 import { getAddress } from 'viem';
 import { codeBlock } from '../presentation/report';
 import type { ProposalCheck } from '../types';
 import { getContractName } from '../utils/clients/tenderly';
-import { ETHERSCAN_API_KEY } from '../utils/constants';
 import { getImplementation } from '../utils/contracts/governor';
 import { SECURITY_TOOL_TIMEOUT_MS } from '../utils/security-constants';
-
-// Convert execFile method from a callback to a promise.
-const execFile = util.promisify(execFileCallback);
+import { runSecurityTool } from '../utils/security-tool';
 
 // Data returned from command execution.
 type ExecOutput = {
@@ -73,7 +68,7 @@ export const checkSolc: ProposalCheck = {
       const contractName = await getContractName(contract, deps.chainConfig.chainId);
 
       // Compile the contracts.
-      const result = await runCryticCompile(contract.address);
+      const result = await runCryticCompile(contract.address, deps.chainConfig.chainId);
       if (!result.success) {
         warnings.push(`crytic-compile failed for ${contractName}: ${result.message}`);
         continue;
@@ -99,7 +94,7 @@ export const checkSolc: ProposalCheck = {
  * This may require editing your $PATH variable prior to running this check. If you don't do this,
  * the nix version of solc will take precedence over the solc-select version, and compilation will fail.
  */
-async function runCryticCompile(address: string): Promise<CryticResult> {
+async function runCryticCompile(address: string, chainId: number): Promise<CryticResult> {
   // Validate address format before execution (defense in depth)
   try {
     getAddress(address); // Validates and checksums - throws if invalid
@@ -113,11 +108,7 @@ async function runCryticCompile(address: string): Promise<CryticResult> {
 
   try {
     // Use execFile with argument array to prevent shell injection
-    const output = await execFile(
-      'crytic-compile',
-      [address, '--etherscan-apikey', ETHERSCAN_API_KEY],
-      { timeout: SECURITY_TOOL_TIMEOUT_MS },
-    );
+    const output = await runSecurityTool('crytic-compile', address, chainId);
     return { success: true, output };
   } catch (e: unknown) {
     // Handle timeout errors
@@ -128,9 +119,14 @@ async function runCryticCompile(address: string): Promise<CryticResult> {
         message: `Timed out after ${SECURITY_TOOL_TIMEOUT_MS / 1000}s`,
       };
     }
-    // crytic-compile reports via stderr and non-zero exit, which throws
+    // Compiler errors must not be presented as a successful warnings-only compilation.
     if (e && typeof e === 'object' && 'stderr' in e) {
-      return { success: true, output: e as ExecOutput };
+      const stderr = String((e as { stderr?: unknown }).stderr ?? '');
+      return {
+        success: false,
+        reason: 'execution_error',
+        message: stderr.trim() || 'Compiler exited unsuccessfully',
+      };
     }
     return {
       success: false,

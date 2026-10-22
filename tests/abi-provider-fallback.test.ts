@@ -15,8 +15,11 @@ const calldata = encodeFunctionData({ abi, functionName: 'setFeeTo', args: [reci
 const cacheFiles = new Set<string>();
 const originalBlockscoutUrl = CHAIN_CONFIGS[chainId].blockscoutApiUrl;
 const originalBlockscoutKey = process.env.BLOCKSCOUT_API_KEY;
+const originalQuickNodeUrl = process.env.QUICKNODE_RPC_URL;
 
 beforeEach(() => {
+  // These cases exercise direct provider fallback without managed credentials.
+  process.env.QUICKNODE_RPC_URL = 'http://127.0.0.1:1';
   CHAIN_CONFIGS[chainId].blockscoutApiUrl = 'https://explorer.arc.io/api/v2';
   Reflect.deleteProperty(process.env, 'BLOCKSCOUT_API_KEY');
 });
@@ -32,6 +35,8 @@ afterEach(() => {
   if (originalBlockscoutKey === undefined)
     Reflect.deleteProperty(process.env, 'BLOCKSCOUT_API_KEY');
   else process.env.BLOCKSCOUT_API_KEY = originalBlockscoutKey;
+  if (originalQuickNodeUrl === undefined) Reflect.deleteProperty(process.env, 'QUICKNODE_RPC_URL');
+  else process.env.QUICKNODE_RPC_URL = originalQuickNodeUrl;
   for (const path of cacheFiles) if (existsSync(path)) unlinkSync(path);
   cacheFiles.clear();
   BlockExplorerFactory.clear();

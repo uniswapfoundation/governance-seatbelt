@@ -28,6 +28,7 @@ import {
   CHECK_TIMEOUT_OVERRIDES_MS,
 } from './utils/check-timeout-constants';
 import { getChainConfig, getClientForChain, publicClient } from './utils/clients/client';
+import { prepareManagedAccess } from './utils/clients/managed-access';
 import { handleCrossChainSimulations, simulate } from './utils/clients/tenderly';
 import { DAO_NAME, GOVERNOR_ADDRESS, REPORTS_OUTPUT_DIRECTORY } from './utils/constants';
 import {
@@ -289,6 +290,8 @@ async function main() {
   // Validate inputs
   if (!GOVERNOR_ADDRESS) throw new Error('Must provide a GOVERNOR_ADDRESS');
   if (!DAO_NAME) throw new Error('Must provide a DAO_NAME');
+
+  await prepareManagedAccess();
 
   // Get governor type and contract
   const governorType = await inferGovernorType(GOVERNOR_ADDRESS);
