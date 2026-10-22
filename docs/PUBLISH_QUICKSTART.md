@@ -1,6 +1,6 @@
 # Publish Quickstart (`bun upload`)
 
-This is the primary guide for publishing Seatbelt simulation artifacts.
+The usual workflow is `SIM_NAME=my-proposal bun run propose`, then open the local report and click **Share**. It publishes the report and copies the viewer link to your clipboard. The CLI below is an alternative for terminal workflows.
 
 ## Prerequisites
 
@@ -24,7 +24,11 @@ bun upload --validate-only
 bun upload --publish
 ```
 
-On success, the relay returns publish URLs:
+On success, the CLI prints **Share URL** first: the formatted report link, using the same URL format as the frontend Share button. If the relay cannot save the publish lookup, it prints a viewer link with an `?artifact=` parameter instead. Both open the report UI.
+
+If the relay has no viewer configured, publishing still succeeds, but the CLI says the Share URL is unavailable and names the setting to configure. It does not label the deployment landing page as a share link.
+
+The CLI also prints the deployment, artifact, metadata URLs and publish ID when available. The relay response contains:
 
 - `publishId` — immutable publish identifier used by viewer share paths (when lookup persistence succeeds)
 - `deploymentUrl` — artifact deployment root (may be a publish landing page)

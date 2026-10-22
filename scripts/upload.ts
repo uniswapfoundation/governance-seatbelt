@@ -9,6 +9,12 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
+import {
+  buildCanonicalShareUrl,
+  buildPrettyShareUrl,
+  buildViewerUrl,
+  normalizePublishId,
+} from '../frontend/src/lib/share-link';
 import { readNonEmptyEnv, readPrimaryOrAliasEnv } from '../utils/env.js';
 import {
   PublishArtifactValidationError,
@@ -72,7 +78,9 @@ type ManagedRelayResponse = {
   deploymentUrl: string;
   artifactUrl?: string;
   metadataUrl?: string;
+  viewerUrl?: string;
   publishId?: string;
+  publishIdResolvable?: boolean;
   idempotencyKey?: string;
 };
 
@@ -320,7 +328,9 @@ function parseRelayResponse(value: unknown): ManagedRelayResponse {
     deploymentUrl,
     artifactUrl: readOptionalString(value, 'artifactUrl'),
     metadataUrl: readOptionalString(value, 'metadataUrl'),
+    viewerUrl: readOptionalString(value, 'viewerUrl'),
     publishId: readOptionalString(value, 'publishId'),
+    publishIdResolvable: value.publishIdResolvable === true,
     idempotencyKey: readOptionalString(value, 'idempotencyKey'),
   };
 }
@@ -458,15 +468,20 @@ async function runManagedRelayPublish(
   });
 
   console.log('[upload] Publish succeeded.');
-  console.log(`[upload] Deployment URL: ${result.deploymentUrl}`);
-
-  if (result.artifactUrl) {
-    console.log(`[upload] Artifact URL: ${result.artifactUrl}`);
+  const artifactUrl =
+    result.artifactUrl ?? appendPathToUrl(result.deploymentUrl, 'simulation-results.json');
+  if (result.viewerUrl) {
+    const viewerUrl = buildViewerUrl(result.viewerUrl);
+    const publishId = result.publishIdResolvable ? normalizePublishId(result.publishId) : null;
+    const shareUrl = publishId
+      ? buildPrettyShareUrl(viewerUrl, publishId)
+      : buildCanonicalShareUrl(viewerUrl, artifactUrl);
+    console.log(`[upload] Share URL: ${shareUrl}`);
   } else {
-    console.log(
-      `[upload] Artifact URL: ${appendPathToUrl(result.deploymentUrl, 'simulation-results.json')}`,
-    );
+    console.log('[upload] Share URL unavailable: configure SEATBELT_VIEWER_URL on the relay.');
   }
+  console.log(`[upload] Deployment URL: ${result.deploymentUrl}`);
+  console.log(`[upload] Artifact URL: ${artifactUrl}`);
 
   if (result.metadataUrl) {
     console.log(`[upload] Metadata URL: ${result.metadataUrl}`);
