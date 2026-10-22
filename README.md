@@ -12,10 +12,11 @@ for better informed voting.
 # Install root + frontend dependencies
 bun run setup
 
-# Copy and configure environment variables
-cp .env.example .env
-# Edit .env with your RPC and explorer credentials and RPC URLs
 ```
+
+Team users do not need an `.env` file. The first simulation asks for your Seatbelt
+access code once and remembers it privately on your computer. Ask your team for the code.
+QuickNode and explorer credentials stay on the managed relay.
 
 ### 2. Run a test simulation
 
@@ -34,10 +35,26 @@ Reports are saved to `reports/` folder.
 
 ### QuickNode simulation
 
-Seatbelt uses the configured chain RPCs for all simulations, including executed-transaction
-replay. Set `QUICKNODE_RPC_URL` for Ethereum and each destination's `*_RPC_URL` from
-`.env.example`. Ethereum requires `QUICKNODE_RPC_URL`; legacy provider variables are not used. There is no Tenderly
-fallback or public-node fallback. A missing endpoint fails that chain explicitly.
+Seatbelt uses QuickNode for all simulations, including executed-transaction replay.
+By default, requests go through the existing Seatbelt relay using your saved access code.
+Simulation logic, checks, reports, and the frontend still run locally. Both workflows stay the same:
+
+```bash
+SIM_NAME=my-proposal bun run propose                 # local report, then click Share
+bun start --proposal-json proposal.json             # GovKit JSON input
+bun upload --publish                               # CLI report link
+```
+
+The code is stored with owner-only permissions under `~/.config/seatbelt/` (or
+`$XDG_CONFIG_HOME/seatbelt/`). A revoked code prompts again on the next interactive run.
+Run once interactively before using the managed service in unattended local scripts.
+Operators: see [managed access setup](docs/MANAGED_ACCESS.md).
+
+For your own infrastructure or CI, copy `.env.example` and set `QUICKNODE_RPC_URL`
+plus each destination's `*_RPC_URL` and explorer credentials. An explicit Ethereum endpoint
+selects direct-provider mode for every chain; missing destinations do not use the relay.
+Legacy provider variables are not used.
+There is no Tenderly or public-node fallback. A missing endpoint fails that chain explicitly.
 
 Each endpoint must support historical `debug_traceCall`, `debug_traceTransaction`, `callTracer`
 with logs, `prestateTracer`, and state/block overrides. Chain availability and these methods
@@ -187,7 +204,7 @@ To run the frontend with simulation results:
 1. Provide simulation results (choose one):
 
    ```sh
-   # Option A (recommended): run a real simulation (requires QuickNode RPCs and explorer credentials)
+   # Run a real simulation (team access code requested once)
    SIM_NAME=uni-transfer bun run sim
    ```
 
@@ -259,9 +276,9 @@ to the `matrix` section of `.github/workflows/governance-checks.yaml`.
 
 Note that currently only Compound `GovernorBravo` and OpenZeppelin style governors are supported.
 
-### Environment Variable Setup
+### Direct-provider Environment Setup
 
-First, create a file called `.env` with the following environment variables:
+Only when supplying your own infrastructure or running CI, create `.env` with:
 
 ```sh
 # Etherscan API Key, used when running Slither.

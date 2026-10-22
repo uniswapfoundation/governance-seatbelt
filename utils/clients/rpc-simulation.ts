@@ -4,6 +4,7 @@ import { type Hex, getAddress, pad, toHex } from 'viem';
 import type { CallTrace, StateDiff, TenderlyPayload, TenderlySimulation } from '../../types';
 import { z } from '../validation/zod';
 import { getChainConfig } from './client';
+import { managedFetch, usesManagedAccess } from './managed-access';
 import { getRpcAssetChanges } from './rpc-assets';
 import { getRpcBalanceSnapshots } from './rpc-balances';
 
@@ -21,16 +22,21 @@ export async function simulationRpc<T>(
     const url = getChainConfig(chainId).rpcUrl;
     for (let attempt = 0; ; attempt++) {
       if (method.startsWith('debug_trace')) {
-        const slot = (traceQueues.get(url) ?? Promise.resolve()).then(() => delay(50));
-        traceQueues.set(url, slot);
+        const slot = (traceQueues.get(url || String(chainId)) ?? Promise.resolve()).then(() =>
+          delay(50),
+        );
+        traceQueues.set(url || String(chainId), slot);
         await slot;
       }
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-        signal: AbortSignal.timeout(30_000),
-      });
+      const response =
+        !url && usesManagedAccess()
+          ? await managedFetch('rpc', { chainId, method, params })
+          : await fetch(url, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+              signal: AbortSignal.timeout(30_000),
+            });
       const body = response.ok
         ? z
             .object({

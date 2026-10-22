@@ -4,6 +4,9 @@ Operational reference for the managed publish relay used by `bun upload --publis
 
 Audience: relay maintainers/operators. End-user publish steps are in `docs/PUBLISH_QUICKSTART.md`.
 
+The same relay also serves authenticated simulation requests. See
+[managed access setup](MANAGED_ACCESS.md) for credentials, quotas and rollout order.
+
 ## Relay behavior
 
 - Relay always re-validates artifacts server-side against the publish contract.

@@ -1,5 +1,6 @@
 import { type Abi, getAddress } from 'viem';
 import { SchemaValidationError, parseWithSchema, z } from '../../validation/zod';
+import { managedFetch, usesManagedAccess } from '../managed-access';
 import { isAbi } from '../verifier-lookup';
 import { CacheManager } from './cache';
 import { BaseBlockExplorer, type VerificationOptions } from './index';
@@ -62,11 +63,17 @@ export class BlockscoutExplorer extends BaseBlockExplorer {
           new URL(url).origin === 'https://api.blockscout.com'
             ? process.env.BLOCKSCOUT_API_KEY
             : undefined;
-        const response = await fetch(url, {
-          signal: AbortSignal.timeout(10000),
-          headers: apiKey ? { authorization: `Bearer ${apiKey}` } : undefined,
-          redirect: 'error',
-        });
+        const response =
+          usesManagedAccess() &&
+          !process.env.BLOCKSCOUT_API_KEY &&
+          chainId === 5042 &&
+          new URL(url).origin === 'https://api.blockscout.com'
+            ? await managedFetch('explorer', { chainId, address, action: 'blockscout' })
+            : await fetch(url, {
+                signal: AbortSignal.timeout(10000),
+                headers: apiKey ? { authorization: `Bearer ${apiKey}` } : undefined,
+                redirect: 'error',
+              });
         if (response.status === 404) return null;
 
         if (response.ok) {

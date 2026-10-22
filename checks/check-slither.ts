@@ -1,20 +1,16 @@
-import { execFile as execFileCallback } from 'node:child_process';
-import util from 'node:util';
 import { getAddress } from 'viem';
 import { codeBlock } from '../presentation/report';
 import type { ProposalCheck } from '../types';
 import { getContractName } from '../utils/clients/tenderly';
-import { ETHERSCAN_API_KEY, SLITHER_ALLOW_UNVERIFIED } from '../utils/constants';
+import { SLITHER_ALLOW_UNVERIFIED } from '../utils/constants';
 import { getImplementation } from '../utils/contracts/governor';
 import { SECURITY_TOOL_TIMEOUT_MS } from '../utils/security-constants';
+import { runSecurityTool } from '../utils/security-tool';
 import {
   checkContractVerification,
   formatSourcesChecked,
   formatVerificationSource,
 } from '../utils/verification/contract-verification';
-
-// Convert execFile method from a callback to a promise.
-const execFile = util.promisify(execFileCallback);
 
 // Data returned from command execution.
 type ExecOutput = {
@@ -206,9 +202,7 @@ async function runSlither(address: string): Promise<SlitherResult> {
 
   try {
     // Use execFile with argument array to prevent shell injection
-    const output = await execFile('slither', [address, '--etherscan-apikey', ETHERSCAN_API_KEY], {
-      timeout: SECURITY_TOOL_TIMEOUT_MS,
-    });
+    const output = await runSecurityTool('slither', address, 1);
     return { success: true, output };
   } catch (e: unknown) {
     // Handle timeout errors

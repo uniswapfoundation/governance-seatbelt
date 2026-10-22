@@ -40,6 +40,12 @@ jobs:
       - name: Run storage-label integration tests
         run: bun test tests/rpc-simulation.integration.test.ts tests/storage-labels.integration.test.ts tests/mapping-storage.integration.test.ts tests/state-change-extraction.test.ts tests/abi-provider-fallback.test.ts
 
+      - name: Install Redis for managed-access integration
+        run: sudo apt-get update && sudo apt-get install -y redis-server
+
+      - name: Verify managed access with Redis and Anvil
+        run: bun test tests/managed-access.integration.test.ts
+
       - name: Run checks tests
         run: cd checks && bun test
         env:
