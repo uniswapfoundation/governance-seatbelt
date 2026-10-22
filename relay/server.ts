@@ -13,6 +13,9 @@ import {
   signPublishMetadata,
 } from '../utils/publish/publish-authenticity.js';
 import { computeArtifactHash, createPublishMetadata } from '../utils/publish/publish-metadata.js';
+import { readRequestBody } from './http.js';
+import { runUpstashCommand } from './redis.js';
+import { createSimulationGateway } from './simulation-gateway.js';
 
 type OpenJsonObject = Record<string, unknown>;
 
@@ -162,7 +165,6 @@ const DEFAULT_DEPLOY_TIMEOUT_MS = 180_000;
 const PUBLISH_ID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PUBLISH_LOOKUP_KEY_PREFIX = 'seatbelt:publish:';
-const UPSTASH_TIMEOUT_MS = 5_000;
 
 class RelayPublishTimeoutError extends Error {
   readonly timeoutMs: number;
@@ -434,41 +436,6 @@ function parsePublishLookupRecord(value: unknown): PublishLookupRecord | null {
     artifactHash,
     publishedAt,
   };
-}
-
-async function runUpstashCommand(
-  restUrl: string,
-  restToken: string,
-  command: string[],
-): Promise<unknown> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), UPSTASH_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(restUrl, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${restToken}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(command),
-      signal: controller.signal,
-    });
-
-    const body = (await response.json()) as Record<string, unknown>;
-    const error = readOptionalString(body, 'error');
-    if (error) {
-      throw new Error(error);
-    }
-
-    if (!response.ok) {
-      throw new Error(`Upstash command failed with HTTP ${response.status}`);
-    }
-
-    return Reflect.get(body, 'result');
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 function createInMemoryPublishLookupStore(): PublishLookupStore {
@@ -996,56 +963,6 @@ function maybePruneRateLimitBuckets(
   }
 }
 
-async function readRequestBody(request: Request, maxBodyBytes: number): Promise<string> {
-  const contentLengthHeader = request.headers.get('content-length');
-  if (contentLengthHeader) {
-    const contentLength = Number(contentLengthHeader);
-    if (Number.isFinite(contentLength) && contentLength > maxBodyBytes) {
-      throw new Error('PAYLOAD_TOO_LARGE');
-    }
-  }
-
-  if (!request.body) {
-    return '';
-  }
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-
-  try {
-    while (true) {
-      const readResult = await reader.read();
-      if (readResult.done) {
-        break;
-      }
-
-      if (!readResult.value) {
-        continue;
-      }
-
-      totalBytes += readResult.value.byteLength;
-      if (totalBytes > maxBodyBytes) {
-        throw new Error('PAYLOAD_TOO_LARGE');
-      }
-
-      chunks.push(readResult.value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  const merged = new Uint8Array(totalBytes);
-  let writeOffset = 0;
-
-  for (const chunk of chunks) {
-    merged.set(chunk, writeOffset);
-    writeOffset += chunk.byteLength;
-  }
-
-  return new TextDecoder().decode(merged);
-}
-
 function parsePublishPayload(rawBody: string): PublishRequestPayload {
   let jsonValue: unknown;
 
@@ -1226,9 +1143,12 @@ export function createRelayFetchHandler(
   const publishLookupStore =
     options.dependencies?.publishLookupStore ?? createPublishLookupStore(env);
 
+  const gateway = createSimulationGateway(env);
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     const pathname = normalizePath(url.pathname);
+    if (['/api/v1/access', '/api/v1/rpc', '/api/v1/explorer'].includes(pathname))
+      return gateway(request);
 
     if (request.method === 'GET' && pathname === '/api/v1/health') {
       return createJsonResponse(

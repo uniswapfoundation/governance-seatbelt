@@ -22,6 +22,7 @@ import { cacheProposal, getCachedProposal, needsSimulation } from './utils/cache
 import { supportsL2Checks } from './utils/chains/capabilities';
 import { mergeAllCheckResults } from './utils/check-results';
 import { getChainConfig, getClientForChain, publicClient } from './utils/clients/client';
+import { prepareManagedAccess } from './utils/clients/managed-access';
 import {
   type SimulationExecutionOptions,
   handleCrossChainSimulations,
@@ -532,6 +533,8 @@ async function main() {
   if (cliOptions.proposalJsonPath && SIM_NAME) {
     throw new Error('Choose only one local simulation source: --proposal-json or SIM_NAME');
   }
+
+  await prepareManagedAccess();
 
   let governorType: GovernorType;
   let localSimulation: { config: SimulationConfig; label: string } | null = null;

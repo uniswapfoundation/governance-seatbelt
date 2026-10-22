@@ -22,7 +22,9 @@ import {
   xLayer,
   zora,
 } from 'viem/chains';
+import { configuredRpc } from '../chains/rpc-endpoints';
 import { DEFAULT_BLOCK_EXPLORER_BASE_URL, normalizeBlockExplorerBaseUrl } from '../explorer-links';
+import { managedFetch, usesManagedAccess } from './managed-access';
 
 export enum BlockExplorerSource {
   Blockscout = 'blockscout',
@@ -55,26 +57,6 @@ export interface ChainConfig {
   blockscoutApiUrl?: string;
   rpcUrl: string;
 }
-
-const MAINNET_RPC_URL = process.env.QUICKNODE_RPC_URL || '';
-const ARBITRUM_RPC_URL = process.env.ARBITRUM_RPC_URL || '';
-const ROBINHOOD_RPC_URL = process.env.ROBINHOOD_RPC_URL || '';
-const OPTIMISM_RPC_URL = process.env.OPTIMISM_RPC_URL || '';
-const BASE_RPC_URL = process.env.BASE_RPC_URL || '';
-const UNICHAIN_RPC_URL = process.env.UNICHAIN_RPC_URL || '';
-const INK_RPC_URL = process.env.INK_RPC_URL || '';
-const SONEIUM_RPC_URL = process.env.SONEIUM_RPC_URL || '';
-const BOB_RPC_URL = process.env.BOB_RPC_URL || '';
-const BSC_RPC_URL = process.env.BSC_RPC_URL || '';
-const CELO_RPC_URL = process.env.CELO_RPC_URL || '';
-const POLYGON_RPC_URL = process.env.POLYGON_RPC_URL || '';
-const AVALANCHE_RPC_URL = process.env.AVALANCHE_RPC_URL || '';
-const MONAD_RPC_URL = process.env.MONAD_RPC_URL || '';
-const TEMPO_RPC_URL = process.env.TEMPO_RPC_URL || '';
-const MEGAETH_RPC_URL = process.env.MEGAETH_RPC_URL || '';
-const WORLDCHAIN_RPC_URL = process.env.WORLDCHAIN_RPC_URL || '';
-const ZORA_RPC_URL = process.env.ZORA_RPC_URL || '';
-const XLAYER_RPC_URL = process.env.XLAYER_RPC_URL || '';
 
 const ETHERSCAN_V2_API_URL = 'https://api.etherscan.io/v2/api';
 
@@ -133,16 +115,17 @@ type ClientRegistry = {
 export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
   [arc.id]: {
     chainId: arc.id,
-    blockscoutApiUrl: process.env.BLOCKSCOUT_API_KEY
-      ? 'https://api.blockscout.com/5042/api/v2'
-      : 'https://explorer.arc.io/api/v2',
+    blockscoutApiUrl:
+      process.env.BLOCKSCOUT_API_KEY || usesManagedAccess()
+        ? 'https://api.blockscout.com/5042/api/v2'
+        : 'https://explorer.arc.io/api/v2',
     blockExplorer: { baseUrl: 'https://arc.etherscan.io' },
     verification: {
       backend: VerificationBackend.EtherscanV2,
       apiUrl: ETHERSCAN_V2_API_URL,
       apiKey: process.env.ETHERSCAN_API_KEY,
     },
-    rpcUrl: process.env.ARC_RPC_URL || '',
+    rpcUrl: configuredRpc(arc.id),
   },
   [mainnet.id]: {
     chainId: mainnet.id,
@@ -155,7 +138,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       apiUrl: ETHERSCAN_V2_API_URL,
       apiKey: process.env.ETHERSCAN_API_KEY,
     },
-    rpcUrl: MAINNET_RPC_URL,
+    rpcUrl: configuredRpc(mainnet.id),
   },
   [arbitrum.id]: {
     chainId: arbitrum.id,
@@ -168,7 +151,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       apiUrl: ETHERSCAN_V2_API_URL,
       apiKey: process.env.ETHERSCAN_API_KEY,
     },
-    rpcUrl: ARBITRUM_RPC_URL,
+    rpcUrl: configuredRpc(arbitrum.id),
   },
   [robinhood.id]: {
     chainId: robinhood.id,
@@ -179,7 +162,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       backend: VerificationBackend.Blockscout,
       apiUrl: 'https://robinhoodchain.blockscout.com/api/v2',
     },
-    rpcUrl: ROBINHOOD_RPC_URL,
+    rpcUrl: configuredRpc(robinhood.id),
   },
   [optimism.id]: {
     chainId: optimism.id,
@@ -192,7 +175,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       apiUrl: ETHERSCAN_V2_API_URL,
       apiKey: process.env.ETHERSCAN_API_KEY,
     },
-    rpcUrl: OPTIMISM_RPC_URL,
+    rpcUrl: configuredRpc(optimism.id),
   },
   [base.id]: {
     chainId: base.id,
@@ -205,7 +188,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       apiUrl: ETHERSCAN_V2_API_URL,
       apiKey: process.env.ETHERSCAN_API_KEY,
     },
-    rpcUrl: BASE_RPC_URL,
+    rpcUrl: configuredRpc(base.id),
   },
   [unichain.id]: {
     chainId: unichain.id,
@@ -218,7 +201,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       apiUrl: ETHERSCAN_V2_API_URL,
       apiKey: process.env.ETHERSCAN_API_KEY,
     },
-    rpcUrl: UNICHAIN_RPC_URL,
+    rpcUrl: configuredRpc(unichain.id),
   },
   [ink.id]: {
     chainId: ink.id,
@@ -229,7 +212,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       backend: VerificationBackend.Blockscout,
       apiUrl: ink.blockExplorers?.default.apiUrl,
     },
-    rpcUrl: INK_RPC_URL,
+    rpcUrl: configuredRpc(ink.id),
   },
   [soneium.id]: {
     chainId: soneium.id,
@@ -240,7 +223,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       backend: VerificationBackend.Blockscout,
       apiUrl: 'https://soneium.blockscout.com/api/v2',
     },
-    rpcUrl: SONEIUM_RPC_URL,
+    rpcUrl: configuredRpc(soneium.id),
   },
   [bob.id]: {
     chainId: bob.id,
@@ -251,7 +234,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       backend: VerificationBackend.Blockscout,
       apiUrl: 'https://explorer.gobob.xyz/api/v2',
     },
-    rpcUrl: BOB_RPC_URL,
+    rpcUrl: configuredRpc(bob.id),
   },
   [bsc.id]: {
     chainId: bsc.id,
@@ -263,7 +246,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       apiUrl: ETHERSCAN_V2_API_URL,
       apiKey: process.env.ETHERSCAN_API_KEY,
     },
-    rpcUrl: BSC_RPC_URL,
+    rpcUrl: configuredRpc(bsc.id),
   },
   [celo.id]: {
     chainId: celo.id,
@@ -275,7 +258,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       apiUrl: ETHERSCAN_V2_API_URL,
       apiKey: process.env.ETHERSCAN_API_KEY,
     },
-    rpcUrl: CELO_RPC_URL,
+    rpcUrl: configuredRpc(celo.id),
   },
   [polygon.id]: {
     chainId: polygon.id,
@@ -287,7 +270,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       apiUrl: ETHERSCAN_V2_API_URL,
       apiKey: process.env.ETHERSCAN_API_KEY,
     },
-    rpcUrl: POLYGON_RPC_URL,
+    rpcUrl: configuredRpc(polygon.id),
   },
   [avalanche.id]: {
     chainId: avalanche.id,
@@ -299,7 +282,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       apiUrl: ETHERSCAN_V2_API_URL,
       apiKey: process.env.ETHERSCAN_API_KEY,
     },
-    rpcUrl: AVALANCHE_RPC_URL,
+    rpcUrl: configuredRpc(avalanche.id),
   },
   [monad.id]: {
     chainId: monad.id,
@@ -310,7 +293,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       backend: VerificationBackend.SourcifyOnly,
       degradedReason: 'Monad explorer verification API is not supported yet; using Sourcify only.',
     },
-    rpcUrl: MONAD_RPC_URL,
+    rpcUrl: configuredRpc(monad.id),
   },
   [tempo.id]: {
     chainId: tempo.id,
@@ -321,7 +304,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       backend: VerificationBackend.Tempo,
       apiUrl: 'https://contracts.tempo.xyz',
     },
-    rpcUrl: TEMPO_RPC_URL,
+    rpcUrl: configuredRpc(tempo.id),
   },
   [megaeth.id]: {
     chainId: megaeth.id,
@@ -333,7 +316,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       apiUrl: ETHERSCAN_V2_API_URL,
       apiKey: process.env.ETHERSCAN_API_KEY,
     },
-    rpcUrl: MEGAETH_RPC_URL,
+    rpcUrl: configuredRpc(megaeth.id),
   },
   [worldchain.id]: {
     chainId: worldchain.id,
@@ -345,7 +328,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       apiUrl: ETHERSCAN_V2_API_URL,
       apiKey: process.env.ETHERSCAN_API_KEY,
     },
-    rpcUrl: WORLDCHAIN_RPC_URL,
+    rpcUrl: configuredRpc(worldchain.id),
   },
   [zora.id]: {
     chainId: zora.id,
@@ -356,7 +339,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       backend: VerificationBackend.Blockscout,
       apiUrl: 'https://explorer.zora.energy/api/v2',
     },
-    rpcUrl: ZORA_RPC_URL,
+    rpcUrl: configuredRpc(zora.id),
   },
   [xLayer.id]: {
     chainId: xLayer.id,
@@ -367,7 +350,7 @@ export const CHAIN_CONFIGS: Record<number, ChainConfig> = {
       backend: VerificationBackend.SourcifyOnly,
       degradedReason: 'XLayer verification backend API is not supported yet; using Sourcify only.',
     },
-    rpcUrl: XLAYER_RPC_URL,
+    rpcUrl: configuredRpc(xLayer.id),
   },
 };
 
@@ -422,8 +405,23 @@ export function resolveVerificationConfig(config: ChainConfig): ResolvedVerifica
 }
 
 function rpcTransport(url: string, chainId: number): Transport {
-  if (url) {
-    const transport = http(url)({});
+  if (url || usesManagedAccess()) {
+    const transport = url
+      ? http(url)({})
+      : custom({
+          async request(args) {
+            const response = await managedFetch('rpc', {
+              chainId,
+              method: args.method,
+              params: args.params ?? [],
+            });
+            if (!response.ok) throw new Error(`Seatbelt RPC unavailable (HTTP ${response.status})`);
+            const body = await response.json();
+            if (body.error || !Object.hasOwn(body, 'result'))
+              throw new Error('Managed RPC request failed');
+            return body.result;
+          },
+        })({});
     return custom(
       {
         async request(args) {
