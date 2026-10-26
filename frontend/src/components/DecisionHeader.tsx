@@ -190,8 +190,9 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
         </div>
       </div>
 
-      {/* Stats grid - responsive: 2 cols on mobile, 4 cols on lg+ */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 divide-y lg:divide-y-0 lg:divide-x divide-border/60">
+      <div
+        className={`grid grid-cols-2 ${tenderlyUrl ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} divide-y lg:divide-y-0 lg:divide-x divide-border/60`}
+      >
         {/* Checks */}
         <StatItem icon={<ShieldCheckIcon className="h-4 w-4" />} label="Checks">
           <span className="text-sm font-medium">{ranChecks} executed</span>
@@ -255,8 +256,8 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
         </StatItem>
 
         {/* Simulation */}
-        <StatItem icon={<ActivityIcon className="h-4 w-4" />} label="Simulation">
-          {tenderlyUrl ? (
+        {tenderlyUrl && (
+          <StatItem icon={<ActivityIcon className="h-4 w-4" />} label="Simulation">
             <Button
               variant="default"
               size="sm"
@@ -268,10 +269,8 @@ export function DecisionHeader({ report }: DecisionHeaderProps) {
                 <ExternalLinkIcon className="h-3.5 w-3.5" />
               </a>
             </Button>
-          ) : (
-            <span className="text-sm text-muted-foreground">Not available</span>
-          )}
-        </StatItem>
+          </StatItem>
+        )}
 
         <StatItem icon={<CheckCircleIcon className="h-4 w-4" />} label="Publish">
           {publish ? (
